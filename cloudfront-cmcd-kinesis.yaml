@@ -1,0 +1,996 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFront distribution with CMCD field capture to Kinesis Data Streams'
+
+Parameters:
+  OriginDomainName:
+    Type: String
+    Description: Domain name of the origin server
+    Default: example.com
+  
+  KinesisStreamName:
+    Type: String
+    Description: Name for the Kinesis Data Stream
+    Default: cmcd-stream
+  
+  DatabaseName:
+    Type: String
+    Description: Timestream database name
+    Default: cmcd-database
+  
+  TableName:
+    Type: String
+    Description: Timestream table name
+    Default: cmcd-metrics
+
+  S3BucketName:
+    Type: String
+    Description: Name for the S3 bucket (must be globally unique)
+    Default: cmcd-content-bucket
+
+  InfluxDBPassword:
+    Type: String
+    Description: InfluxDB admin password (8-64 alphanumeric characters)
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: '^[a-zA-Z0-9]+$'
+    ConstraintDescription: Must be 8-64 alphanumeric characters
+
+  InfluxDBToken:
+    Type: String
+    Description: InfluxDB API token for Lambda access
+    NoEcho: true
+    MinLength: 10
+    ConstraintDescription: Must be a valid InfluxDB token
+
+Resources:
+  # KMS Key for S3 encryption
+  S3KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for S3 bucket encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow CloudFront Service
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:GenerateDataKey
+            Resource: '*'
+
+  S3KMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-s3'
+      TargetKeyId: !Ref S3KMSKey
+
+  # S3 Bucket for content
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${S3BucketName}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref S3KMSKey
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # S3 Bucket Policy for CloudFront and Account Access
+  ContentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Version: '2012-10-17'
+    Properties:
+      Bucket: !Ref ContentBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub 
+              - '${BucketArn}/*'
+              - BucketArn: 
+                  Fn::Sub:
+                    - 'arn:aws:s3:::${BucketName}'
+                    - BucketName:
+                        !Ref ContentBucket
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CMCDCloudFrontDistribution}'
+
+  
+
+  # Origin Access Control for CloudFront
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-OAC'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # KMS Key for Kinesis encryption
+  KinesisKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for Kinesis stream encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+
+  KinesisKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-kinesis'
+      TargetKeyId: !Ref KinesisKMSKey
+
+  # Kinesis Data Stream
+  CMCDKinesisStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Ref KinesisStreamName
+      ShardCount: 1
+      RetentionPeriodHours: 24
+      StreamEncryption:
+        EncryptionType: KMS
+        KeyId: !Ref KinesisKMSKey
+
+  # Managed Policy for CloudFront Kinesis access
+  CloudFrontKinesisPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - kinesis:PutRecord
+              - kinesis:PutRecords
+            Resource: !GetAtt CMCDKinesisStream.Arn
+          - Effect: Allow
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: !GetAtt KinesisKMSKey.Arn
+
+  # IAM Role for CloudFront Real-time Logs
+  CloudFrontLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref CloudFrontKinesisPolicy
+
+  # CloudFront Real-time Log Configuration
+  CMCDRealtimeLogConfig:
+    Type: AWS::CloudFront::RealtimeLogConfig
+    Properties:
+      Name: cmcd-realtime-logs
+      EndPoints:
+        - StreamType: Kinesis
+          KinesisStreamConfig:
+            RoleArn: !GetAtt CloudFrontLogsRole.Arn
+            StreamArn: !GetAtt CMCDKinesisStream.Arn
+      Fields:
+        - timestamp
+        - c-ip
+        - sc-status
+        - cs-method
+        - cs-uri-stem
+        - cs-uri-query
+        - cs-headers
+        - time-taken
+        - x-edge-location
+        - x-edge-request-id
+      SamplingRate: 100
+
+  # WAF WebACL for CloudFront
+  CloudFrontWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub '${AWS::StackName}-cloudfront-waf'
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      Rules:
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: CommonRuleSetMetric
+        - Name: AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: KnownBadInputsRuleSetMetric
+        - Name: RateLimitRule
+          Priority: 3
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 2000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitMetric
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub '${AWS::StackName}-WebACL'
+
+  # CloudFront Distribution
+  CMCDCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: 'CloudFront distribution with CMCD capture'
+        DefaultRootObject: index.html
+        WebACLId: !GetAtt CloudFrontWebACL.Arn
+        Origins:
+          - Id: s3-origin
+            DomainName: !GetAtt ContentBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !Ref OriginAccessControl
+          - Id: custom-origin
+            DomainName: !Ref OriginDomainName
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingOptimized
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
+          ResponseHeadersPolicyId: 5cc3b908-e619-4b99-88e5-2cf7f45965bd  # CORS-With-Preflight
+          RealtimeLogConfigArn: !GetAtt CMCDRealtimeLogConfig.Arn
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+          MinimumProtocolVersion: TLSv1.2_2021
+        PriceClass: PriceClass_100
+
+  # Secrets Manager Secret for InfluxDB Password
+  InfluxDBPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${AWS::StackName}-influxdb-password'
+      Description: 'InfluxDB admin password'
+      SecretString: !Sub |
+        {
+          "username": "admin",
+          "password": "${InfluxDBPassword}"
+        }
+      KmsKeyId: !Ref SecretsManagerKMSKey
+
+  # Timestream for InfluxDB
+  InfluxDBInstance:
+    Type: AWS::Timestream::InfluxDBInstance
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      Name: !Ref DatabaseName
+      DbInstanceType: db.influx.medium
+      AllocatedStorage: 20
+      Bucket: !Ref TableName
+      Organization: cmcd-org
+      Username: admin
+      Password: !Ref InfluxDBPassword
+      VpcSubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      VpcSecurityGroupIds:
+        - !Ref InfluxDBSecurityGroup
+      PubliclyAccessible: false
+
+  # VPC for InfluxDB
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public Subnet for Bastion Host
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  # Private Subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+
+  # NAT Gateway for private subnets
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+
+  # Route Tables
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Security Group for InfluxDB
+  InfluxDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for InfluxDB instance
+      VpcId: !Ref VPC
+
+  # Security Group for Lambda
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda function
+      VpcId: !Ref VPC
+
+  # Security Group for Bastion Host
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Bastion Host
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8086
+          ToPort: 8086
+          DestinationSecurityGroupId: !Ref InfluxDBSecurityGroup
+
+  # Security Group Rules for InfluxDB access
+  LambdaToInfluxDBRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref InfluxDBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8086
+      ToPort: 8086
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  BastionToInfluxDBIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref InfluxDBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8086
+      ToPort: 8086
+      SourceSecurityGroupId: !Ref BastionSecurityGroup
+
+  # KMS Key for Secrets Manager encryption
+  SecretsManagerKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for Secrets Manager encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+
+  SecretsManagerKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-secrets-manager'
+      TargetKeyId: !Ref SecretsManagerKMSKey
+
+  # Lambda function for secret rotation
+  SecretRotationLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-secret-rotation'
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': json.dumps('Secret rotation placeholder')}
+      Role: !GetAtt SecretRotationLambdaRole.Arn
+
+  # IAM Role for Secret Rotation Lambda
+  SecretRotationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # Lambda permission for Secrets Manager
+  SecretRotationLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SecretRotationLambda
+      Action: lambda:InvokeFunction
+      Principal: secretsmanager.amazonaws.com
+
+  # Secret for InfluxDB password
+  InfluxDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: InfluxDB admin password
+      KmsKeyId: !Ref SecretsManagerKMSKey
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: password
+        PasswordLength: 16
+        RequireEachIncludedType: true
+        IncludeSpace: false
+        ExcludeCharacters: '"@/\`'
+
+  # Secret rotation schedule
+  SecretRotationSchedule:
+    Type: AWS::SecretsManager::RotationSchedule
+    Properties:
+      SecretId: !Ref InfluxDBSecret
+      RotationLambdaARN: !GetAtt SecretRotationLambda.Arn
+      RotationRules:
+        AutomaticallyAfterDays: 30
+
+  # Managed Policy for Bastion Host InfluxDB access
+  BastionInfluxDBPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Ref InfluxDBPasswordSecret
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+            Resource: !GetAtt SecretsManagerKMSKey.Arn
+
+  # DLQ for Lambda functions
+  LambdaDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-lambda-dlq'
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  # IAM Role for Bastion Host
+  BastionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Ref BastionInfluxDBPolicy
+
+  # Instance Profile for Bastion Host
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BastionRole
+
+
+
+  # New Bastion Host EC2 Instance
+  NewBastionHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-09e6f87a47903347c # Amazon Linux 2023 AMI (update for your region)
+      InstanceType: t3.micro
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref BastionSecurityGroup
+      IamInstanceProfile: !Ref BastionInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum update -y
+          sudo yum install -y amazon-ssm-agent curl jq
+          
+          # Start and enable SSM agent
+          sudo systemctl enable amazon-ssm-agent
+          sudo systemctl start amazon-ssm-agent
+          
+          # Install InfluxDB CLI
+          curl -LO https://dl.influxdata.com/influxdb/releases/influxdb2-client-2.7.3-linux-amd64.tar.gz
+          tar xvzf influxdb2-client-2.7.3-linux-amd64.tar.gz
+          sudo cp influx /usr/local/bin/
+          
+          # Create connection script
+          cat > /home/ec2-user/connect-influxdb.sh << 'EOF'
+          #!/bin/bash
+          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id ${InfluxDBPasswordSecret} --query SecretString --output text --region ${AWS::Region})
+          PASSWORD=$(echo $SECRET_VALUE | jq -r .password)
+          INFLUXDB_ENDPOINT="${InfluxDBInstance.Endpoint}"
+          
+          echo "InfluxDB Endpoint: $INFLUXDB_ENDPOINT"
+          echo "Username: admin"
+          echo "Password: $PASSWORD"
+          echo ""
+          echo "To connect using InfluxDB CLI:"
+          echo "influx -host $INFLUXDB_ENDPOINT -username admin -password $PASSWORD"
+          EOF
+          
+          chmod +x /home/ec2-user/connect-influxdb.sh
+          chown ec2-user:ec2-user /home/ec2-user/connect-influxdb.sh
+      Tags:
+        - Key: Name
+          Value: CMCD-New-Bastion-Host
+
+  # Managed Policy for Lambda VPC access (these actions don't support resource-level permissions)
+  LambdaVPCAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DeleteNetworkInterface
+            Resource: '*'
+
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole
+        - !Ref LambdaVPCAccessPolicy
+      Policies:
+        - PolicyName: InfluxDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - timestream:GetInfluxDBInstance
+                  - secretsmanager:GetSecretValue
+                Resource: 
+                  - !Sub 'arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:influxdb-instance/${InfluxDBInstance}'
+                  - !Ref InfluxDBPasswordSecret
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                Resource: 
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet1}'
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet2}'
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${LambdaSecurityGroup}'
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource: 
+                  - !GetAtt KinesisKMSKey.Arn
+                  - !GetAtt SecretsManagerKMSKey.Arn
+
+  # Lambda Function
+  CMCDProcessorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: cmcd-kinesis-processor
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Code:
+        ZipFile: !Sub |
+          import json
+          import base64
+          import boto3
+          import os
+          import urllib.parse
+          import logging
+          import urllib3
+
+          # Configure logging
+          logging.basicConfig(level=logging.INFO)
+          logger = logging.getLogger(__name__)
+
+          http = urllib3.PoolManager()
+
+          def lambda_handler(event, context):
+              try:
+                  logger.info(f"Processing {len(event['Records'])} records")
+                  
+                  # Get InfluxDB endpoint and token
+                  endpoint = os.environ['INFLUXDB_ENDPOINT']
+                  token = os.environ['INFLUXDB_TOKEN']
+                  
+                  logger.info(f"Connecting to InfluxDB at {endpoint}")
+                  
+                  processed_count = 0
+                  error_count = 0
+                  
+                  for record in event['Records']:
+                      try:
+                          # Decode the base64 data from Kinesis
+                          payload = base64.b64decode(record['kinesis']['data']).decode('utf-8')
+                          log_data = parse_cloudfront_log(payload)
+                          
+                          if log_data:
+                              write_to_influxdb(endpoint, token, log_data)
+                              processed_count += 1
+                              logger.debug(f"Processed record with CMCD data: {log_data.get('cmcd_data', {})}")
+                          else:
+                              logger.debug("Failed to parse CloudFront log record")
+                              
+                      except Exception as e:
+                          error_count += 1
+                          logger.error(f"Error processing record: {str(e)}")
+                  
+                  logger.info(f"Successfully processed {processed_count} records, {error_count} errors")
+                  return {'statusCode': 200, 'body': f'Processed {processed_count} records, {error_count} errors'}
+                  
+              except Exception as e:
+                  logger.error(f"Lambda execution error: {str(e)}")
+                  raise
+
+          def parse_cloudfront_log(log_line):
+              try:
+                  fields = log_line.strip().split('\t')
+                  if len(fields) < 9:
+                      logger.warning(f"Insufficient fields in log line: {len(fields)}")
+                      return None
+                      
+                  # Extract CMCD from URI (field 4) and query string (field 8)
+                  uri = fields[4] if len(fields) > 4 else ''
+                  query_string = fields[8] if len(fields) > 8 else ''
+                  
+                  cmcd_data = {}
+                  # Parse CMCD from URI query parameters
+                  if 'CMCD=' in uri:
+                      cmcd_data.update(extract_cmcd_from_query(uri))
+                  # Parse CMCD from separate query string field
+                  if 'CMCD=' in query_string:
+                      cmcd_data.update(extract_cmcd_from_query(query_string))
+                  
+                  return {
+                      'timestamp': int(float(fields[0]) * 1000000000),
+                      'client_ip': fields[1],
+                      'status': fields[2],
+                      'method': fields[3],
+                      'uri': uri,
+                      'edge_location': fields[5],
+                      'time_taken': float(fields[7]) if len(fields) > 7 and fields[7].replace('.', '').isdigit() else 0,
+                      'cmcd_data': cmcd_data
+                  }
+              except Exception as e:
+                  logger.error(f"Error parsing CloudFront log: {str(e)}")
+                  return None
+
+          def extract_cmcd_from_query(query_str):
+              cmcd_data = {}
+              try:
+                  # Find CMCD parameter in the query string
+                  if 'CMCD=' in query_str:
+                      # Extract the CMCD value (URL encoded)
+                      cmcd_start = query_str.find('CMCD=') + 5
+                      cmcd_end = query_str.find('&', cmcd_start)
+                      if cmcd_end == -1:
+                          cmcd_end = len(query_str)
+                      
+                      cmcd_value = query_str[cmcd_start:cmcd_end]
+                      # URL decode the CMCD value multiple times if needed (double/triple encoded)
+                      decoded_cmcd = cmcd_value
+                      for _ in range(3):  # Try up to 3 levels of decoding
+                          try:
+                              new_decoded = urllib.parse.unquote(decoded_cmcd)
+                              if new_decoded == decoded_cmcd:
+                                  break  # No more decoding needed
+                              decoded_cmcd = new_decoded
+                          except:
+                              break
+                      
+                      # Parse CMCD key-value pairs
+                      cmcd_data = parse_cmcd_value(decoded_cmcd)
+                      
+              except Exception as e:
+                  logger.error(f"Error extracting CMCD from query: {str(e)}")
+              return cmcd_data
+
+          def parse_cmcd_value(value):
+              parsed = {}
+              try:
+                  # CMCD format: key1=value1,key2=value2,key3=value3
+                  for pair in value.split(','):
+                      if '=' in pair:
+                          k, v = pair.split('=', 1)
+                          # Remove quotes and clean up the value
+                          parsed[k.strip()] = v.strip().strip('"')
+                      else:
+                          # Handle boolean flags (keys without values)
+                          parsed[pair.strip()] = True
+              except Exception as e:
+                  logger.error(f"Error parsing CMCD value: {str(e)}")
+              return parsed
+
+          def write_to_influxdb(endpoint, token, log_data):
+              try:
+                  # Create Telegraf-style line protocol
+                  tags = []
+                  fields = []
+                  
+                  # Add basic tags (escape special characters)
+                  tags.append(f"client_ip={log_data['client_ip']}")
+                  tags.append(f"edge_location={log_data['edge_location']}")
+                  tags.append(f"status={log_data['status']}")
+                  tags.append(f"method={log_data['method']}")
+                  
+                  # Add basic fields
+                  fields.append(f"time_taken={log_data['time_taken']}")
+                  
+                  # Add CMCD fields if they exist
+                  if log_data.get('cmcd_data'):
+                      for key, value in log_data['cmcd_data'].items():
+                          # Escape key names and values for InfluxDB line protocol
+                          safe_key = key.replace(' ', '_').replace(',', '_').replace('=', '_')
+                          
+                          if isinstance(value, bool):
+                              fields.append(f"cmcd_{safe_key}={str(value).lower()}")
+                          elif isinstance(value, str) and value.isdigit():
+                              fields.append(f"cmcd_{safe_key}={value}")
+                          elif isinstance(value, (int, float)):
+                              fields.append(f"cmcd_{safe_key}={value}")
+                          elif isinstance(value, str):
+                              # Escape string values for tags
+                              safe_value = value.replace(',', '\\,').replace('=', '\\=').replace(' ', '\\ ')
+                              tags.append(f"cmcd_{safe_key}={safe_value}")
+                          else:
+                              fields.append(f"cmcd_{safe_key}={value}")
+                  
+                  # Ensure we have at least one field
+                  if not fields:
+                      fields.append("processed=1")
+                  
+                  line_protocol = f"cloudfront_logs,{','.join(tags)} {','.join(fields)} {log_data['timestamp']}"
+                  
+                  logger.debug(f"Line protocol: {line_protocol}")
+                  
+                  # Write to InfluxDB using v2 API with token
+                  url = f"{endpoint}/api/v2/write"
+                  headers = {
+                      'Authorization': f"Token {token}",
+                      'Content-Type': 'text/plain'
+                  }
+                  
+                  params = f"org={os.environ['INFLUXDB_ORG']}&bucket={os.environ['INFLUXDB_BUCKET']}"
+                  full_url = f"{url}?{params}"
+                  
+                  response = http.request('POST', full_url, headers=headers, body=line_protocol)
+                  
+                  if response.status == 204:
+                      logger.info("Successfully wrote point to InfluxDB")
+                  else:
+                      logger.error(f"InfluxDB write failed: {response.status} - {response.data}")
+                      raise Exception(f"InfluxDB write failed: {response.status}")
+                      
+              except Exception as e:
+                  logger.error(f"Error writing to InfluxDB: {str(e)}")
+                  raise
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          INFLUXDB_ENDPOINT: !Sub 'https://${InfluxDBInstance.Endpoint}:8086'
+          INFLUXDB_ORG: cmcd-org
+          INFLUXDB_BUCKET: !Ref TableName
+          INFLUXDB_TOKEN: !Ref InfluxDBToken
+      KmsKeyArn: !GetAtt SecretsManagerKMSKey.Arn
+      Timeout: 60
+
+  # Event Source Mapping
+  KinesisEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt CMCDKinesisStream.Arn
+      FunctionName: !Ref CMCDProcessorLambda
+      StartingPosition: LATEST
+      BatchSize: 100
+
+Outputs:
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CMCDCloudFrontDistribution
+    Export:
+      Name: !Sub '${AWS::StackName}-CloudFrontDistributionId'
+  
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CMCDCloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-CloudFrontDomainName'
+
+  KinesisStreamArn:
+    Description: Kinesis Data Stream ARN
+    Value: !GetAtt CMCDKinesisStream.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-KinesisStreamArn'
+
+  LambdaFunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt CMCDProcessorLambda.Arn
+  
+  InfluxDBInstanceId:
+    Description: InfluxDB Instance ID
+    Value: !Ref InfluxDBInstance
+
+  InfluxDBEndpoint:
+    Description: InfluxDB Endpoint
+    Value: !GetAtt InfluxDBInstance.Endpoint
+
+  S3BucketName:
+    Description: S3 Bucket Name
+    Value: !Ref ContentBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-S3BucketName'
+
+
+  InfluxDBPasswordSecretArn:
+    Description: ARN of the Secrets Manager secret containing InfluxDB password
+    Value: !Ref InfluxDBPasswordSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-InfluxDBPasswordSecretArn'
+  
+  BastionHostInstanceId:
+    Description: Instance ID of the Bastion Host
+    Value: !Ref NewBastionHost
+  
+  SessionManagerCommand:
+    Description: Command to connect to bastion host via Session Manager
+    Value: !Sub 'aws ssm start-session --target ${NewBastionHost} --region ${AWS::Region}'
+  
+  InfluxDBConnectionScript:
+    Description: Script location on bastion host to get InfluxDB connection details
+    Value: '/home/ec2-user/connect-influxdb.sh'

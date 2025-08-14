@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS Video Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .video-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        video {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>HLS Video Player</h1>
+    <div class="video-container">
+        <video id="video" controls></video>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const sessionId = 'session_' + Date.now().toString(36) + Math.random().toString(36).substring(2);
+
+        if (Hls.isSupported()) {
+            const hls = new Hls({
+                cmcd: {
+                    sessionId: sessionId,
+                    contentId: 'video-content-demo'
+                }
+            });
+            hls.loadSource('https://d30cl5gqh0cd4x.cloudfront.net/videos/master.m3u8');
+            hls.attachMedia(video);
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native HLS support (Safari)
+            video.src = 'https://d30cl5gqh0cd4x.cloudfront.net/videos/master.m3u8';
+        }
+    </script>
+</body>
+</html>

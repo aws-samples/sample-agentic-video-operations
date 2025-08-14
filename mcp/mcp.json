@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cmcd-mcp": {
+      "command": "python3",
+      "args": ["/Users/shamksh/Documents/devspace/cmcd-mcp/mcp/cmcd_server.py"]
+    },
+    "influx-db-cmcd-mcp": {
+      "command": "python3",
+      "args": ["/Users/shamksh/Documents/devspace/cmcd-mcp/mcp/influxdb_server.py"]
+    }
+  }
+}
