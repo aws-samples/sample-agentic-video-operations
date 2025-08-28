@@ -27,21 +27,7 @@ Parameters:
     Description: Name for the S3 bucket (must be globally unique)
     Default: cmcd-content-bucket
 
-  InfluxDBPassword:
-    Type: String
-    Description: InfluxDB admin password (8-64 alphanumeric characters)
-    NoEcho: true
-    MinLength: 8
-    MaxLength: 64
-    AllowedPattern: '^[a-zA-Z0-9]+$'
-    ConstraintDescription: Must be 8-64 alphanumeric characters
 
-  InfluxDBToken:
-    Type: String
-    Description: InfluxDB API token for Lambda access
-    NoEcho: true
-    MinLength: 10
-    ConstraintDescription: Must be a valid InfluxDB token
 
 Resources:
   # KMS Key for S3 encryption
@@ -301,18 +287,27 @@ Resources:
           MinimumProtocolVersion: TLSv1.2_2021
         PriceClass: PriceClass_100
 
-  # Secrets Manager Secret for InfluxDB Password
-  InfluxDBPasswordSecret:
+  # InfluxDB Password Secret (without endpoint reference to break circular dependency)
+  InfluxDBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub '${AWS::StackName}-influxdb-password'
-      Description: 'InfluxDB admin password'
-      SecretString: !Sub |
-        {
-          "username": "admin",
-          "password": "${InfluxDBPassword}"
-        }
-      KmsKeyId: !Ref SecretsManagerKMSKey
+      Description: !Sub '${AWS::StackName}-influxdb-credentials'
+      GenerateSecretString:
+        SecretStringTemplate: !Sub |
+          {
+            "username": "admin",
+            "token": "${AWS::StackName}-token-${AWS::AccountId}",
+            "organization": "cmcd-org",
+            "bucket": "${TableName}"
+          }
+        GenerateStringKey: password
+        PasswordLength: 16
+        ExcludePunctuation: true
+        ExcludeCharacters: '"@/\`'
+        IncludeSpace: false
+      Tags:
+        - Key: Name
+          Value: InfluxDBpassword
 
   # Timestream for InfluxDB
   InfluxDBInstance:
@@ -320,13 +315,13 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
     Properties:
-      Name: !Ref DatabaseName
+      Name: !Sub '${DatabaseName}-${AWS::AccountId}'
       DbInstanceType: db.influx.medium
       AllocatedStorage: 20
       Bucket: !Ref TableName
       Organization: cmcd-org
       Username: admin
-      Password: !Ref InfluxDBPassword
+      Password: !Sub '{{resolve:secretsmanager:${InfluxDBSecret}:SecretString:password}}'
       VpcSubnetIds:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
@@ -518,6 +513,82 @@ Resources:
               return {'statusCode': 200, 'body': json.dumps('Secret rotation placeholder')}
       Role: !GetAtt SecretRotationLambdaRole.Arn
 
+  # Lambda function to update secret with InfluxDB endpoint
+  UpdateSecretLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-update-secret'
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Code:
+        ZipFile: !Sub |
+          import json
+          import boto3
+          import cfnresponse
+          
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                      secrets_client = boto3.client('secretsmanager')
+                      
+                      # Get current secret value
+                      response = secrets_client.get_secret_value(SecretId='${InfluxDBSecret}')
+                      secret_dict = json.loads(response['SecretString'])
+                      
+                      # Update with InfluxDB endpoint
+                      secret_dict['endpoint'] = f"https://{event['ResourceProperties']['InfluxDBEndpoint']}:8086"
+                      
+                      # Update the secret
+                      secrets_client.update_secret(
+                          SecretId='${InfluxDBSecret}',
+                          SecretString=json.dumps(secret_dict)
+                      )
+                      
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+      Role: !GetAtt UpdateSecretLambdaRole.Arn
+      Timeout: 60
+
+  # IAM Role for Update Secret Lambda
+  UpdateSecretLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: UpdateSecretPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:UpdateSecret
+                Resource: !Ref InfluxDBSecret
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:Encrypt
+                  - kms:GenerateDataKey
+                Resource: !GetAtt SecretsManagerKMSKey.Arn
+
+  # Custom resource to trigger secret update
+  UpdateSecretCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: InfluxDBInstance
+    Properties:
+      ServiceToken: !GetAtt UpdateSecretLambda.Arn
+      InfluxDBEndpoint: !GetAtt InfluxDBInstance.Endpoint
+
   # IAM Role for Secret Rotation Lambda
   SecretRotationLambdaRole:
     Type: AWS::IAM::Role
@@ -540,23 +611,14 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: secretsmanager.amazonaws.com
 
-  # Secret for InfluxDB password
-  InfluxDBSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: InfluxDB admin password
-      KmsKeyId: !Ref SecretsManagerKMSKey
-      GenerateSecretString:
-        SecretStringTemplate: '{"username": "admin"}'
-        GenerateStringKey: password
-        PasswordLength: 16
-        RequireEachIncludedType: true
-        IncludeSpace: false
-        ExcludeCharacters: '"@/\`'
 
-  # Secret rotation schedule
+
+  # Secret rotation schedule (depends on InfluxDB instance being created)
   SecretRotationSchedule:
     Type: AWS::SecretsManager::RotationSchedule
+    DependsOn: 
+      - InfluxDBInstance
+      - UpdateSecretCustomResource
     Properties:
       SecretId: !Ref InfluxDBSecret
       RotationLambdaARN: !GetAtt SecretRotationLambda.Arn
@@ -573,7 +635,7 @@ Resources:
           - Effect: Allow
             Action:
               - secretsmanager:GetSecretValue
-            Resource: !Ref InfluxDBPasswordSecret
+            Resource: !Ref InfluxDBSecret
           - Effect: Allow
             Action:
               - kms:Decrypt
@@ -614,6 +676,7 @@ Resources:
   # New Bastion Host EC2 Instance
   NewBastionHost:
     Type: AWS::EC2::Instance
+    DependsOn: InfluxDBInstance
     Properties:
       ImageId: ami-09e6f87a47903347c # Amazon Linux 2023 AMI (update for your region)
       InstanceType: t3.micro
@@ -636,12 +699,14 @@ Resources:
           tar xvzf influxdb2-client-2.7.3-linux-amd64.tar.gz
           sudo cp influx /usr/local/bin/
           
-          # Create connection script
+          # Create connection script (will be updated after InfluxDB is ready)
           cat > /home/ec2-user/connect-influxdb.sh << 'EOF'
           #!/bin/bash
-          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id ${InfluxDBPasswordSecret} --query SecretString --output text --region ${AWS::Region})
+          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id ${InfluxDBSecret} --query SecretString --output text --region ${AWS::Region})
           PASSWORD=$(echo $SECRET_VALUE | jq -r .password)
-          INFLUXDB_ENDPOINT="${InfluxDBInstance.Endpoint}"
+          
+          # Get InfluxDB endpoint from CloudFormation stack outputs
+          INFLUXDB_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} --query 'Stacks[0].Outputs[?OutputKey==`InfluxDBEndpoint`].OutputValue' --output text --region ${AWS::Region})
           
           echo "InfluxDB Endpoint: $INFLUXDB_ENDPOINT"
           echo "Username: admin"
@@ -695,7 +760,7 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource: 
                   - !Sub 'arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:influxdb-instance/${InfluxDBInstance}'
-                  - !Ref InfluxDBPasswordSecret
+                  - !Ref InfluxDBSecret
               - Effect: Allow
                 Action:
                   - ec2:CreateNetworkInterface
@@ -926,18 +991,293 @@ Resources:
           INFLUXDB_ENDPOINT: !Sub 'https://${InfluxDBInstance.Endpoint}:8086'
           INFLUXDB_ORG: cmcd-org
           INFLUXDB_BUCKET: !Ref TableName
-          INFLUXDB_TOKEN: !Ref InfluxDBToken
+          INFLUXDB_TOKEN: !Sub '${AWS::StackName}-token-${AWS::AccountId}'
       KmsKeyArn: !GetAtt SecretsManagerKMSKey.Arn
       Timeout: 60
 
   # Event Source Mapping
   KinesisEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
+    DependsOn: 
+      - CMCDProcessorLambda
+      - CMCDKinesisStream
     Properties:
       EventSourceArn: !GetAtt CMCDKinesisStream.Arn
       FunctionName: !Ref CMCDProcessorLambda
       StartingPosition: LATEST
       BatchSize: 100
+
+  # IAM Role for Index HTML Deployment Lambda
+  IndexHtmlDeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: !Sub 'arn:aws:s3:::${ContentBucket}/*'
+              - Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:ReEncrypt*
+                  - kms:GenerateDataKey*
+                  - kms:DescribeKey
+                Resource: !GetAtt S3KMSKey.Arn
+              - Effect: Allow
+                Action:
+                  - cloudfront:CreateInvalidation
+                Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/*'
+
+  # Lambda function to deploy index.html
+  IndexHtmlDeploymentFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt IndexHtmlDeploymentRole.Arn
+      Runtime: python3.11
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import json
+          
+          def handler(event, context):
+              try:
+                  print(f"Received event: {json.dumps(event)}")
+                  
+                  if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                      s3 = boto3.client('s3')
+                      
+                      # Get parameters
+                      bucket_name = event['ResourceProperties']['BucketName']
+                      cloudfront_domain = event['ResourceProperties']['CloudFrontDomain']
+                      
+                      print(f"Deploying index.html to bucket: {bucket_name} with CloudFront domain: {cloudfront_domain}")
+                      
+                      # Create index.html content with CloudFront domain and enhanced error handling
+                      index_html = f"""<!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>HLS Video Player</title>
+              <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+              <style>
+                  body {{
+                      font-family: Arial, sans-serif;
+                      max-width: 800px;
+                      margin: 0 auto;
+                      padding: 20px;
+                      background-color: #f5f5f5;
+                  }}
+                  .video-container {{
+                      background: white;
+                      padding: 20px;
+                      border-radius: 8px;
+                      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                  }}
+                  video {{
+                      width: 100%;
+                      height: auto;
+                      border-radius: 4px;
+                  }}
+                  h1 {{
+                      color: #333;
+                      text-align: center;
+                  }}
+                  .status {{
+                      margin-top: 10px;
+                      padding: 10px;
+                      border-radius: 4px;
+                      font-size: 14px;
+                  }}
+                  .error {{ background-color: #ffebee; color: #c62828; }}
+                  .info {{ background-color: #e3f2fd; color: #1565c0; }}
+              </style>
+          </head>
+          <body>
+              <h1>HLS Video Player</h1>
+              <div class="video-container">
+                  <video id="video" controls></video>
+                  <div id="status"></div>
+              </div>
+              <script>
+                  const video = document.getElementById('video');
+                  const statusDiv = document.getElementById('status');
+                  const sessionId = 'session_' + Date.now().toString(36) + Math.random().toString(36).substring(2);
+                  
+                  function showStatus(message, type = 'info') {{
+                      statusDiv.innerHTML = `<div class="status ${{type}}">${{message}}</div>`;
+                      setTimeout(() => statusDiv.innerHTML = '', 5000);
+                  }}
+                  
+                  if (Hls.isSupported()) {{
+                      const hls = new Hls({{
+                          cmcd: {{
+                              sessionId: sessionId,
+                              contentId: 'video-content-demo'
+                          }},
+                          // Optimize buffering settings
+                          maxBufferLength: 30,
+                          maxMaxBufferLength: 600,
+                          maxBufferSize: 60 * 1000 * 1000,
+                          maxBufferHole: 0.5,
+                          lowBufferWatchdogPeriod: 0.5,
+                          highBufferWatchdogPeriod: 3,
+                          nudgeOffset: 0.1,
+                          nudgeMaxRetry: 3,
+                          maxFragLookUpTolerance: 0.25,
+                          liveSyncDurationCount: 3,
+                          liveMaxLatencyDurationCount: 10,
+                          enableWorker: true,
+                          enableSoftwareAES: true,
+                          manifestLoadingTimeOut: 10000,
+                          manifestLoadingMaxRetry: 1,
+                          manifestLoadingRetryDelay: 1000,
+                          fragLoadingTimeOut: 5000,
+                          fragLoadingMaxRetry: 2,
+                          fragLoadingRetryDelay: 500
+                      }});
+                      
+                      // Add error handling
+                      hls.on(Hls.Events.ERROR, function (event, data) {{
+                          console.log('HLS Error:', data);
+                          if (data.fatal) {{
+                              switch(data.type) {{
+                                  case Hls.ErrorTypes.NETWORK_ERROR:
+                                      console.log('Fatal network error encountered, try to recover');
+                                      showStatus('Network error detected, attempting recovery...', 'error');
+                                      hls.startLoad();
+                                      break;
+                                  case Hls.ErrorTypes.MEDIA_ERROR:
+                                      console.log('Fatal media error encountered, try to recover');
+                                      showStatus('Media error detected, attempting recovery...', 'error');
+                                      hls.recoverMediaError();
+                                      break;
+                                  default:
+                                      console.log('Fatal error, cannot recover');
+                                      showStatus('Playback error - please refresh the page', 'error');
+                                      hls.destroy();
+                                      break;
+                              }}
+                          }} else {{
+                              // Handle non-fatal errors
+                              if (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR) {{
+                                  console.log('Fragment load error, skipping segment:', data.frag?.url);
+                                  showStatus('Skipping missing video segment...', 'info');
+                                  // Force continue playback
+                                  setTimeout(() => {{
+                                      if (video.paused && video.readyState < 3) {{
+                                          console.log('Attempting to resume playback after segment error');
+                                          video.play().catch(e => console.log('Play failed:', e));
+                                      }}
+                                  }}, 1000);
+                              }}
+                          }}
+                      }});
+                      
+                      // Add fragment load error specific handling
+                      hls.on(Hls.Events.FRAG_LOAD_ERROR, function (event, data) {{
+                          console.log('Fragment load error for:', data.frag?.url);
+                          console.log('Will attempt to continue with next segment');
+                      }});
+                      
+                      // Monitor buffer and attempt recovery
+                      hls.on(Hls.Events.BUFFER_STALLED, function (event, data) {{
+                          console.log('Buffer stalled, attempting recovery');
+                          showStatus('Buffering issue detected, attempting to continue...', 'info');
+                          setTimeout(() => {{
+                              if (video.paused) {{
+                                  console.log('Forcing playback resume after buffer stall');
+                                  video.play().catch(e => console.log('Resume failed:', e));
+                              }}
+                          }}, 2000);
+                      }});
+                      
+                      hls.loadSource('https://{cloudfront_domain}/videos/master.m3u8');
+                      hls.attachMedia(video);
+                      
+                      showStatus('Video player loaded successfully', 'info');
+                  }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
+                      // Native HLS support (Safari)
+                      video.src = 'https://{cloudfront_domain}/videos/master.m3u8';
+                      showStatus('Using native HLS support', 'info');
+                  }} else {{
+                      showStatus('HLS not supported in this browser', 'error');
+                  }}
+              </script>
+          </body>
+          </html>"""
+                      
+                      # Upload index.html to S3
+                      response = s3.put_object(
+                          Bucket=bucket_name,
+                          Key='index.html',
+                          Body=index_html,
+                          ContentType='text/html'
+                      )
+                      
+                      print(f"Successfully uploaded index.html to S3: {response}")
+                      
+                      # Invalidate CloudFront cache for index.html
+                      try:
+                          cloudfront = boto3.client('cloudfront')
+                          distribution_id = event['ResourceProperties'].get('DistributionId')
+                          if distribution_id:
+                              invalidation_response = cloudfront.create_invalidation(
+                                  DistributionId=distribution_id,
+                                  InvalidationBatch={
+                                      'Paths': {
+                                          'Quantity': 1,
+                                          'Items': ['/index.html']
+                                      },
+                                      'CallerReference': f"index-html-{context.aws_request_id}"
+                                  }
+                              )
+                              print(f"CloudFront invalidation created: {invalidation_response['Invalidation']['Id']}")
+                      except Exception as inv_error:
+                          print(f"Warning: Could not invalidate CloudFront cache: {inv_error}")
+                      
+                      # Create a simple response
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, 
+                                     {'Message': f'Successfully deployed index.html to {bucket_name} with CloudFront domain {cloudfront_domain}'})
+                      
+                  elif event['RequestType'] == 'Delete':
+                      # Nothing to do for delete
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, 
+                                     {'Message': 'Delete request processed'})
+                      
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  # Upload index.html to S3 bucket
+  IndexHtmlDeployment:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: 
+      - ContentBucket
+      - CMCDCloudFrontDistribution
+    Properties:
+      ServiceToken: !GetAtt IndexHtmlDeploymentFunction.Arn
+      CloudFrontDomain: !GetAtt CMCDCloudFrontDistribution.DomainName
+      DistributionId: !Ref CMCDCloudFrontDistribution
+      BucketName: !Ref ContentBucket
 
 Outputs:
   CloudFrontDistributionId:
@@ -969,6 +1309,14 @@ Outputs:
   InfluxDBEndpoint:
     Description: InfluxDB Endpoint
     Value: !GetAtt InfluxDBInstance.Endpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-InfluxDBEndpoint'
+  
+  InfluxDBEndpointURL:
+    Description: Full InfluxDB Endpoint URL with protocol and port
+    Value: !Sub 'https://${InfluxDBInstance.Endpoint}:8086'
+    Export:
+      Name: !Sub '${AWS::StackName}-InfluxDBEndpointURL'
 
   S3BucketName:
     Description: S3 Bucket Name
@@ -977,11 +1325,23 @@ Outputs:
       Name: !Sub '${AWS::StackName}-S3BucketName'
 
 
-  InfluxDBPasswordSecretArn:
-    Description: ARN of the Secrets Manager secret containing InfluxDB password
-    Value: !Ref InfluxDBPasswordSecret
+  InfluxDBSecretArn:
+    Description: ARN of the Secrets Manager secret containing InfluxDB credentials (updated with endpoint)
+    Value: !Ref InfluxDBSecret
     Export:
-      Name: !Sub '${AWS::StackName}-InfluxDBPasswordSecretArn'
+      Name: !Sub '${AWS::StackName}-InfluxDBSecretArn'
+  
+  InfluxDBToken:
+    Description: InfluxDB API token
+    Value: !Sub '${AWS::StackName}-token-${AWS::AccountId}'
+    Export:
+      Name: !Sub '${AWS::StackName}-InfluxDBToken'
+  
+  InfluxDBOrg:
+    Description: InfluxDB organization name
+    Value: cmcd-org
+    Export:
+      Name: !Sub '${AWS::StackName}-InfluxDBOrg'
   
   BastionHostInstanceId:
     Description: Instance ID of the Bastion Host
@@ -994,3 +1354,9 @@ Outputs:
   InfluxDBConnectionScript:
     Description: Script location on bastion host to get InfluxDB connection details
     Value: '/home/ec2-user/connect-influxdb.sh'
+  
+  VideoPlayerURL:
+    Description: URL to access the HLS video player
+    Value: !Sub 'https://${CMCDCloudFrontDistribution.DomainName}/index.html'
+    Export:
+      Name: !Sub '${AWS::StackName}-VideoPlayerURL'
