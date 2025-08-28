@@ -1,1 +1,8 @@
-fastmcp
+boto3>=1.28.0
+influxdb-client>=1.36.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+fastmcp>=0.4.0
+pydantic>=2.0.0
+urllib3>=2.0.0
+websockets>=11.0.0
