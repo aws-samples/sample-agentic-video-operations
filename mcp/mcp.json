@@ -1,12 +1,11 @@
 {
   "mcpServers": {
     "cmcd-mcp": {
-      "command": "python3",
-      "args": ["/Users/shamksh/Documents/devspace/cmcd-mcp/mcp/cmcd_server.py"]
-    },
-    "influx-db-cmcd-mcp": {
-      "command": "python3",
-      "args": ["/Users/shamksh/Documents/devspace/cmcd-mcp/mcp/influxdb_server.py"]
+      "command": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+      "args": ["/Users/johndoe/Downloads/sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp-main/mcp/cmcd_server.py"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "INFO",
+        "PYTHONPATH": "/Users/johndoe/Downloads/sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp-main/mcp"
+      }
     }
   }
-}
