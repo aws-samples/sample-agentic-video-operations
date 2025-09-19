@@ -235,18 +235,14 @@ pip install -r mcp/requirements.txt
 Update the `mcp/.env` file in the project using values from your CloudFormation stack outputs:
 
 ```bash
-INFLUXDB_URL=<InfluxDBEndpoint from CloudFormation outputs>
+INFLUXDB_URL=https://localhost:8086
 INFLUXDB_TOKEN=<InfluxDBToken from CloudFormation outputs>
-INFLUXDB_ORG=<InfluxDBOrg from CloudFormation outputs>
+INFLUXDB_ORG=cmcd-org
 VERIFY_SSL=false
 ```
 
 **To get your actual values:**
 ```bash
-# Get InfluxDB endpoint URL
-aws cloudformation describe-stacks --stack-name cmcd-analytics-pipeline \
-  --query 'Stacks[0].Outputs[?OutputKey==`InfluxDBEndpointURL`].OutputValue' --output text
-
 # Get InfluxDB token
 aws cloudformation describe-stacks --stack-name cmcd-analytics-pipeline \
   --query 'Stacks[0].Outputs[?OutputKey==`InfluxDBToken`].OutputValue' --output text
@@ -283,13 +279,12 @@ The file at `mcp/mcp.json` should have the following content:
     "cmcd-mcp": {
       "command": "python3",
       "args": ["cmcd_server.py"],
-      "cwd": "/Users/johndoe/Downloads/sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp-main/mcp",
+      "cwd": "/Users/johndoe/Downloads/sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp-main 2/mcp",
       "env": {
         "FASTMCP_LOG_LEVEL": "INFO"
       }
     }
   }
-}
 ```
 
 ### 5. Copy the mcp.json File to Q CLI Directory
@@ -309,7 +304,12 @@ cp mcp.json ~/.q/mcp.json
 Make sure that the files in the mcp directory have execute permissions:
 
 ```bash
-chmod +x mcp/*
+chmod +x ~/.aws/amazonq/mcp.json
+```
+**OR based on your directory structure:**
+
+```bash
+chmod +x ~/.q/mcp.json
 ```
 
 ### 7. Connect via AWS SSM (Bastion Host)
