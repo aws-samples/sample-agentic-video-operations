@@ -26,7 +26,7 @@ from loguru import logger
 logger.remove()
 logger.add(sys.stderr, level="INFO")
 logger.add("cmcd_server.log", rotation="10 MB", level="INFO")
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from pydantic import Field
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
