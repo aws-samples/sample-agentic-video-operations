@@ -65,8 +65,8 @@ The complete CMCD analytics pipeline is deployed using AWS CloudFormation, which
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/aws-samples/sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp
-   cd sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp
+   git clone https://github.com/aws-samples/sample-agentic-video-operations
+   cd sample-agentic-video-operations
    ```
 
 2. **Deploy the Stack**:
@@ -225,8 +225,8 @@ cmcd-mcp-env\Scripts\activate     # On Windows
 ### 2. Install Required Dependencies
 
 ```bash
-# Navigate to the sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp-main directory
-cd sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp-main
+# Navigate to the sample-agentic-video-operations directory
+cd sample-agentic-video-operations
 pip install -r mcp/requirements.txt
 ```
 
@@ -279,7 +279,7 @@ The file at `mcp/mcp.json` should have the following content:
     "cmcd-mcp": {
       "command": "python3",
       "args": ["cmcd_server.py"],
-      "cwd": "/Users/johndoe/Downloads/sample-code-for-video-streaming-monitoring-solution-with-cmcd-and-mcp-main 2/mcp",
+      "cwd": "/Users/johndoe/Downloads/sample-agentic-video-operations/mcp",
       "env": {
         "FASTMCP_LOG_LEVEL": "INFO"
       }
