@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cmcd-mcp": {
+      "command": "python3",
+      "args": ["cmcd_server.py"],
+      "cwd": "<DIRECTORY_PATH>/sample-agentic-video-operations/cmcd-mcp-server",
+      "env": {
+        "FASTMCP_LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}
