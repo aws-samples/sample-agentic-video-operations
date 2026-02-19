@@ -282,6 +282,10 @@ To avoid unnecessary charges, delete the CDK stack:
 cdk destroy
 ```
 
+## Thank You
+
+Thanks for checking out Hydrolix CDN Insights.
+
 ## License
 
 This project is licensed under the Apache-2.0 License.

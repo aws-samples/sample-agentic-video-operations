@@ -85,6 +85,10 @@ The agent uses the following environment variables:
 | `HYDROLIX_TABLE` | Hydrolix table name (format: `database.table`, e.g., `ibc.demo`) |
 | `QUESTION_ANSWERS_TABLE` | DynamoDB table name for storing query results |
 
+## Thank You
+
+Thanks for checking out Hydrolix CDN Insights.
+
 ## License
 
 This project is licensed under the Apache-2.0 License.

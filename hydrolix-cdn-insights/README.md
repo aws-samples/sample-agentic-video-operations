@@ -141,6 +141,8 @@ The deployment consists of two main steps:
 
 ## Thank You
 
+Thanks for checking out Hydrolix CDN Insights.
+
 ## License
 
 This project is licensed under the Apache-2.0 License.
