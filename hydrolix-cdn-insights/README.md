@@ -1,7 +1,10 @@
 # Deploying Hydrolix CDN Insights with Amazon Bedrock AgentCore
 
 > [!IMPORTANT]
-> **🚀 Ready-to-Deploy Agent Web Application**: Use this reference solution to build other agent-powered web applications across different industries. Extend the agent capabilities by adding custom tools for specific industry workflows and adapt it to various business domains.
+> **🚀 Ready-to-Deploy Agent Web Application**: Use this reference solution to build other agent-powered web applications across different industries.
+
+> [!TIP]
+> Extend the agent capabilities by adding custom tools for specific industry workflows and adapt it to various business domains. See [Example Insights & Actions](#example-insights--actions) for inspiration.
 
 This solution provides a Generative AI application called **Hydrolix CDN Insights** that allows users to interact with Hydrolix CDN and streaming video data through a natural language interface. The solution leverages **[Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/)**, a managed service that enables you to deploy, run, and scale custom agent applications, along with the **[Strands Agents SDK](https://strandsagents.com/)** to build an agent that connects to Hydrolix time-series data, providing real-time analytics capabilities through a web application interface.
 
