@@ -6,6 +6,8 @@ A CDN and streaming video data analyst assistant built with the **[Strands Agent
 
 This agent provides an intelligent orchestrator specialized in Hydrolix CDN and streaming video analytics. It leverages Amazon Bedrock Claude models for natural language processing, Hydrolix for time-series data storage, and AgentCore Memory for conversation context management.
 
+### Strands Agent Features
+
 | Feature | Description |
 |----------|----------|
 | Model Provider | Amazon Bedrock (Claude Haiku 4.5) — Powers the orchestrator and all specialized subagents. |
@@ -16,15 +18,15 @@ This agent provides an intelligent orchestrator specialized in Hydrolix CDN and 
 ### User Interaction Workflow
 
 1. The web application sends user questions about CDN performance or streaming metrics to the AgentCore Invoke
-2. The Strands Agent (powered by Claude Haiku 4.5) processes natural language and routes to specialized subagents (`hydrolix_agent`, `qoe_analysis_agent`, or `cache_origin_agent`)
-3. The specialized agents use MCP Hydrolix tools to execute SQL queries against the Hydrolix time-series database and formulate answers
+2. The Strands multi-agent system (powered by Claude Haiku 4.5) processes natural language through an orchestrator that routes to specialized subagents (`hydrolix_agent`, `qoe_analysis_agent`, or `cache_origin_agent`)
+3. Each specialized subagent uses MCP Hydrolix tools to execute SQL queries against the Hydrolix time-series database and formulate answers within its domain of expertise
 4. AgentCore Memory captures session interactions and retrieves previous conversations for context
-5. After the agent's response is received by the web application, the raw data query results are retrieved from the DynamoDB table to display both the answer and the corresponding records
-6. For chart generation, the application invokes a model (powered by Claude Haiku 4.5) to analyze the agent's answer and raw data query results to generate the necessary data to render an appropriate chart visualization
+5. After the agent's response is received by the web application, the raw data query results are retrieved from the DynamoDB table to display both the answer and the corresponding queries
+6. For chart generation, the application invokes a model (powered by Claude Haiku 4.5) to analyze the multi-agent response and raw data query results to generate the necessary data to render an appropriate chart visualization
 
 ### Example Insights & Actions
 
-Beyond querying data, the agent system can be extended in two directions: enriching the conversational experience with automated actions, and triggering the agent directly from external events to investigate and act autonomously.
+Beyond querying data, the multi-agent system can be extended in two directions: enriching the conversational experience with automated actions across Hydrolix and AWS services, and triggering agents directly from external events to investigate and take action autonomously.
 
 #### 💬 From Conversation — Actions triggered by agent insights during a user session
 
