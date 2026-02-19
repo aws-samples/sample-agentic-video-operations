@@ -297,6 +297,8 @@ This will build your React application and deploy it to AWS Amplify Hosting. You
 
 ## Thank You
 
+Thanks for checking out Hydrolix CDN Insights.
+
 ## License
 
 This project is licensed under the Apache-2.0 License.
