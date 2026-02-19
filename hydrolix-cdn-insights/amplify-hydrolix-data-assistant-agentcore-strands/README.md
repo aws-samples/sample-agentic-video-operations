@@ -154,7 +154,7 @@ After authentication deployment, you need to grant your authenticated users perm
                 "bedrock:InvokeModel"
             ],
             "Resource": [
-                "arn:aws:bedrock:*:<account_id>:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "arn:aws:bedrock:*:<account_id>:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
                 "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
                 "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
                 "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
@@ -201,7 +201,7 @@ In your **src/env.js** update the following environment variables using the CDK 
 Also, you can update the general application description:
 - **APP_NAME**: "Hydrolix CDN Insights"
 - **APP_SUBJECT**: "Real-Time Streaming Analytics"
-- **WELCOME_MESSAGE**: Your custom welcome message
+- **WELCOME_MESSAGE**: "Your custom welcome message"
   
 
 ## Test Hydrolix CDN Insights
@@ -221,52 +221,52 @@ First-Time access:
 
 Try these sample questions to test the assistant:
 
+**Hello / Introduction:**
+
 ```
-Hello!
+Hello! What data do you have access to and what kind of analysis can you help me with?
+```
+
+**Hydrolix Agent (general time-series exploration):**
+
+```
+How many total requests have been recorded and what are the top 5 countries by traffic volume?
 ```
 
 ```
-How can you help me?
+Show me the request volume trend per minute for the last 30 minutes, broken down by HTTP status code
+```
+
+**Cache & Origin Agent (CDN infrastructure performance):**
+
+```
+What is the current cache hit rate and which edge locations have the lowest cache efficiency?
 ```
 
 ```
-What data is available?
+Compare origin TTFB vs edge TTFB for cache misses and show the error rate breakdown by status code
+```
+
+**QoE Analysis Agent (viewer quality of experience):**
+
+```
+Are there any buffer starvation events? Show me the rebuffering ratio by country
 ```
 
 ```
-What is the current cache hit rate?
+What is the average encoded bitrate vs measured throughput? Are viewers getting the top available quality?
 ```
 
-```
-Show me the top 10 edge locations by traffic volume
-```
+**Cross-agent analysis (spans multiple agent topics):**
 
 ```
-Are there any sessions experiencing rebuffering issues?
+Give me a full health check: cache hit rate, origin latency, error rates, and viewer QoE metrics including rebuffering and bitrate quality
 ```
 
-```
-What is the average bitrate across all sessions in the last 30 minutes?
-```
+**Conversation summary:**
 
 ```
-Show me the error rate breakdown by status code
-```
-
-```
-Which countries have the highest rebuffering rates?
-```
-
-```
-What is the origin server latency performance?
-```
-
-```
-Give me a QoE summary for the last hour
-```
-
-```
-Give me a short summary and conclusion of our conversation.
+Give me a summary of our conversation
 ```
 
 ## Deploy your Application with Amplify Hosting

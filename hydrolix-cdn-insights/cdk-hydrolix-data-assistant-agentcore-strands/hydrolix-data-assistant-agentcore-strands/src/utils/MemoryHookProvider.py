@@ -131,31 +131,6 @@ class MemoryHookProvider(HookProvider):
                         )
                         break
 
-                    # Check for toolResult with get_tables_information
-                    elif "toolResult" in content_item:
-                        tool_result = content_item["toolResult"]
-                        if (
-                            "content" in tool_result
-                            and tool_result["content"]
-                            and "text" in tool_result["content"][0]
-                        ):
-                            tool_text = tool_result["content"][0]["text"]
-                            # Check if it contains the specific toolUsed marker
-                            if "'toolUsed': 'get_tables_information'" in tool_text:
-                                content_to_save = tool_text
-                                print(
-                                    f"      ✅ Found get_tables_information tool result (length: {len(content_to_save)})"
-                                )
-                                break
-                            else:
-                                print(
-                                    "      ❌ Tool result doesn't contain get_tables_information marker"
-                                )
-                        else:
-                            print(
-                                "      ❌ Tool result missing expected content structure"
-                            )
-
                 if content_to_save:
                     print("\n" + "=" * 50)
                     print("💾 SAVING TO MEMORY")
@@ -176,11 +151,7 @@ class MemoryHookProvider(HookProvider):
                         messages=[(content_to_save, role)],
                     )
                     print("✅ SUCCESSFULLY SAVED TO MEMORY")
-                else:
-                    print("❌ NO SAVEABLE CONTENT FOUND")
-                    print(
-                        "   Reasons: No text content or get_tables_information tool result found"
-                    )
+
             else:
                 print("❌ INVALID MESSAGE STRUCTURE")
                 print("   Missing required fields: role, content, or content is empty")

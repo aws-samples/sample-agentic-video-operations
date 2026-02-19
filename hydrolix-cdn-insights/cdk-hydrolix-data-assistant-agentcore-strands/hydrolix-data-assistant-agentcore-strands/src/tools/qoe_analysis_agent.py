@@ -21,7 +21,7 @@ from strands.models import BedrockModel
 from mcp import stdio_client, StdioServerParameters
 from strands.tools.mcp import MCPClient
 
-from src.utils import load_file_content, get_request_context
+from src.utils import load_file_content, get_request_context, process_agent_stream
 
 
 def _load_qoe_system_prompt(user_timezone: str = "US/Pacific") -> str:
@@ -66,35 +66,7 @@ def _get_hydrolix_mcp_env() -> dict:
     }
 
 
-async def _process_stream(agent: Agent, query: str) -> str:
-    """Process the agent stream and collect the response."""
-    collected_text = []
-    tool_active = False
-    
-    async for item in agent.stream_async(query):
-        if "event" in item:
-            event = item["event"]
 
-            if "contentBlockStart" in event and "toolUse" in event[
-                "contentBlockStart"
-            ].get("start", {}):
-                tool_active = True
-                print(json.dumps({"event": event}))
-
-            elif "contentBlockStop" in event and tool_active:
-                tool_active = False
-                print(json.dumps({"event": event}))
-
-        elif "start_event_loop" in item:
-            print(json.dumps(item))
-        elif "current_tool_use" in item and tool_active:
-            print(json.dumps(item["current_tool_use"]))
-        elif "data" in item:
-            collected_text.append(item["data"])
-            print(item["data"], end="", flush=True)
-    
-    print()
-    return "".join(collected_text)
 
 
 @tool
@@ -173,7 +145,7 @@ def qoe_analysis_agent(query: str) -> str:
             print(f"{'='*60}")
             
             formatted_query = f"Analyze Quality of Experience for: {query}"
-            text_response = asyncio.run(_process_stream(agent, formatted_query))
+            text_response = asyncio.run(process_agent_stream(agent, formatted_query, agent_name="qoe_analysis_agent"))
             
             print(f"\n{'='*60}")
             

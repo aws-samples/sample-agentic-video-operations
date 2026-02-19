@@ -411,7 +411,7 @@ const Chat = () => {
                                   onClick={handleShowTab(index, "records")}
                                   startIcon={<TableRowsRoundedIcon />}
                                 >
-                                  Records
+                                  Queries
                                 </Button>
 
                                 {typeof answer.chart === "object" &&
