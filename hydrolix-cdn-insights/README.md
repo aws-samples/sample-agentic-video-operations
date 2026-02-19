@@ -6,7 +6,7 @@
 This solution provides a Generative AI application called **Hydrolix CDN Insights** that allows users to interact with Hydrolix CDN and streaming video data through a natural language interface. The solution leverages **[Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/)**, a managed service that enables you to deploy, run, and scale custom agent applications, along with the **[Strands Agents SDK](https://strandsagents.com/)** to build an agent that connects to Hydrolix time-series data, providing real-time analytics capabilities through a web application interface.
 
 <div align="center">
-<img src="./images/" alt="Hydrolix CDN Insights with Amazon Bedrock AgentCore">
+<img src="./images/hydrolix-cdn-insights-preview.gif" alt="Hydrolix CDN Insights with Amazon Bedrock AgentCore">
 </div>
 
 🤖 Hydrolix CDN Insights offers an approach to CDN and streaming video analytics that enables enterprises to interact with their time-series data through natural language conversations rather than complex SQL queries. This assistant provides an intuitive question-answering interface for data analysis conversations and can be improved by offering data visualizations to enhance the user experience.
@@ -67,16 +67,13 @@ The AgentCore infrastructure handles all storage complexity and provides efficie
 
 | Feature | Description |
 |----------|----------|
-| Native Tools   | current_time - A built-in Strands tool that provides the current date and time information based on user's timezone.<br>calculator - A built-in Strands tool for performing mathematical calculations. |
-| Custom Tools | hydrolix_agent - A specialized agent for general Hydrolix data queries and analysis.<br>qoe_analysis_agent - A specialized agent focused on Quality of Experience metrics and viewer analytics.<br>cache_origin_agent - A specialized agent for cache performance and origin server analysis. |
-| MCP Integration | **[Hydrolix MCP Server](https://github.com/hydrolix/mcp-hydrolix)** - Model Context Protocol package that provides tools for querying Hydrolix time-series database, including schema inspection and SQL query execution. |
-| Model Provider | Amazon Bedrock (Claude Haiku 4.5) |
+| Model Provider | Amazon Bedrock (Claude Haiku 4.5) — Powers the orchestrator and all specialized subagents. |
+| Specialized Subagents | The orchestrator routes user questions to domain-expert subagents, each with its own system prompt, tools, and specialized knowledge:<br><br>🔍 `hydrolix_agent` - **General Data Analyst** — Default subagent for time-series data exploration, traffic overviews, and ad-hoc queries across all dimensions.<br>🗄️ `cache_origin_agent` - **CDN Infrastructure Expert** — Specialized in cache hit/miss analysis, origin server latency, error rates, bandwidth cost, and edge location (POP) performance. Works with CDN access log data (near-100% fill rate).<br>📺 `qoe_analysis_agent` - **Viewer Experience Expert** — Specialized in Quality of Experience (QoE) using CMCD player telemetry: buffer starvation, bitrate adaptation, throughput, startup performance, and geographic QoE breakdown. Validates data quality before analysis.<br><br>💡 *New specialized subagents can be added to extend the system — for example, **an anti-piracy agent for detecting unauthorized content distribution, or a bot-detector agent for identifying suspicious traffic patterns**.* |
+| MCP Integration | **[Hydrolix MCP Server](https://github.com/hydrolix/mcp-hydrolix)** — Model Context Protocol package used by each specialized subagent to query the Hydrolix time-series database, including schema inspection and SQL query execution. Each subagent initializes its own MCP client to run queries independently. |
+| Native Tools | Built-in Strands tools available to the orchestrator and each specialized subagent:<br>`current_time` - Provides current date and time information based on user's timezone.<br>`calculator` - Performs mathematical calculations: percentages, ratios, statistical metrics. |
 
 > [!NOTE]
 > The React Web Application uses Amazon Cognito for user authentication and permissions management, providing secure access to Amazon Bedrock AgentCore and Amazon DynamoDB services through authenticated user roles.
-
-> [!TIP]
-> You can also change the data source to connect to your preferred time-series database or data warehouse by adapting the Agent's instructions and MCP tool implementations.
 
 > [!IMPORTANT] 
 > Enhance AI safety and compliance by implementing **[Amazon Bedrock Guardrails](https://aws.amazon.com/bedrock/guardrails/)** for your AI applications with the seamless integration offered by **[Strands Agents SDK](https://strandsagents.com/latest/user-guide/safety-security/guardrails/)**.
@@ -94,14 +91,24 @@ The **user interaction workflow** operates as follows:
 
 The deployment consists of two main steps:
 
-1. **Back-End Deployment - [Hydrolix CDN Insights Backend with Amazon Bedrock AgentCore and CDK](./cdk-hydrolix-data-assistant-agentcore-strands/)**
-2. **Front-End Implementation - [Hydrolix CDN Insights Frontend with Amplify](./amplify-hydrolix-data-assistant-agentcore-strands/)**
+1. **[Amazon Bedrock AgentCore Deployment with CDK](./cdk-hydrolix-data-assistant-agentcore-strands/)**
+2. **[Front-End Implementation with Amplify](./amplify-hydrolix-data-assistant-agentcore-strands/)**
 
 > [!NOTE]
 > *It is recommended to use the Oregon (us-west-2) or N. Virginia (us-east-1) regions to deploy the application.*
 
 > [!IMPORTANT] 
 > Remember to clean up resources after testing to avoid unnecessary costs by following the clean-up steps provided.
+
+## Application Preview
+
+<div align="center">
+<img src="./images/preview1.png" alt="Hydrolix CDN Insights - Application Preview 1" width="100%">
+</div>
+
+<div align="center">
+<img src="./images/preview2.png" alt="Hydrolix CDN Insights - Application Preview 2" width="100%">
+</div>
 
 ## Thank You
 

@@ -38,7 +38,7 @@ Before you begin, ensure you have:
 
 ## Setup MCP Hydrolix
 
-Before deploying the infrastructure, you need to set up the Hydrolix MCP (Model Context Protocol) package that enables the agent to query Hydrolix data.
+Before deploying the infrastructure, you need to set up the **[Hydrolix MCP Server](https://github.com/hydrolix/mcp-hydrolix)** (Model Context Protocol) package that enables the agent to query Hydrolix data.
 
 1. Clone the MCP Hydrolix repository:
 
@@ -200,23 +200,65 @@ export SESSION_ID=$(uuidgen)
 
 3. Test the agent with example queries using curl:
 
+**Hello / Introduction:**
+
 ```bash
 curl -X POST http://localhost:8080/invocations \
 -H "Content-Type: application/json" \
--d '{"prompt": "Hello! What data do you have access to?", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+-d '{"prompt": "Hello! What data do you have access to and what kind of analysis can you help me with?", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+```
+
+**Hydrolix Agent (general time-series exploration):**
+
+```bash
+curl -X POST http://localhost:8080/invocations \
+-H "Content-Type: application/json" \
+-d '{"prompt": "How many total requests have been recorded and what are the top 5 countries by traffic volume?", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
 ```
 
 ```bash
 curl -X POST http://localhost:8080/invocations \
 -H "Content-Type: application/json" \
--d '{"prompt": "Show me the cache hit rate for the last 30 minutes", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+-d '{"prompt": "Show me the request volume trend per minute for the last 30 minutes, broken down by HTTP status code", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+```
+
+**Cache & Origin Agent (CDN infrastructure performance):**
+
+```bash
+curl -X POST http://localhost:8080/invocations \
+-H "Content-Type: application/json" \
+-d '{"prompt": "What is the current cache hit rate and which edge locations have the lowest cache efficiency?", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
 ```
 
 ```bash
 curl -X POST http://localhost:8080/invocations \
 -H "Content-Type: application/json" \
--d '{"prompt": "Analyze QoE metrics - are there any rebuffering issues?", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+-d '{"prompt": "Compare origin TTFB vs edge TTFB for cache misses and show the error rate breakdown by status code", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
 ```
+
+**QoE Analysis Agent (viewer quality of experience):**
+
+```bash
+curl -X POST http://localhost:8080/invocations \
+-H "Content-Type: application/json" \
+-d '{"prompt": "Are there any buffer starvation events? Show me the rebuffering ratio by country", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+```
+
+```bash
+curl -X POST http://localhost:8080/invocations \
+-H "Content-Type: application/json" \
+-d '{"prompt": "What is the average encoded bitrate vs measured throughput? Are viewers getting the top available quality?", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+```
+
+**Cross-agent analysis (spans multiple agent topics):**
+
+```bash
+curl -X POST http://localhost:8080/invocations \
+-H "Content-Type: application/json" \
+-d '{"prompt": "Give me a full health check: cache hit rate, origin latency, error rates, and viewer QoE metrics including rebuffering and bitrate quality", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
+```
+
+**Conversation summary:**
 
 ```bash
 curl -X POST http://localhost:8080/invocations \
@@ -230,7 +272,7 @@ Once deployed and Hydrolix credentials are configured, you can invoke the agent 
 
 ## Next Step
 
-You can now proceed to the **[Front-End Implementation - Hydrolix CDN Insights Frontend with Amplify](../amplify-hydrolix-data-assistant-agentcore-strands/)**.
+You can now proceed to the **[Front-End Implementation with Amplify](../amplify-hydrolix-data-assistant-agentcore-strands/)**.
 
 ## Cleaning-up Resources (Optional)
 

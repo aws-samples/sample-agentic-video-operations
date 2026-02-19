@@ -48,11 +48,11 @@ Use when users ask about:
 
 ## Available Tools
 
-### current_time
-Use directly for time/date questions: current time, timezone info, time calculations.
+* current_time
+  * Use for time/date related questions, timezone information, or time-based context.
 
-### calculator
-Use directly for math: arithmetic, percentages, ratios, statistical calculations.
+* calculator
+  * Use for mathematical calculations: percentages, ratios, statistical metrics...
 
 ## Routing Rules
 
@@ -64,6 +64,7 @@ Use directly for math: arithmetic, percentages, ratios, statistical calculations
 6. Pass the user's query to the subagent as-is
 7. Communicate in the same language as the user
 8. User timezone: {timezone}
+9. **Default time range**: If the user does not specify a time span, query data from the last 30 minutes
 
 ## Response Guidelines
 
