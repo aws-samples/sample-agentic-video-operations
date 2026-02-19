@@ -1,18 +1,15 @@
 # Deploying Hydrolix CDN Insights with Amazon Bedrock AgentCore
 
 > [!IMPORTANT]
-> **🚀 Ready-to-Deploy Multi-Agent Web Application**: Use this reference solution to build other multi-agent-powered web applications across different industries.
+> **🚀 Ready-to-Deploy Agent Web Application**: Use this reference solution to build other agent-powered web applications across different industries. Extend the agent capabilities by adding custom tools for specific industry workflows and adapt it to various business domains.
 
-> [!TIP]
-> Extend the multi-agent system by adding new specialized subagents, custom tools, and automated workflows for Hydrolix analytics and AWS service integrations. See [Example Insights & Actions](#example-insights--actions) for ideas on conversational actions and external triggers you can implement.
-
-This reference solution provides a Generative AI application called **Hydrolix CDN Insights** that allows users to interact with Hydrolix CDN and streaming video data through a natural language interface. The solution leverages **[Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/)**, a managed service that enables you to deploy, run, and scale custom agent applications, along with the **[Strands Agents SDK](https://strandsagents.com/)** to build a multi-agent system that connects to Hydrolix time-series data, providing real-time analytics capabilities through a web application interface.
+This solution provides a Generative AI application called **Hydrolix CDN Insights** that allows users to interact with Hydrolix CDN and streaming video data through a natural language interface. The solution leverages **[Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/)**, a managed service that enables you to deploy, run, and scale custom agent applications, along with the **[Strands Agents SDK](https://strandsagents.com/)** to build an agent that connects to Hydrolix time-series data, providing real-time analytics capabilities through a web application interface.
 
 <div align="center">
 <img src="./images/hydrolix-cdn-insights-preview.gif" alt="Hydrolix CDN Insights with Amazon Bedrock AgentCore">
 </div>
 
-🤖 Hydrolix CDN Insights offers a multi-agent approach to CDN and streaming video analytics that enables enterprises to interact with their time-series data through natural language conversations rather than complex SQL queries. An orchestrator routes questions to specialized subagents — each an expert in a specific domain — providing an intuitive question-answering interface for data analysis conversations that can be improved by offering data visualizations to enhance the user experience.
+🤖 Hydrolix CDN Insights offers an approach to CDN and streaming video analytics that enables enterprises to interact with their time-series data through natural language conversations rather than complex SQL queries. This assistant provides an intuitive question-answering interface for data analysis conversations and can be improved by offering data visualizations to enhance the user experience.
 
 ✨ This solution enables users to:
 
@@ -20,7 +17,7 @@ This reference solution provides a Generative AI application called **Hydrolix C
 - Receive AI-generated responses based on SQL queries to Hydrolix time-series database
 - View query results in tabular format
 - Explore data through automatically generated visualizations
-- Get insights and analysis from specialized subagents in:
+- Get insights and analysis from the AI assistant specialized in:
   - Cache performance and hit rates
   - Quality of Experience (QoE) metrics
   - Origin server performance
@@ -37,7 +34,7 @@ This reference solution provides a Generative AI application called **Hydrolix C
 
 ## Solution Overview
 
-The following architecture diagram illustrates a reference solution for Hydrolix CDN Insights, a generative AI multi-agent system built using Strands Agents SDK and powered by Amazon Bedrock. An orchestrator agent routes user questions to specialized subagents that access time-series CDN and streaming video data stored in Hydrolix through a question-answering interface.
+The following architecture diagram illustrates a reference solution for Hydrolix CDN Insights, a generative AI assistant built using Strands Agents SDK and powered by Amazon Bedrock. This assistant enables users to access time-series CDN and streaming video data stored in Hydrolix through a question-answering interface.
 
 ![Hydrolix CDN Insights](./images/gen-ai-assistant-diagram.png)
 
@@ -56,15 +53,15 @@ The following architecture diagram illustrates a reference solution for Hydrolix
 ### User Interaction Workflow
 
 1. The web application sends user questions about CDN performance or streaming metrics to the AgentCore Invoke
-2. The Strands multi-agent system (powered by Claude Haiku 4.5) processes natural language through an orchestrator that routes to specialized subagents (`hydrolix_agent`, `qoe_analysis_agent`, or `cache_origin_agent`)
-3. Each specialized subagent uses MCP Hydrolix tools to execute SQL queries against the Hydrolix time-series database and formulate answers within its domain of expertise
+2. The Strands Agent (powered by Claude Haiku 4.5) processes natural language and routes to specialized subagents (`hydrolix_agent`, `qoe_analysis_agent`, or `cache_origin_agent`)
+3. The specialized agents use MCP Hydrolix tools to execute SQL queries against the Hydrolix time-series database and formulate answers
 4. AgentCore Memory captures session interactions and retrieves previous conversations for context
-5. After the agent's response is received by the web application, the raw data query results are retrieved from the DynamoDB table to display both the answer and the corresponding queries
-6. For chart generation, the application invokes a model (powered by Claude Haiku 4.5) to analyze the multi-agent response and raw data query results to generate the necessary data to render an appropriate chart visualization
+5. After the agent's response is received by the web application, the raw data query results are retrieved from the DynamoDB table to display both the answer and the corresponding records
+6. For chart generation, the application invokes a model (powered by Claude Haiku 4.5) to analyze the agent's answer and raw data query results to generate the necessary data to render an appropriate chart visualization
 
 ### Example Insights & Actions
 
-Beyond querying data, the multi-agent system can be extended in two directions: enriching the conversational experience with automated actions across Hydrolix and AWS services, and triggering agents directly from external events to investigate and take action autonomously.
+Beyond querying data, the agent system can be extended in two directions: enriching the conversational experience with automated actions, and triggering the agent directly from external events to investigate and act autonomously.
 
 #### 💬 From Conversation — Actions triggered by agent insights during a user session
 

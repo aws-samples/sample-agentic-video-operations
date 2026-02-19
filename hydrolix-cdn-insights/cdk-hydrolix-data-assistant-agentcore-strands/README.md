@@ -7,12 +7,12 @@ Deploy the complete infrastructure for **Hydrolix CDN Insights** using **[AWS Cl
 
 ## Overview
 
-This CDK stack deploys a complete Hydrolix CDN Insights multi-agent system powered by Amazon Bedrock AgentCore with the following components:
+This CDK stack deploys a complete Hydrolix CDN Insights assistant powered by Amazon Bedrock AgentCore with the following components:
 
 ### Amazon Bedrock AgentCore Resources
 
 - **AgentCore Memory**: Short-term memory for maintaining conversation context with 7-day event expiration
-- **AgentCore Runtime**: Container-based runtime hosting the Strands multi-agent system with ARM64 architecture
+- **AgentCore Runtime**: Container-based runtime hosting the Strands Agent with ARM64 architecture
 - **AgentCore Runtime Endpoint**: HTTP endpoint for invoking Hydrolix CDN Insights
 
 ### Data and Configuration Infrastructure
@@ -58,7 +58,7 @@ mv mcp-hydrolix/mcp_hydrolix hydrolix-data-assistant-agentcore-strands/src/mcp/
 rm -rf mcp-hydrolix
 ```
 
-The `mcp_hydrolix` package is now integrated into your multi-agent project and will be included in the Docker container during deployment.
+The `mcp_hydrolix` package is now integrated into your agent project and will be included in the Docker container during deployment.
 
 ## AWS Deployment
 
@@ -77,16 +77,16 @@ cdk deploy \
 ```
 
 Default Parameters:
-- **BedrockModelId**: "global.anthropic.claude-haiku-4-5-20251001-v1:0" - Bedrock model ID for the multi-agent system
+- **BedrockModelId**: "global.anthropic.claude-haiku-4-5-20251001-v1:0" - Bedrock model ID for the agent
 - **HydrolixTable**: "ibc.demo" - Hydrolix table name (format: database.table)
 
 ### Deployed Resources
 
 **AgentCore Resources:**
 - AgentCore Memory with 7-day event expiration
-- **AgentCore Runtime**: Container-based runtime (ARM64)
-- **AgentCore Runtime Endpoint**
-- **ECR repository** with multi-agent container image
+- AgentCore Runtime (container-based, ARM64)
+- AgentCore Runtime Endpoint
+- ECR repository with agent container image
 
 **Data Infrastructure:**
 - DynamoDB table for SQL query results
@@ -95,7 +95,7 @@ Default Parameters:
 **Runtime Environment Variables:**
 The AgentCore Runtime automatically receives these environment variables:
 - `MEMORY_ID`: AgentCore Memory ID
-- `BEDROCK_MODEL_ID`: Bedrock model ID for the multi-agent system
+- `BEDROCK_MODEL_ID`: Bedrock model ID for the agent
 - `HYDROLIX_SECRET_ARN`: Hydrolix Secrets Manager ARN
 - `HYDROLIX_TABLE`: Hydrolix table name (e.g., "ibc.demo")
 - `QUESTION_ANSWERS_TABLE`: DynamoDB table name for query results
@@ -177,11 +177,11 @@ aws secretsmanager put-secret-value \
   }'
 ```
 
-3. The Hydrolix subagents will use these credentials when querying time-series data.
+3. The Hydrolix agents will use these credentials when querying time-series data.
 
 ## Local Testing
 
-Before deploying to AWS, you can test the Hydrolix CDN Insights multi-agent system locally to verify functionality:
+Before deploying to AWS, you can test Hydrolix CDN Insights locally to verify functionality:
 
 1. Navigate to the agent folder and start the local agent server:
 
@@ -198,7 +198,7 @@ This launches a local server on port 8080 that simulates the AgentCore runtime e
 export SESSION_ID=$(uuidgen)
 ```
 
-3. Test the multi-agent system with example queries using curl:
+3. Test the agent with example queries using curl:
 
 **Hello / Introduction:**
 
@@ -268,7 +268,7 @@ curl -X POST http://localhost:8080/invocations \
 
 ## Invoking the Agent
 
-Once deployed and Hydrolix credentials are configured, you can invoke the multi-agent system using the AgentCore Runtime Endpoint. The endpoint name is available in the stack outputs as `AgentEndpointName`.
+Once deployed and Hydrolix credentials are configured, you can invoke the agent using the AgentCore Runtime Endpoint. The endpoint name is available in the stack outputs as `AgentEndpointName`.
 
 ## Next Step
 

@@ -7,14 +7,14 @@ This tutorial guides you through setting up a React Web application that integra
 
 ## Overview
 
-By the end of this tutorial, you'll have a fully functional Generative AI web application called **Hydrolix CDN Insights** that allows users to interact with a Hydrolix data analysis multi-agent system powered by Amazon Bedrock AgentCore.
+By the end of this tutorial, you'll have a fully functional Generative AI web application called **Hydrolix CDN Insights** that allows users to interact with a Hydrolix data analysis interface powered by Amazon Bedrock AgentCore.
 
 The application consists of two main components:
 
 - **React Web Application**: Provides the user interface and handles user interactions
 - **Amazon Bedrock AgentCore Integration:**:
-    - Uses your AgentCore deployment for multi-agent orchestration and natural language processing
-    - The application invokes the Amazon Bedrock AgentCore to interact with the multi-agent system
+    - Uses your AgentCore deployment for data analysis and natural language processing
+    - The application invokes the Amazon Bedrock AgentCore for interacting with the assistant
     - Directly invokes Claude Haiku 4.5 model for chart generation and visualization
 
 > [!IMPORTANT]
@@ -219,7 +219,7 @@ First-Time access:
 2. **Verify Email**: Check your email for a verification code
 3. **Sign In**: Use your email and password to sign in
 
-Try these sample questions to test the multi-agent system:
+Try these sample questions to test the assistant:
 
 **Hello / Introduction:**
 
