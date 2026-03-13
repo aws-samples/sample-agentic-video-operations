@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mediaconnect-mcp": {
+      "command": "python3",
+      "args": ["server.py"],
+      "cwd": "<DIRECTORY_PATH>",
+      "env": {
+        "FASTMCP_LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}
