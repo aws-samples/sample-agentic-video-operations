@@ -1,0 +1,12 @@
+# CDK project — not needed in the container
+cdk/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+*.md
+!prompts/*.md
+.kiro/
+.bedrock_agentcore.yaml
+mcp.json

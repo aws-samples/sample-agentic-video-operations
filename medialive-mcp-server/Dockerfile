@@ -1,0 +1,39 @@
+FROM public.ecr.aws/docker/library/python:3.13-slim
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+
+
+COPY requirements.txt requirements.txt
+# Install from requirements file
+RUN pip install -r requirements.txt
+
+
+
+
+RUN pip install aws-opentelemetry-distro>=0.10.1
+
+
+# Set AWS region environment variable
+
+# AWS region — override at deploy time via env vars or CDK
+ENV AWS_REGION=${AWS_REGION:-us-west-2}
+ENV AWS_DEFAULT_REGION=${AWS_REGION:-us-west-2}
+
+
+# Signal that this is running in Docker for host binding logic
+ENV DOCKER_CONTAINER=1
+
+# Create non-root user
+RUN useradd -m -u 1000 bedrock_agentcore
+USER bedrock_agentcore
+
+EXPOSE 8080
+EXPOSE 8000
+
+# Copy entire project (respecting .dockerignore)
+COPY . .
+
+# Use the full module path
+
+CMD ["opentelemetry-instrument", "python", "-m", "main"]

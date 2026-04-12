@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "medialive-mcp": {
+      "command": "python3",
+      "args": ["server.py"],
+      "cwd": "<DIRECTORY_PATH>",
+      "env": {
+        "AWS_REGION": "us-west-2",
+        "MEDIALIVE_DEFAULT_CHANNEL_ID": "<YOUR_CHANNEL_ID>",
+        "THUMBNAIL_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "FASTMCP_LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}

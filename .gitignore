@@ -1,0 +1,9 @@
+.kiro/*
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Migration reference — superseded by medialive-mcp-server/
+mcp-eml-reference/

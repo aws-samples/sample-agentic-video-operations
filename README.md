@@ -17,6 +17,8 @@ This repository hosts sample projects that showcase **intelligent observability*
 |:---:|--------|-------------|------------------|
 | <img src="./images/genai.png" width="40"> | **[cmcd-mcp-server](./cmcd-mcp-server/)** | MCP server for analyzing Common Media Client Data (CMCD) streaming telemetry. AI-powered analytics tools for video streaming QoE analysis using InfluxDB. | MCP, CMCD, InfluxDB, CloudFront, Kinesis |
 | <img src="./images/agentcore.png" width="40"> | **[hydrolix-cdn-insights](./hydrolix-cdn-insights/)** | Generative AI assistant for CDN and streaming video analytics using Hydrolix time-series data. Natural language interface for real-time performance insights powered by Amazon Bedrock AgentCore. | Strands Agents SDK, Amazon Bedrock AgentCore, Hydrolix, CDK, Amplify |
+| <img src="./images/genai.png" width="40"> | **[mediaconnect-mcp-server](./mediaconnect-mcp-server/)** | MCP server for managing and monitoring AWS Elemental MediaConnect flows. AI-powered tools for live video transport including flow management, CloudWatch monitoring, and thumbnail analysis via Bedrock. | MCP, CloudWatch, Amazon Bedrock |
+| <img src="./images/genai.png" width="40"> | **[medialive-mcp-server](./medialive-mcp-server/)** | MCP server and Strands Agent for managing and monitoring AWS Elemental MediaLive channels. 5-category CloudWatch monitoring, thumbnail analysis via Bedrock, schedule management, and CDK deployment to AgentCore. | MCP, Strands Agents SDK, Amazon Bedrock AgentCore, CloudWatch, CDK |
 
 ## Getting Started
 
@@ -27,8 +29,10 @@ git clone https://github.com/aws-samples/sample-agentic-video-operations
 cd sample-agentic-video-operations
 
 # Pick a sample
-cd cmcd-mcp-server      # CMCD MCP analytics server
-cd hydrolix-cdn-insights # Hydrolix CDN insights with AgentCore
+cd cmcd-mcp-server        # CMCD MCP analytics server
+cd hydrolix-cdn-insights  # Hydrolix CDN insights with AgentCore
+cd mediaconnect-mcp-server # MediaConnect flow management MCP server
+cd medialive-mcp-server   # MediaLive MCP server + AgentCore agent
 ```
 
 ## Security
