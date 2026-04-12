@@ -50,10 +50,9 @@ def _get_hydrolix_mcp_env() -> dict:
     if not secret_arn:
         raise ValueError("HYDROLIX_SECRET_ARN environment variable not set")
     
-    print(f"🔐 Retrieving Hydrolix configuration from Secrets Manager: {secret_arn}")
+    print("Retrieving Hydrolix configuration from Secrets Manager")
 
     secrets_region = os.getenv("AWS_REGION", "us-east-1")
-    print(f"🌍 Using Secrets Manager region: {secrets_region}")
     secrets_client = boto3.client('secretsmanager', region_name=secrets_region)
     
     secret_response = secrets_client.get_secret_value(SecretId=secret_arn)
