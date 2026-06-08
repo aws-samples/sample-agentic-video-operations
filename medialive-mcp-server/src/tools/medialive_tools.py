@@ -63,10 +63,9 @@ def describe_channel(channel_id: Optional[str] = None):
         pipeline_details = channel.get('PipelineDetails', [])
         if pipeline_details:
             result += f"\nPipeline Status:\n"
-            for pipeline in pipeline_details:
+            for i, pipeline in enumerate(pipeline_details):
                 active_input = pipeline.get('ActiveInputAttachmentName', 'N/A')
-                active_desc = artifact_descriptions.get(active_input, 'Unknown')
-                result += f"  Currently Active: {active_input} ({active_desc})\n"
+                result += f"  Pipeline {i}: Active Input = {active_input}\n"
 
         return result
     except Exception as e:

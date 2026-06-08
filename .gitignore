@@ -1,4 +1,5 @@
 .kiro/*
+.claude/*
 
 # Python
 __pycache__/
@@ -7,3 +8,5 @@ __pycache__/
 
 # Migration reference — superseded by medialive-mcp-server/
 mcp-eml-reference/
+**/cdk.out/
+node_modules/
