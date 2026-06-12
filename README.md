@@ -9,7 +9,8 @@ Media companies — whether delivering live broadcasts, on-demand streaming, or 
 
 This repository hosts sample projects that showcase **intelligent observability** for media operations — spanning streaming, broadcast, and content delivery. Each sample demonstrates how specialized AI agents can continuously monitor quality across the media supply chain, identify root causes within seconds, generate specific resolution paths, and enable proactive experience optimization.
 
-> **Note:** These samples are provided for demonstration and educational purposes. They are not production-ready without security hardening and customization for your environment.
+> [!IMPORTANT]
+> These samples are for **educational and reference purposes only**. They are not intended for production use without security hardening, thorough testing, and customization for your environment.
 
 ## Samples
 
@@ -19,6 +20,7 @@ This repository hosts sample projects that showcase **intelligent observability*
 | <img src="./images/agentcore.png" width="40"> | **[hydrolix-cdn-insights](./hydrolix-cdn-insights/)** | Generative AI assistant for CDN and streaming video analytics using Hydrolix time-series data. Natural language interface for real-time performance insights powered by Amazon Bedrock AgentCore. | Strands Agents SDK, Amazon Bedrock AgentCore, Hydrolix, CDK, Amplify |
 | <img src="./images/genai.png" width="40"> | **[mediaconnect-mcp-server](./mediaconnect-mcp-server/)** | MCP server for managing and monitoring AWS Elemental MediaConnect flows. AI-powered tools for live video transport including flow management, CloudWatch monitoring, and thumbnail analysis via Bedrock. | MCP, CloudWatch, Amazon Bedrock |
 | <img src="./images/genai.png" width="40"> | **[medialive-mcp-server](./medialive-mcp-server/)** | MCP server and Strands Agent for managing and monitoring AWS Elemental MediaLive channels. 5-category CloudWatch monitoring, thumbnail analysis via Bedrock, schedule management, and CDK deployment to AgentCore. | MCP, Strands Agents SDK, Amazon Bedrock AgentCore, CloudWatch, CDK |
+| <img src="./images/agentcore.png" width="40"> | **[media-services-langchain](./media-services-langchain/)** | Multi-agent system for live streaming operations using LangChain/LangGraph. Coordinator routes to specialized MediaLive and MediaConnect agents deployed to Amazon Bedrock AgentCore. | LangChain, LangGraph, Amazon Bedrock AgentCore, CDK |
 
 ## Getting Started
 
@@ -29,11 +31,15 @@ git clone https://github.com/aws-samples/sample-agentic-video-operations
 cd sample-agentic-video-operations
 
 # Pick a sample
-cd cmcd-mcp-server        # CMCD MCP analytics server
-cd hydrolix-cdn-insights  # Hydrolix CDN insights with AgentCore
-cd mediaconnect-mcp-server # MediaConnect flow management MCP server
-cd medialive-mcp-server   # MediaLive MCP server + AgentCore agent
+cd cmcd-mcp-server           # CMCD MCP analytics server
+cd hydrolix-cdn-insights     # Hydrolix CDN insights with AgentCore
+cd mediaconnect-mcp-server   # MediaConnect flow management MCP server
+cd medialive-mcp-server      # MediaLive MCP server + AgentCore agent
+cd media-services-langchain  # LangChain multi-agent orchestration
 ```
+
+> [!TIP]
+> This repository includes `.claude/CLAUDE.md` agent instructions for AI-assisted development and deployment. Compatible with Claude Code, Kiro, and other agentic IDEs.
 
 ## Security
 

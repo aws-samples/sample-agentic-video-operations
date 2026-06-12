@@ -1,5 +1,13 @@
 .kiro/*
 
+# Agent IDE — instructions tracked intentionally; user-specific artifacts ignored
+.claude/plans/
+.claude/steering/
+
+# Secrets
+.env
+*.env.local
+
 # Python
 __pycache__/
 *.pyc
@@ -7,3 +15,5 @@ __pycache__/
 
 # Migration reference — superseded by medialive-mcp-server/
 mcp-eml-reference/
+**/cdk.out/
+node_modules/
