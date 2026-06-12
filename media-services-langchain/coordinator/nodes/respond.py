@@ -22,7 +22,11 @@ def respond_node(state: dict) -> dict:
     agent_results = state.get("agent_results", [])
 
     if not agent_results:
-        return {"messages": [AIMessage(content="I wasn't able to gather results for your request.")]}
+        response = llm.invoke([
+            SystemMessage(content=RESPOND_PROMPT),
+            HumanMessage(content=f"Answer this directly: {user_message}"),
+        ])
+        return {"messages": [AIMessage(content=response.content)]}
 
     results_text = "\n\n".join(
         f"[{r['agent'].upper()} - {r['task_id']}]\n{r['result']}"

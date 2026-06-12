@@ -16,10 +16,18 @@ class TodoItem(TypedDict):
     result: Optional[str]
 
 
+def merge_todos(existing: list[TodoItem], updates: list[TodoItem]) -> list[TodoItem]:
+    """Merge todos by task_id — updates replace existing entries."""
+    by_id = {t["task_id"]: t for t in existing}
+    for t in updates:
+        by_id[t["task_id"]] = t
+    return list(by_id.values())
+
+
 class CoordinatorState(MessagesState):
     """State for the coordinator graph."""
     classification: dict
-    todos: Annotated[list[TodoItem], add]
+    todos: Annotated[list[TodoItem], merge_todos]
     requires_approval: bool
     approval_status: Literal["pending", "approved", "rejected", "not_required"]
     agent_results: Annotated[list[dict], add]

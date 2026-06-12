@@ -13,13 +13,14 @@ from eml.graph import build_eml_graph
 
 app = BedrockAgentCoreApp()
 
+_settings = Settings()
+_checkpointer = create_checkpointer(_settings.memory_id, _settings.region)
+_graph = build_eml_graph(_checkpointer)
+
 
 @app.entrypoint
 async def invoke(payload, context):
     """AgentCore Runtime entry point for EML specialist."""
-    settings = Settings()
-    checkpointer = create_checkpointer(settings.memory_id, settings.region)
-    graph = build_eml_graph(checkpointer)
 
     prompt = payload.get("prompt", "")
     task_id = payload.get("task_id", str(uuid4()))
@@ -27,7 +28,7 @@ async def invoke(payload, context):
 
     config = build_config("eml", task_id, f"task-{task_id}")
 
-    result = await graph.ainvoke(
+    result = await _graph.ainvoke(
         {"messages": [{"role": "user", "content": prompt}]},
         config=config,
     )

@@ -10,6 +10,7 @@ Container layout:
   /app/shared/        ← shared module
 """
 
+import json
 from typing import Optional
 from langchain_core.tools import tool
 
@@ -86,7 +87,8 @@ def eml_immediate_input_switch(channel_id: str, action_name: str, input_attachme
 @tool
 def eml_check_issues(channel_id: str, hours_back: int = 24) -> str:
     """Cross-category issue scan with HIGH/MEDIUM severity classification."""
-    return _monitoring.check_channel_issues(channel_id, hours_back)
+    result = _monitoring.check_channel_issues(channel_id, hours_back)
+    return json.dumps(result, default=str)
 
 
 ALL_TOOLS = [

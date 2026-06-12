@@ -1,10 +1,10 @@
-"""EMX specialist LangGraph state machine.
+"""EMX specialist LangGraph agent.
 
-Uses langchain.agents.create_agent (ReAct loop with tools + checkpointing).
+Uses langgraph.prebuilt.create_react_agent (ReAct loop with tools + checkpointing).
 Reference: langchain-ai/langchain-aws samples/tools/bedrock_agentcore_code_interpreter.ipynb
 """
 
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent
 from langchain.chat_models import init_chat_model
 from langgraph_checkpoint_aws import AgentCoreMemorySaver
 
@@ -17,16 +17,20 @@ _code_toolkit = None
 
 
 async def _get_code_interpreter_tools(region: str):
-    """Lazy-load Code Interpreter toolkit on first use."""
+    """Lazy-load Code Interpreter toolkit on first use.
+    # TODO: wire into build_emx_graph when async init is supported
+    """
     global _code_toolkit
     if _code_toolkit is None:
         try:
             from langchain_aws.tools import create_code_interpreter_toolkit
             _code_toolkit, tools = await create_code_interpreter_toolkit(region=region)
-            return tools
         except Exception:
+            _code_toolkit = []
             return []
-    return []
+    if isinstance(_code_toolkit, list):
+        return _code_toolkit
+    return _code_toolkit.get_tools()
 
 
 def build_emx_graph(checkpointer: AgentCoreMemorySaver):
@@ -39,10 +43,10 @@ def build_emx_graph(checkpointer: AgentCoreMemorySaver):
         region_name=settings.region,
     )
 
-    return create_agent(
+    return create_react_agent(
         model,
         tools=list(ALL_TOOLS),
-        system_prompt=SYSTEM_PROMPT,
+        prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
     )
 

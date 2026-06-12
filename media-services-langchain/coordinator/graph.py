@@ -1,9 +1,12 @@
-"""Coordinator LangGraph state machine.
+"""Coordinator LangGraph state machine (advanced variant).
 
 Flow: classify → plan (write_todos) → approve → route → merge → respond
 
-The coordinator uses a custom StateGraph (not create_agent) because it has
-structured multi-phase logic that doesn't fit a simple ReAct tool loop.
+This is the structured StateGraph variant with explicit nodes for each phase.
+The deployed entrypoint (coordinator/main.py) uses a simpler ReAct tool-calling
+approach. This graph is used by unit tests and serves as a reference for the
+full write_todos deep-agent pattern.
+
 Reference: langchain-ai/langchain-aws samples/memory/agentcore_memory_checkpointer.ipynb
 """
 

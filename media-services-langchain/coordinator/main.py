@@ -1,7 +1,7 @@
 """Coordinator AgentCore Runtime entrypoint.
 
-Uses create_agent (same pattern as EML/EMX) with routing tools that
-invoke specialist runtimes. The write_todos planning happens via
+Uses create_react_agent (ReAct tool-calling loop) with routing tools
+that invoke specialist runtimes. The write_todos planning happens via
 the LLM's tool-calling loop — the coordinator model decides when to
 plan, route, and merge based on the system prompt.
 """
@@ -10,7 +10,7 @@ import json
 from uuid import uuid4
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.tools import tool
 from langgraph_checkpoint_aws import AgentCoreMemorySaver
@@ -20,6 +20,9 @@ from shared.config import Settings
 from shared.runtime_client import AgentCoreRuntimeClient
 
 app = BedrockAgentCoreApp()
+
+_settings = Settings()
+_checkpointer = create_checkpointer(_settings.memory_id, _settings.region)
 
 SYSTEM_PROMPT = """You are a media operations coordinator managing a live streaming pipeline.
 You have access to two specialist agents:
@@ -37,17 +40,18 @@ For simple queries (list, describe, metrics), skip planning and route directly.
 Always report which specialist provided each piece of information."""
 
 
+_client = AgentCoreRuntimeClient(region=_settings.region)
+
+
 @tool
 def invoke_eml(task_description: str) -> str:
     """Invoke the EML (MediaLive) specialist agent with a specific task.
     Use for: listing channels, describing channels, metrics, logs, scheduling, start/stop.
     """
-    settings = Settings()
-    client = AgentCoreRuntimeClient(region=settings.region)
     session_id = f"eml-delegation-{uuid4()}"
     try:
-        return client.invoke(
-            runtime_arn=settings.eml_runtime_arn,
+        return _client.invoke(
+            runtime_arn=_settings.eml_runtime_arn,
             task={"task_id": str(uuid4()), "description": task_description},
             session_id=session_id,
         )
@@ -60,12 +64,10 @@ def invoke_emx(task_description: str) -> str:
     """Invoke the EMX (MediaConnect) specialist agent with a specific task.
     Use for: listing flows, describing flows, metrics, thumbnails, start/stop.
     """
-    settings = Settings()
-    client = AgentCoreRuntimeClient(region=settings.region)
     session_id = f"emx-delegation-{uuid4()}"
     try:
-        return client.invoke(
-            runtime_arn=settings.emx_runtime_arn,
+        return _client.invoke(
+            runtime_arn=_settings.emx_runtime_arn,
             task={"task_id": str(uuid4()), "description": task_description},
             session_id=session_id,
         )
@@ -82,28 +84,27 @@ def write_todos(plan: str) -> str:
     return f"Plan recorded:\n{plan}\n\nProceed with execution."
 
 
-def build_coordinator(checkpointer: AgentCoreMemorySaver):
-    """Build the coordinator agent."""
-    settings = Settings()
+def _build_coordinator():
+    """Build the coordinator agent (called once at module load)."""
     model = init_chat_model(
-        settings.agent_model_id,
+        _settings.agent_model_id,
         model_provider="bedrock_converse",
-        region_name=settings.region,
+        region_name=_settings.region,
     )
-    return create_agent(
+    return create_react_agent(
         model,
         tools=[invoke_eml, invoke_emx, write_todos],
-        system_prompt=SYSTEM_PROMPT,
-        checkpointer=checkpointer,
+        prompt=SYSTEM_PROMPT,
+        checkpointer=_checkpointer,
     )
+
+
+_graph = _build_coordinator()
 
 
 @app.entrypoint
 async def invoke(payload, context):
     """AgentCore Runtime entry point."""
-    settings = Settings()
-    checkpointer = create_checkpointer(settings.memory_id, settings.region)
-    graph = build_coordinator(checkpointer)
 
     prompt = payload.get("prompt", "Hello!")
     session_id = payload.get("session_id") or context.session_id or f"session-{uuid4()}"
@@ -115,7 +116,7 @@ async def invoke(payload, context):
 
     config = build_config("coordinator", user_id, session_id)
 
-    result = await graph.ainvoke(
+    result = await _graph.ainvoke(
         {"messages": [{"role": "user", "content": prompt}]},
         config=config,
     )

@@ -1,10 +1,10 @@
 {
   "Name": "demo-langchain-abr",
   "ChannelClass": "SINGLE_PIPELINE",
-  "RoleArn": "arn:aws:iam::904149973046:role/MediaLiveAccessRole",
+  "RoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/MediaLiveAccessRole",
   "InputAttachments": [
     {
-      "InputId": "9554348",
+      "InputId": "<MEDIACONNECT_INPUT_ID>",
       "InputAttachmentName": "srt-mediaconnect"
     }
   ],
@@ -13,7 +13,7 @@
       "Id": "mediapackage-dest",
       "Settings": [
         {
-          "Url": "https://md6fwj-1.ingest.e56ncc.mediapackagev2.us-west-2.amazonaws.com/in/v1/demo-langchain-group/1/demo-langchain-channel/index"
+          "Url": "<MEDIAPACKAGE_V2_INGEST_URL>"
         }
       ]
     }
