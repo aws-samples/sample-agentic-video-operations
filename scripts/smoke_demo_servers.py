@@ -25,6 +25,7 @@ SMOKE_CASES = (
     SmokeCase("cmcd", "analyze_buffer_events", "low_buffer_count"),
     SmokeCase("mediaconnect", "list_flows", "flows"),
     SmokeCase("medialive", "list_channels", "channel_id"),
+    SmokeCase("hls-doctor", "fetch_manifest", "looks_like_m3u8"),
 )
 
 

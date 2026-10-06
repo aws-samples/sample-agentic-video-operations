@@ -9,6 +9,7 @@ PYTHON_MANIFESTS = (
     "packages/media_ops_contracts/pyproject.toml",
     "packages/media_ops_video_quality/pyproject.toml",
     "samples/cmcd/pyproject.toml",
+    "samples/hls-doctor/pyproject.toml",
     "samples/hub/pyproject.toml",
     "samples/mediaconnect/pyproject.toml",
     "samples/medialive/pyproject.toml",

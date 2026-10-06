@@ -1,0 +1,221 @@
+# HLS Doctor
+
+Diagnose HTTP Live Streaming presentations from a single manifest URL: build
+the presentation graph, validate protocol structure, probe delivery, and
+explain likely causes with evidence instead of raw errors.
+
+[![License](https://img.shields.io/badge/License-MIT--0-blue.svg)](../../LICENSE)
+
+## Purpose
+
+Given an `.m3u8` URL, HLS Doctor recursively inspects every playlist beneath
+it, validates HLS semantics (required tags, group references, rendition
+declarations, encryption signaling, EXT-X-VERSION compatibility), probes the
+delivery of playlists, segments, initialization sections and keys, and emits
+findings that separate observed facts from interpretation:
+
+```text
+Finding: Unreachable init section
+Evidence: Returned HTTP 404 at +42 ms
+Playback impact: No segment of the rendition can be decoded.
+```
+
+A single failed request is evidence, not a root-cause conclusion: every
+finding carries its observations, severity (impact) and confidence (evidence
+strength) separately.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    CLI[hls-doctor CLI] --> W[inspect_stream workflow]
+    MCP[serve-hls-doctor MCP stdio] --> T[inspection tools]
+    T --> W
+    W --> G[presentation graph]
+    W --> V[validators]
+    W --> P[HTTP probes]
+    G --> F[findings + evidence]
+    V --> F
+    P --> F
+```
+
+- `domain/` is framework-free: playlist tokenizer and typed parsers (unknown
+  tags are preserved verbatim), presentation graph, validators, version rules,
+  evidence store and findings.
+- `adapters/http/` fetches live URLs with httpx, or replays recorded exchanges
+  from `fixtures/` in demo mode. A missing recording fails closed.
+- `tool_surface/` exposes the same read-only tools to the MCP server and to
+  the hub's `hls` domain pack.
+
+## Prerequisites
+
+- Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/).
+- [`just`](https://just.systems/) (`uv tool install rust-just`).
+- No AWS account and no credentials: this sample makes no AWS calls.
+
+## Setup and Run
+
+### Run Locally
+
+1. Create the root configuration once:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Inspect the recorded demo presentation with no network access:
+
+   ```bash
+   DEMO=1 uv run --package hls-doctor hls-doctor inspect https://demo.example/vod/master.m3u8
+   ```
+
+3. Inspect a real stream (any reachable `.m3u8` URL):
+
+   ```bash
+   uv run --package hls-doctor hls-doctor inspect <manifest-url> --output json
+   ```
+
+   The exit code reflects the worst finding: 0 healthy, 1 warnings, 2 errors,
+   3 fatal, 4 the URL itself was unusable.
+
+4. Or serve the tools over MCP stdio:
+
+   ```bash
+   just run hls-doctor
+   ```
+
+   The raw command is `uv run --package hls-doctor serve-hls-doctor`.
+
+Register the server in an MCP client with `samples/hls-doctor/mcp.json`,
+replacing the placeholder path with your clone:
+
+```json
+{
+  "mcpServers": {
+    "hls-doctor": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/sample-agentic-video-operations",
+        "--env-file",
+        ".env",
+        "--package",
+        "hls-doctor",
+        "serve-hls-doctor"
+      ]
+    },
+    "hls-doctor-demo": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/sample-agentic-video-operations",
+        "--package",
+        "hls-doctor",
+        "serve-hls-doctor"
+      ],
+      "env": {
+        "DEMO": "1",
+        "DEMO_SCENARIO": "hls_clean_vod",
+        "ALLOW_WRITES": "false"
+      }
+    }
+  }
+}
+```
+
+Known-good request, using the `hls-doctor-demo` entry:
+
+> Inspect https://demo.example/vod/master.m3u8 and summarize the findings.
+
+Expected result: the agent calls `inspect_stream` and reports a healthy VOD
+presentation with 4 variant playlists, alternate audio, subtitles and
+AES-128 encryption, and zero errors. Switch `DEMO_SCENARIO` to
+`hls_broken_map` and the same request reports an unreachable initialization
+section with the 404 evidence.
+
+### Deploy to AWS
+
+This sample runs locally and creates no AWS infrastructure. It has no
+deployment of its own.
+
+### Verify the Deployment
+
+There is no deployed runtime to verify. The known-good request above is the
+verification.
+
+## Available Tools
+
+| Tool | Access | What it does |
+|---|---|---|
+| `inspect_stream` | read | Full pipeline: graph, validation, delivery probes, ranked findings |
+| `fetch_manifest` | read | Fetch one URL and check it is plausibly an M3U8 playlist |
+| `parse_playlist` | read | Parse one playlist into structure counts and unknown-tag lines |
+| `map_presentation` | read | Resolve the full presentation graph and feature inventory |
+| `probe_http` | read | One GET with status, timing and headers, recorded as evidence |
+
+## Demo Scenarios
+
+`DEMO=1` replays recorded HTTP exchanges from `fixtures/`; no network access
+happens and a URL without a recording fails closed. `DEMO_SCENARIO` selects
+the incident:
+
+| Scenario | What the inspection finds |
+|---|---|
+| `hls_clean_vod` | Healthy encrypted VOD; zero errors |
+| `hls_missing_variant` | One ABR variant playlist returns 404 |
+| `hls_wrong_version` | EXT-X-VERSION:3 declared while v7 syntax is in use |
+| `hls_targetduration_exceeded` | A segment advertises 8.5 s against TARGETDURATION 6 |
+| `hls_broken_map` | The initialization section returns 404 |
+| `hls_expired_key` | The AES-128 key URL returns 403 with an expiry-shaped body |
+| `hls_subtitle_playlist_404` | The subtitle rendition playlist returns 404 |
+
+The scenarios are derived from the clean base by the deterministic mutations
+in `scripts/hls_fixture_mutations.py`; `scripts/record_hls_fixtures.py`
+records new bases from a live stream with hosts and query tokens redacted.
+
+## Teardown
+
+Stop the CLI or MCP process with `Ctrl+C`. Nothing else was created.
+
+## Known Limitations
+
+- The inspection is a single snapshot: media playlists are fetched once, so
+  live-edge behavior over time is outside one run's evidence.
+- Delivery probing covers playlists, keys, initialization sections and
+  representative segments; segment media content is not decoded.
+- Ad signaling tags (SCTE-35 cues) are inventoried but their payloads are not
+  decoded.
+- The report reflects what the probes observed from this network location;
+  CDN behavior can differ per edge.
+
+## Development
+
+```bash
+just test hls-doctor
+just lint
+just typecheck
+```
+
+The acceptance scenarios in `samples/hls-doctor/tests/scenarios` replay every
+fixture incident through the full pipeline and assert the expected finding,
+severity and confidence.
+
+## Contributing
+
+See [CONTRIBUTING.md](../../CONTRIBUTING.md). Keep changes offline-testable:
+every new check needs a fixture scenario or a unit test with playlist
+literals.
+
+## Security
+
+- The inspector is read-only; it sends only GET requests.
+- Key bodies, tokens and cookies never appear in reports: URLs are redacted
+  and `--redact-query-params` masks every query value.
+- Treat inspected playlists as untrusted input; findings quote at most short
+  fragments of them.
+
+## License
+
+MIT No Attribution. See [LICENSE](../../LICENSE).

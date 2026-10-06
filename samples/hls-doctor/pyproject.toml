@@ -1,0 +1,30 @@
+[project]
+name = "hls-doctor"
+version = "0.1.0"
+description = "CLI-first HLS stream diagnostics: presentation graph, protocol validation, delivery probes, evidence-model findings."
+license = "MIT-0"
+requires-python = ">=3.12"
+dependencies = [
+  "fastmcp>=3.2,<4",
+  "httpx>=0.28,<1",
+  "media-ops-contracts",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.6,<3",
+]
+
+[project.scripts]
+hls-doctor = "hls_doctor.entrypoints.run_cli:main"
+serve-hls-doctor = "hls_doctor.entrypoints.serve_mcp:main"
+
+[project.entry-points."media_ops.domain_packs"]
+hls = "hls_doctor.domain_pack:create_domain_pack"
+
+[tool.uv.sources]
+media-ops-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "hls_doctor"

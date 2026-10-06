@@ -26,6 +26,7 @@ run sample *args:
       mediaconnect) uv run --package mediaconnect-mcp-server serve-mediaconnect {{ args }} ;;
       medialive)    uv run --package medialive-mcp-server serve-medialive {{ args }} ;;
       hub)          HUB_LOCAL_MODE=true uv run --package media-ops-hub serve-hub {{ args }} ;;
+      hls-doctor)   uv run --package hls-doctor serve-hls-doctor {{ args }} ;;
       hydrolix)     just _pending hydrolix ;;
       *)            just _unknown "{{ sample }}" ;;
     esac
@@ -43,6 +44,7 @@ test sample="":
       mediaconnect) uv run pytest samples/mediaconnect/tests ;;
       medialive) uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack ;;
       hub)       uv run pytest samples/hub/tests/contract ;;
+      hls-doctor) uv run pytest samples/hls-doctor/tests ;;
       hydrolix)  uv run pytest scripts/tests/test_manage_hydrolix_stack.py ;;
       *)         just _unknown "{{ sample }}" ;;
     esac

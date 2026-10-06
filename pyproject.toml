@@ -5,7 +5,7 @@ name = "sample-agentic-video-operations"
 version = "0.1.0"
 license = "MIT-0"
 requires-python = ">=3.12"
-dependencies = ["media-ops-contracts", "media-ops-video-quality", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server", "media-ops-hub"]
+dependencies = ["media-ops-contracts", "media-ops-video-quality", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server", "media-ops-hub", "hls-doctor"]
 
 [dependency-groups]
 # sqlglot: the Hydrolix runtime's SQL check, pinned exactly as in its requirements.txt.
@@ -22,6 +22,7 @@ members = [
   "samples/mediaconnect",
   "samples/medialive",
   "samples/hub",
+  "samples/hls-doctor",
 ]
 
 [tool.uv.sources]
@@ -31,6 +32,7 @@ cmcd-mcp-server = { workspace = true }
 mediaconnect-mcp-server = { workspace = true }
 medialive-mcp-server = { workspace = true }
 media-ops-hub = { workspace = true }
+hls-doctor = { workspace = true }
 
 [tool.ruff]
 # Tool caches live under one ignored .cache/ directory, not in the repository root.
@@ -44,6 +46,7 @@ src = [
   "samples/mediaconnect/src",
   "samples/medialive/src",
   "samples/hub/src",
+  "samples/hls-doctor/src",
 ]
 
 [tool.ruff.lint]
@@ -55,6 +58,11 @@ select = ["E", "F", "I", "B", "UP", "SIM", "S"]
 # Operator scripts run fixed-argv subprocesses (aws/cdk/git) and open the
 # InfluxDB tunnel URL from validated settings; nothing user-supplied.
 "scripts/*.py" = ["S310", "S603", "S607"]
+# Fixed argv; the binary is resolved to an absolute path with shutil.which, and the
+# URL argument is validated upstream by httpx URL parsing.
+"samples/hls-doctor/src/hls_doctor/adapters/ffprobe/run_ffprobe.py" = ["S603"]
+"samples/hls-doctor/src/hls_doctor/adapters/applevalidator/run_mediastreamvalidator.py" = ["S603"]
+"samples/hls-doctor/src/hls_doctor/adapters/hlsjs/run_player_probe.py" = ["S603"]
 
 # Non-strict baseline over the workspace packages; ratchet per package as they harden.
 [tool.mypy]
@@ -66,6 +74,7 @@ files = [
   "samples/mediaconnect/src",
   "samples/medialive/src",
   "samples/hub/src",
+  "samples/hls-doctor/src",
   "samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands",
 ]
 # The hydrolix deploy copies the upstream mcp_hydrolix package into src/mcp (gitignored,
@@ -106,6 +115,7 @@ testpaths = [
   "samples/medialive/tests/pack",
   "samples/hub/tests/contract",
   "samples/hub/tests/eval",
+  "samples/hls-doctor/tests",
 ]
 pythonpath = ["scripts"]
 addopts = "--strict-markers --tb=short -m 'not eval'"

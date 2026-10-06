@@ -14,6 +14,7 @@ SERVERS = (
     "cmcd_mcp.entrypoints.serve_mcp",
     "mediaconnect_mcp.entrypoints.serve_mcp",
     "medialive_mcp.entrypoints.serve_mcp",
+    "hls_doctor.entrypoints.serve_mcp",
 )
 BANNER_TEXT = ("╭", "FastMCP", "pip install --upgrade", "horizon.prefect.io", "gofastmcp.com")
 

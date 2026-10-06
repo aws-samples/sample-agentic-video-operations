@@ -1,10 +1,10 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version == '3.14.*' and sys_platform == 'win32'",
     "python_full_version >= '3.15' and sys_platform != 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'win32'",
     "python_full_version == '3.14.*' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform != 'win32'",
@@ -15,6 +15,7 @@ resolution-markers = [
 [manifest]
 members = [
     "cmcd-mcp-server",
+    "hls-doctor",
     "media-ops-contracts",
     "media-ops-hub",
     "media-ops-video-quality",
@@ -792,6 +793,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1", size = 101250, upload-time = "2025-04-24T03:35:25.427Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
+]
+
+[[package]]
+name = "hls-doctor"
+version = "0.1.0"
+source = { editable = "samples/hls-doctor" }
+dependencies = [
+    { name = "fastmcp" },
+    { name = "httpx" },
+    { name = "media-ops-contracts" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastmcp", specifier = ">=3.2,<4" },
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pydantic-settings", specifier = ">=2.6,<3" },
 ]
 
 [[package]]
@@ -2857,6 +2879,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "cmcd-mcp-server" },
+    { name = "hls-doctor" },
     { name = "media-ops-contracts" },
     { name = "media-ops-hub" },
     { name = "media-ops-video-quality" },
@@ -2876,6 +2899,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cmcd-mcp-server", editable = "samples/cmcd" },
+    { name = "hls-doctor", editable = "samples/hls-doctor" },
     { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
     { name = "media-ops-hub", editable = "samples/hub" },
     { name = "media-ops-video-quality", editable = "packages/media_ops_video_quality" },
@@ -2897,8 +2921,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

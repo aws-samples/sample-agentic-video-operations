@@ -19,6 +19,7 @@ The sample key is the argument to every `just` recipe.
 | `medialive` | MediaLive channel health and control | No own deploy. Runs in the cloud as a domain pack of `hub`; its former `cdk/` is now the hub's | `medialive-mcp-server/` |
 | `hub` | One agent that investigates across the selected media domains (extend_the_hub.md) | `samples/hub/cdk/` | consolidates the earlier multi-runtime sample |
 | `hydrolix` | CDN analytics with a web UI | Its existing CDK + Amplify | `hydrolix-cdn-insights/` |
+| `hls-doctor` | HLS stream diagnostics from a manifest URL | No own deploy. Runs locally (CLI and MCP stdio) | new in this repository |
 
 Adding a sample means adding a row here, a `samples/<key>/` folder that follows section 2, and its recipes in the `justfile`.
 
@@ -54,6 +55,7 @@ samples/<key>/
 | `samples/mediaconnect` | `mediaconnect-mcp-server` | `mediaconnect_mcp` | `serve-mediaconnect` |
 | `samples/medialive` | `medialive-mcp-server` | `medialive_mcp` | `serve-medialive` |
 | `samples/hub` | `media-ops-hub` | `media_ops_hub` | `serve-hub` |
+| `samples/hls-doctor` | `hls-doctor` | `hls_doctor` | `serve-hls-doctor`, plus the `hls-doctor` CLI |
 | `packages/media_ops_contracts` | `media-ops-contracts` | `media_ops_contracts` | none |
 
 **Rules:**

@@ -46,7 +46,7 @@ def read_recipes(justfile: str) -> dict[str, str]:
 def handled_samples(body: str) -> set[str]:
     """Sample keys a recipe's case statement routes to a real command."""
     handled = set()
-    for keys, action in re.findall(r"^\s*([a-z|]+)\)\s*(.*?);;", body, re.MULTILINE):
+    for keys, action in re.findall(r"^\s*([a-z|-]+)\)\s*(.*?);;", body, re.MULTILINE):
         if "_pending" not in action and "_unknown" not in action and "exit 1" not in action:
             handled |= set(keys.split("|"))
     return handled

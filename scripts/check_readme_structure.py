@@ -21,6 +21,7 @@ REQUIRED_HEADINGS = [
 ]
 CONVERTED_READMES: list[str] = [
     "samples/cmcd/README.md",
+    "samples/hls-doctor/README.md",
     "samples/hub/README.md",
     "samples/hydrolix/README.md",
     "samples/medialive/README.md",
