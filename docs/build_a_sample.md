@@ -68,7 +68,7 @@ samples/<key>/
 The root holds only these entries. `scripts/check_repository_layout.py`, run by `just docs-check` and CI, enforces the list.
 
 ```
-README.md  AGENTS.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
+README.md  AGENTS.md  CHANGELOG.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
 justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
 .github/workflows/ci.yml
 .claude/              # Claude Code instructions; .claude/plans/ is never tracked
