@@ -27,6 +27,10 @@ Parameters:
     Description: Name for the S3 bucket (must be globally unique)
     Default: cmcd-content-bucket
 
+  DeploymentArtifactsBucketName:
+    Type: String
+    Description: Existing S3 bucket used to package this template for deployment
+
 
 
 Resources:
@@ -426,6 +430,51 @@ Resources:
     Properties:
       VpcId: !Ref VPC
 
+  # Keep the custom resource's CloudFormation response path available during teardown.
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Gateway
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VPC
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SendCloudFormationCustomResourceResponse
+            Effect: Allow
+            Principal: '*'
+            Action: s3:PutObject
+            Resource:
+              Fn::Sub:
+                - 'arn:${AWS::Partition}:s3:::cloudformation-custom-resource-response-${RegionWithoutDashes}/*'
+                - RegionWithoutDashes:
+                    Fn::Join:
+                      - ''
+                      - Fn::Split:
+                          - '-'
+                          - !Ref AWS::Region
+          - Sid: ReadStackBucketMetadata
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:GetBucketLocation
+              - s3:ListBucket
+            Resource:
+              - !GetAtt ContentBucket.Arn
+              - !Sub 'arn:${AWS::Partition}:s3:::${DeploymentArtifactsBucketName}'
+          - Sid: AccessStackBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:DeleteObject
+              - s3:GetObject
+              - s3:PutObject
+            Resource:
+              - !Sub '${ContentBucket.Arn}/*'
+              - !Sub 'arn:${AWS::Partition}:s3:::${DeploymentArtifactsBucketName}/*'
+
   PrivateRoute:
     Type: AWS::EC2::Route
     Properties:
@@ -562,7 +611,7 @@ Resources:
           ADMIN_SECRET_ARN = "${InfluxDBSecret}"
           PROCESSOR_SECRET_ARN = "${InfluxDBProcessorSecret}"
           PHYSICAL_RESOURCE_ID = "${AWS::StackName}-influxdb-tokens"
-          RESPONSE_BUFFER_MILLIS = 25_000
+          RESPONSE_BUFFER_MILLIS = 15_000
 
           def remaining_seconds(context):
               return max(
@@ -585,11 +634,11 @@ Resources:
               headers=None,
               data=None,
               attempts=3,
-              retry_delay=10,
+              retry_delay=5,
           ):
               last_error = None
               for attempt in range(attempts):
-                  timeout = min(30, remaining_seconds(context))
+                  timeout = min(15, remaining_seconds(context))
                   if timeout < 1:
                       raise TimeoutError("InfluxDB provisioning deadline reached")
                   try:
@@ -740,6 +789,15 @@ Resources:
               raise RuntimeError("InfluxDB deployment smoke read did not return the written point")
 
           def lambda_handler(event, context):
+              if event["RequestType"] == "Delete":
+                  cfnresponse.send(
+                      event,
+                      context,
+                      cfnresponse.SUCCESS,
+                      {"TokensProvisioned": False},
+                      physicalResourceId=PHYSICAL_RESOURCE_ID,
+                  )
+                  return
               try:
                   if event["RequestType"] in ("Create", "Update"):
                       secrets_client = boto3.client('secretsmanager')
@@ -824,7 +882,7 @@ Resources:
                           context,
                       )
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {
-                      "TokensProvisioned": event["RequestType"] != "Delete",
+                      "TokensProvisioned": True,
                   }, physicalResourceId=PHYSICAL_RESOURCE_ID)
               except Exception as error:
                   print(f"InfluxDB token provisioning failed: {error}")
@@ -832,7 +890,7 @@ Resources:
                       "Error": "InfluxDB token provisioning or smoke verification failed",
                   }, physicalResourceId=PHYSICAL_RESOURCE_ID)
       Role: !GetAtt UpdateSecretLambdaRole.Arn
-      Timeout: 300
+      Timeout: 240
 
   # IAM Role for Update Secret Lambda
   UpdateSecretLambdaRole:
@@ -876,9 +934,10 @@ Resources:
       - PrivateRoute
       - PrivateSubnet1RouteTableAssociation
       - PrivateSubnet2RouteTableAssociation
+      - S3GatewayEndpoint
     Properties:
       ServiceToken: !GetAtt UpdateSecretLambda.Arn
-      ServiceTimeout: 600
+      ServiceTimeout: 300
       InfluxDBEndpoint: !GetAtt InfluxDBInstance.Endpoint
       Bucket: !Ref TableName
 
@@ -1570,9 +1629,6 @@ Resources:
   # Upload index.html to S3 bucket
   IndexHtmlDeployment:
     Type: AWS::CloudFormation::CustomResource
-    DependsOn: 
-      - ContentBucket
-      - CMCDCloudFrontDistribution
     Properties:
       ServiceToken: !GetAtt IndexHtmlDeploymentFunction.Arn
       CloudFrontDomain: !GetAtt CMCDCloudFrontDistribution.DomainName

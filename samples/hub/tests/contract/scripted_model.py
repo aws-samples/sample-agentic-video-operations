@@ -34,7 +34,9 @@ class ScriptedModel(Model):
     def structured_output(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
-    async def stream(self, messages: Any, tool_specs: Any = None, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:  # fmt: skip
+    async def stream(
+        self, messages: Any, tool_specs: Any = None, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[Any]:
         self.tool_names = [spec["name"] for spec in tool_specs or []]
         self.messages = list(messages)
         blocks = self.turns.pop(0) if self.turns else [say("No more scripted turns.")]
@@ -44,7 +46,9 @@ class ScriptedModel(Model):
                 use = block["toolUse"]
                 start = {"toolUse": {"name": use["name"], "toolUseId": use["toolUseId"]}}
                 yield {"contentBlockStart": {"start": start}}
-                yield {"contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(use["input"])}}}}
+                yield {
+                    "contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(use["input"])}}}
+                }
             else:
                 yield {"contentBlockDelta": {"delta": {"text": block["text"]}}}
             yield {"contentBlockStop": {}}
@@ -71,7 +75,9 @@ class GatedModel(ScriptedModel):
         self.gate = threading.Event()
         self.opened_by_test = False  # False when the 5 s safety timeout released the gate
 
-    async def stream(self, messages: Any, tool_specs: Any = None, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:  # fmt: skip
+    async def stream(
+        self, messages: Any, tool_specs: Any = None, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[Any]:
         self.calls += 1
         if self.calls == self.gate_at:
             self.waiting.set()

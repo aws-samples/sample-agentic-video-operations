@@ -39,11 +39,13 @@ class StreamEventRecorder(HookProvider):
         session_id: str,
         actor_id: str,
         publish: Callable[[StreamEvent], None] = lambda event: None,
+        record_skill: Callable[[str], None] = lambda skill: None,
     ) -> None:
         self.surface = surface
         self.session_id = session_id
         self.actor_id = actor_id
         self.publish = publish  # called as each event is recorded, so callers can stream it
+        self.record_skill = record_skill
         self.events: list[StreamEvent] = []
         self._started_packs: set[str] = set()
 
@@ -62,6 +64,8 @@ class StreamEventRecorder(HookProvider):
         write = self.surface.writes.get(name)
         resource = event.tool_use["input"].get(write.resource_parameter) if write else None
         skill = event.tool_use["input"].get("name") if name == "load_skill" else None
+        if skill:
+            self.record_skill(str(skill))
         self.add(
             ToolCalled(
                 session_id=self.session_id,

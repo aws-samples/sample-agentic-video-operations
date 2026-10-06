@@ -34,9 +34,16 @@ class FakeAws:
         log_groups=LOG_GROUPS,
         influx_statuses=("AVAILABLE", None),
         bucket_exists=True,
+        artifact_bucket_exists=False,
         stack_status="auto",
         physical_resources=None,
         failure_messages=None,
+        custom_resource_response_failure=False,
+        custom_resource_failure_reason=(
+            "CloudFormation did not receive a response from your Custom Resource. "
+            "Please check your logs."
+        ),
+        deletions_take_effect=True,
     ):
         self.account = account
         self.log_groups = list(log_groups)
@@ -47,6 +54,7 @@ class FakeAws:
         self.failed_once = set()
         self.influx_statuses = list(influx_statuses)
         self.bucket_exists = bucket_exists
+        self.artifact_bucket_exists = artifact_bucket_exists
         self.stack_status = (
             ("CREATE_COMPLETE" if self.outputs else None)
             if stack_status == "auto"
@@ -56,6 +64,10 @@ class FakeAws:
             "InfluxDBInstance": "influx-demo",
             "ContentBucket": "cmcd-content-111122223333",
         }
+        self.custom_resource_response_failure = custom_resource_response_failure
+        self.custom_resource_failure_reason = custom_resource_failure_reason
+        self.custom_resource_failure_seen = False
+        self.deletions_take_effect = deletions_take_effect
         self.calls = []
         self.secret = {
             "username": "admin",
@@ -103,14 +115,33 @@ class FakeAws:
                 return self._missing(arguments, "ResourceNotFoundException")
             return self._answer(status)
         if "head-bucket" in joined:
-            if not self.bucket_exists:
+            bucket = arguments[arguments.index("--bucket") + 1]
+            exists = self.artifact_bucket_exists if "-artifacts-" in bucket else self.bucket_exists
+            if not exists:
                 return self._missing(arguments, "404 Not Found")
             return subprocess.CompletedProcess(arguments, 0, "", "")
-        if "s3 rm" in joined:
-            self.bucket_exists = False
+        if "create-bucket" in joined:
+            self.artifact_bucket_exists = True
+        if "delete-bucket" in joined and self.deletions_take_effect:
+            self.artifact_bucket_exists = False
         if "cloudformation delete-stack" in joined:
-            self.stack_status = None
-        if "delete-log-group" in joined:
+            if "--retain-resources" in arguments:
+                if self.deletions_take_effect:
+                    self.stack_status = None
+                    self.bucket_exists = False
+            elif self.custom_resource_response_failure and not self.custom_resource_failure_seen:
+                self.custom_resource_failure_seen = True
+                self.stack_status = "DELETE_FAILED"
+            elif self.deletions_take_effect:
+                self.stack_status = None
+                self.bucket_exists = False
+        if "cloudformation wait" in joined and self.stack_status == "DELETE_FAILED":
+            reason = (
+                "Waiter StackDeleteComplete failed: The following resource(s) failed to delete: "
+                "[UpdateSecretCustomResource]"
+            )
+            return subprocess.CompletedProcess(arguments, 255, "", reason)
+        if "delete-log-group" in joined and self.deletions_take_effect:
             self.log_groups = [name for name in self.log_groups if name != arguments[-1]]
         if "describe-stacks" in joined:
             if "StackStatus" in joined:
@@ -120,6 +151,10 @@ class FakeAws:
             key = next((key for key in self.outputs if f"'{key}'" in joined), None)
             return self._answer(self.outputs.get(key) if key else None)
         if "describe-stack-resource" in joined:
+            if "ResourceStatusReason" in joined:
+                return self._answer(
+                    json.dumps(["DELETE_FAILED", self.custom_resource_failure_reason])
+                )
             logical_id = arguments[arguments.index("--logical-resource-id") + 1]
             return self._answer(self.physical_resources.get(logical_id))
         if "get-secret-value" in joined:
@@ -188,7 +223,12 @@ def test_deploy_with_yes_deploys_the_template_in_us_east_1_and_prints_next_steps
     [deploy] = fake_aws.commands("cloudformation deploy")
     assert deploy[deploy.index("--region") + 1] == "us-east-1"
     assert deploy[deploy.index("--stack-name") + 1] == "video-ops-cmcd"
+    assert (
+        deploy[deploy.index("--s3-bucket") + 1] == "video-ops-cmcd-artifacts-111122223333-us-east-1"
+    )
+    assert deploy[deploy.index("--s3-prefix") + 1] == "video-ops-cmcd"
     assert "S3BucketName=cmcd-content-111122223333" in deploy
+    assert "DeploymentArtifactsBucketName=video-ops-cmcd-artifacts-111122223333-us-east-1" in deploy
     assert "OriginDomainName=example.com" in deploy
     output = capsys.readouterr().out
     assert "--target i-0demo" in output
@@ -197,13 +237,108 @@ def test_deploy_with_yes_deploys_the_template_in_us_east_1_and_prints_next_steps
     assert "--query SecretString --output text\n" not in output
 
 
+def test_deploy_creates_and_secures_the_artifact_bucket_before_cloudformation():
+    fake_aws = FakeAws()
+
+    status, _ = run(fake_aws, "deploy", "--yes")
+
+    assert status == 0
+    actions = [" ".join(call[:2]) for call in fake_aws.calls]
+    assert actions.index("s3api create-bucket") < actions.index("cloudformation deploy")
+    assert len(fake_aws.commands("put-public-access-block")) == 1
+    [encryption] = fake_aws.commands("put-bucket-encryption")
+    assert '"SSEAlgorithm":"AES256"' in " ".join(encryption)
+    artifact_calls = [
+        call
+        for call in fake_aws.calls
+        if "video-ops-cmcd-artifacts-111122223333-us-east-1" in call
+        and call[0] == "s3api"
+        and "create-bucket" not in call
+    ]
+    assert all(
+        call[call.index("--expected-bucket-owner") + 1] == "111122223333" for call in artifact_calls
+    )
+    deploy_index = next(
+        index
+        for index, call in enumerate(fake_aws.calls)
+        if "cloudformation deploy" in " ".join(call)
+    )
+    assert "head-bucket" in fake_aws.calls[deploy_index - 1]
+
+
+def test_oversized_template_is_deployed_through_s3():
+    assert Path(manage_cmcd_stack.TEMPLATE).stat().st_size > 51_200
+
+    fake_aws = FakeAws()
+    run(fake_aws, "deploy", "--yes")
+
+    [deploy] = fake_aws.commands("cloudformation deploy")
+    assert "--s3-bucket" in deploy
+
+
+def test_deploy_reuses_and_resecures_an_existing_artifact_bucket():
+    fake_aws = FakeAws(artifact_bucket_exists=True)
+
+    status, _ = run(fake_aws, "deploy", "--yes")
+
+    assert status == 0
+    assert fake_aws.commands("create-bucket") == []
+    assert len(fake_aws.commands("put-public-access-block")) == 1
+    assert len(fake_aws.commands("put-bucket-encryption")) == 1
+
+
+def test_deploy_stops_when_artifact_bucket_access_is_denied(capsys):
+    denied = (
+        "An error occurred (AccessDenied) when calling HeadBucket: "
+        "not authorized for arn:aws:s3:::video-ops-cmcd-artifacts-111122223333-us-east-1"
+    )
+    fake_aws = FakeAws(
+        failing=("head-bucket",),
+        failure_messages={"head-bucket": denied},
+    )
+
+    status, _ = run(fake_aws, "deploy", "--yes")
+
+    assert status == 255
+    assert fake_aws.commands("create-bucket") == []
+    assert fake_aws.commands("cloudformation deploy") == []
+    output = capsys.readouterr().out
+    assert "AccessDenied" in output
+    assert "CMCD_ARTIFACTS_BUCKET" in output
+
+
+def test_deploy_stops_when_artifact_bucket_cannot_be_secured():
+    fake_aws = FakeAws(failing=("put-public-access-block",))
+
+    status, _ = run(fake_aws, "deploy", "--yes")
+
+    assert status == 255
+    assert fake_aws.commands("cloudformation deploy") == []
+
+
+def test_deploy_stops_when_the_generated_bucket_name_is_taken(capsys):
+    taken = "An error occurred (BucketAlreadyExists) when calling CreateBucket"
+    fake_aws = FakeAws(
+        failing=("create-bucket",),
+        failure_messages={"create-bucket": taken},
+    )
+
+    status, _ = run(fake_aws, "deploy", "--yes")
+
+    assert status == 255
+    assert fake_aws.commands("cloudformation deploy") == []
+    assert "CMCD_ARTIFACTS_BUCKET" in capsys.readouterr().out
+
+
 def test_deploy_uses_bucket_and_origin_from_the_environment(monkeypatch):
     monkeypatch.setenv("CMCD_S3_BUCKET_NAME", "my-bucket")
     monkeypatch.setenv("CMCD_ORIGIN_DOMAIN", "origin.example.org")
+    monkeypatch.setenv("CMCD_ARTIFACTS_BUCKET", "my-artifacts")
     fake_aws = FakeAws()
     run(fake_aws, "deploy", "--yes")
     [deploy] = fake_aws.commands("cloudformation deploy")
     assert "S3BucketName=my-bucket" in deploy
+    assert "DeploymentArtifactsBucketName=my-artifacts" in deploy
     assert "OriginDomainName=origin.example.org" in deploy
 
 
@@ -230,19 +365,20 @@ def test_failed_deploy_returns_its_exit_code_and_skips_next_steps():
 
 
 def test_destroy_prompt_lists_bucket_stack_influxdb_and_log_groups_before_deleting(capsys):
-    fake_aws = FakeAws()
+    fake_aws = FakeAws(artifact_bucket_exists=True)
     status, ask = run(fake_aws, "destroy", answer="y")
     assert status == 0
     prompt_text = capsys.readouterr().out.split("Teardown complete")[0]
     for listed in ("cmcd-content-111122223333", "video-ops-cmcd", "influx-demo", *LOG_GROUPS):
         assert listed in prompt_text
-    lookups = ("describe-stacks", "get-caller-identity", "describe-log-groups")
+    assert "video-ops-cmcd-artifacts-111122223333-us-east-1" in prompt_text
+    lookups = ("describe-stacks", "get-caller-identity", "describe-log-groups", "head-bucket")
     calls_before_prompt = fake_aws.calls[: ask.calls_before_prompt]
     assert all(any(lookup in call for lookup in lookups) for call in calls_before_prompt)
 
 
 def test_destroy_deletes_influxdb_before_bucket_stack_and_log_groups():
-    fake_aws = FakeAws()
+    fake_aws = FakeAws(artifact_bucket_exists=True)
     status, ask = run(fake_aws, "destroy", answer="y")
     assert status == 0
     actions = [" ".join(call[:2]) for call in fake_aws.calls[ask.calls_before_prompt :]]
@@ -256,13 +392,116 @@ def test_destroy_deletes_influxdb_before_bucket_stack_and_log_groups():
         "cloudformation wait",
         "logs delete-log-group",
         "logs delete-log-group",
+        "s3api head-bucket",
+        "s3 rm",
+        "s3api delete-bucket",
+        "timestream-influxdb get-db-instance",
+        "s3api head-bucket",
+        "cloudformation describe-stacks",
+        "logs describe-log-groups",
+        "s3api head-bucket",
     ]
     [influx] = fake_aws.commands("delete-db-instance")
     assert influx[influx.index("--identifier") + 1] == "influx-demo"
-    [empty_bucket] = fake_aws.commands("s3 rm")
+    empty_bucket = next(
+        call for call in fake_aws.commands("s3 rm") if "cmcd-content-111122223333" in " ".join(call)
+    )
     assert "--only-show-errors" in empty_bucket
     deleted_groups = [call[-1] for call in fake_aws.commands("delete-log-group")]
     assert deleted_groups == LOG_GROUPS
+    artifact_calls = [
+        call
+        for call in fake_aws.calls
+        if "video-ops-cmcd-artifacts-111122223333-us-east-1" in " ".join(call)
+    ]
+    artifact_owner_checks = [call for call in artifact_calls if call[0] == "s3api"]
+    assert all("--expected-bucket-owner" in call for call in artifact_owner_checks)
+    [artifact_empty] = [call for call in artifact_calls if call[:2] == ["s3", "rm"]]
+    assert artifact_empty == [
+        "s3",
+        "rm",
+        "s3://video-ops-cmcd-artifacts-111122223333-us-east-1",
+        "--recursive",
+        "--only-show-errors",
+        "--region",
+        "us-east-1",
+    ]
+
+
+def test_destroy_reports_influxdb_stack_eni_and_total_timing(capsys):
+    fake_aws = FakeAws()
+    readings = iter((0.0, 1.0, 2.0, 10.0, 11.0, 31.0, 40.0))
+
+    status = destroy_cmcd_stack.destroy_cmcd_stack(
+        fake_aws,
+        assume_yes=True,
+        ask=lambda _: "y",
+        sleep=lambda _: None,
+        monotonic=lambda: next(readings),
+    )
+
+    assert status == 0
+    output = capsys.readouterr().out
+    assert "InfluxDB deletion: 9.0s" in output
+    assert "CloudFormation deletion (includes VPC ENI release): 20.0s" in output
+    assert "total: 40.0s" in output
+
+
+def test_destroy_retries_only_the_no_response_custom_resource_with_retain(capsys):
+    fake_aws = FakeAws(custom_resource_response_failure=True)
+
+    status, _ = run(fake_aws, "destroy", "--yes")
+
+    assert status == 0
+    deletions = fake_aws.commands("cloudformation delete-stack")
+    assert len(deletions) == 2
+    assert "--retain-resources" not in deletions[0]
+    assert deletions[1] == [
+        "cloudformation",
+        "delete-stack",
+        "--region",
+        "us-east-1",
+        "--stack-name",
+        "video-ops-cmcd",
+        "--retain-resources",
+        "UpdateSecretCustomResource",
+    ]
+    assert len(fake_aws.commands("cloudformation wait")) == 2
+    assert "retaining only its inert custom-resource record" in capsys.readouterr().out
+
+
+def test_destroy_does_not_retain_the_custom_resource_for_an_unrelated_failure():
+    fake_aws = FakeAws(
+        custom_resource_response_failure=True,
+        custom_resource_failure_reason="The provider returned FAILED: invalid token configuration",
+    )
+
+    status, _ = run(fake_aws, "destroy", "--yes")
+
+    assert status == 1
+    [deletion] = fake_aws.commands("cloudformation delete-stack")
+    assert "--retain-resources" not in deletion
+
+
+def test_destroy_reports_fresh_lookups_even_when_delete_commands_exit_zero(capsys):
+    fake_aws = FakeAws(
+        artifact_bucket_exists=True,
+        influx_statuses=("AVAILABLE", None, "AVAILABLE"),
+        deletions_take_effect=False,
+    )
+
+    status, _ = run(fake_aws, "destroy", "--yes")
+
+    assert status == 1
+    remaining = capsys.readouterr().out.split("Teardown incomplete. Remaining resources:", 1)[1]
+    for expected in (
+        "InfluxDB instance: influx-demo",
+        "content bucket: cmcd-content-111122223333",
+        "CloudFormation stack: video-ops-cmcd",
+        "Lambda log group: /aws/lambda/video-ops-cmcd-update-secret",
+        "deployment artifact bucket: video-ops-cmcd-artifacts-111122223333-us-east-1",
+    ):
+        assert expected in remaining
 
 
 def test_destroy_without_log_groups_still_deletes_influxdb(capsys):
@@ -275,14 +514,17 @@ def test_destroy_without_log_groups_still_deletes_influxdb(capsys):
 
 
 def test_failed_influxdb_deletion_still_cleans_log_groups_and_reports_remaining(capsys):
-    fake_aws = FakeAws(failing=("delete-db-instance",))
+    fake_aws = FakeAws(
+        failing=("delete-db-instance",),
+        influx_statuses=("AVAILABLE", "AVAILABLE"),
+    )
     status, _ = run(fake_aws, "destroy", "--yes")
     assert status == 1
     assert fake_aws.commands("s3 rm") == []
     assert fake_aws.commands("delete-stack") == []
     assert len(fake_aws.commands("delete-log-group")) == len(LOG_GROUPS)
     output = capsys.readouterr().out
-    assert "InfluxDB instance or deletion status unknown: influx-demo" in output
+    assert "InfluxDB instance: influx-demo" in output
     assert "content bucket: cmcd-content-111122223333" in output
     assert "CloudFormation stack: video-ops-cmcd" in output
 
@@ -301,6 +543,54 @@ def test_destroy_of_a_missing_stack_deletes_nothing():
     assert status == 0
     assert ask.calls_before_prompt is None
     assert fake_aws.commands("delete-stack") == []
+
+
+def test_destroy_removes_artifacts_when_the_stack_is_already_absent():
+    fake_aws = FakeAws(outputs={}, log_groups=[], artifact_bucket_exists=True)
+
+    status, _ = run(fake_aws, "destroy", "--yes")
+
+    assert status == 0
+    assert len(fake_aws.commands("delete-bucket")) == 1
+    assert fake_aws.commands("delete-stack") == []
+
+
+def test_destroy_second_run_removes_artifacts_after_a_partial_failure(capsys):
+    fake_aws = FakeAws(
+        outputs={},
+        log_groups=[],
+        artifact_bucket_exists=True,
+        fail_once=("delete-bucket",),
+    )
+
+    first_status, _ = run(fake_aws, "destroy", "--yes")
+    first_output = capsys.readouterr().out
+    second_status, _ = run(fake_aws, "destroy", "--yes")
+
+    assert first_status == 1
+    assert "deployment artifact bucket" in first_output
+    assert second_status == 0
+    assert len(fake_aws.commands("delete-bucket")) == 2
+
+
+def test_destroy_does_not_treat_artifact_bucket_access_denied_as_missing(capsys):
+    denied = (
+        "An error occurred (AccessDenied) when calling HeadBucket: "
+        "not authorized for arn:aws:s3:::video-ops-cmcd-artifacts-111122223333-us-east-1"
+    )
+    fake_aws = FakeAws(
+        failing=("head-bucket",),
+        failure_messages={"head-bucket": denied},
+    )
+
+    status, ask = run(fake_aws, "destroy", answer="y")
+
+    assert status == 1
+    assert ask.calls_before_prompt is None
+    for deletion in ("delete-db-instance", "s3 rm", "delete-stack", "delete-log-group"):
+        assert fake_aws.commands(deletion) == []
+    assert fake_aws.commands("delete-bucket") == []
+    assert "nothing was deleted" in capsys.readouterr().out.lower()
 
 
 def test_destroy_does_not_treat_a_failed_stack_lookup_as_already_absent(capsys):
@@ -337,13 +627,13 @@ def test_destroy_second_run_converges_after_partial_failure():
     assert len(fake_aws.commands("delete-log-group")) == len(LOG_GROUPS)
 
 
-def test_destroy_second_run_cleans_logs_after_stack_delete_wait_fails():
+def test_destroy_confirms_absence_after_stack_delete_wait_fails():
     fake_aws = FakeAws(fail_once=("cloudformation wait",))
 
     first_status, _ = run(fake_aws, "destroy", "--yes")
     second_status, _ = run(fake_aws, "destroy", "--yes")
 
-    assert first_status == 1
+    assert first_status == 0
     assert second_status == 0
     assert len(fake_aws.commands("delete-stack")) == 1
     assert len(fake_aws.commands("delete-log-group")) == len(LOG_GROUPS)
@@ -414,7 +704,7 @@ def test_access_denied_influxdb_lookup_is_not_mistaken_for_account_404(capsys):
         assert fake_aws.commands(deletion) == []
     output = capsys.readouterr().out
     assert "AccessDeniedException" in output
-    assert "InfluxDB instance or deletion status unknown: influx-demo" in output
+    assert "InfluxDB instance presence unknown: influx-demo" in output
 
 
 def test_access_denied_influxdb_wait_poll_stops_without_dependent_deletes(capsys):
@@ -431,7 +721,7 @@ def test_access_denied_influxdb_wait_poll_stops_without_dependent_deletes(capsys
         assert fake_aws.commands(deletion) == []
     output = capsys.readouterr().out
     assert "AccessDeniedException" in output
-    assert "InfluxDB instance or deletion status unknown: influx-demo" in output
+    assert "InfluxDB instance presence unknown: influx-demo" in output
 
 
 def test_log_group_failures_do_not_skip_other_groups_and_report_only_failed_group(capsys):

@@ -1,0 +1,18 @@
+name: diagnose_input_loss
+prompt: Diagnose the viewer outage on the demo MediaLive channel.
+media_domains: [medialive]
+fixture: input_loss
+turns:
+  - [{tool: load_skill, input: {name: diagnose-input-loss}}]
+  - [{tool: list_channels}]
+  - [{tool: check_channel_issues, input: {channel_id: "1234567", hours_back: 1}}]
+  - [{tool: describe_channel, input: {channel_id: "1234567"}}]
+  - [{answer: "Viewers see input loss on pipeline 0; the active SRT input is failing upstream. Inspect the contribution source or switch to the healthy backup."}]
+expected:
+  specialists: [medialive]
+  tools: [load_skill, list_channels, check_channel_issues, describe_channel]
+  skills: [diagnose-input-loss]
+  diagnosis_keywords: [input loss, pipeline 0, upstream]
+  forbidden_tools: [stop_channel, switch_channel_input]
+  max_tool_calls: 4
+  writes_attempted: 0

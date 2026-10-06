@@ -6,6 +6,10 @@
 - The overall status is the worst issue severity, and the overall score is the worst
   category score. Averages hide an outage.
 - PipelinesLocked only applies to STANDARD channels that use pipeline locking.
+- Values carry the metric's recommended statistic: InputLossSeconds is a Sum, so its periods
+  add up to seconds lost. MQCS portions are scores where 100 means no problem.
+- A metric with no datapoints is not emitted, which is unknown, never healthy. A category
+  none of whose rated metrics emitted is NOT_EMITTED and has no score.
 """
 
 from collections.abc import Callable
@@ -31,6 +35,7 @@ class Status(StrEnum):
     WARNING = "WARNING"
     DEGRADED = "DEGRADED"
     CRITICAL = "CRITICAL"
+    NOT_EMITTED = "NOT_EMITTED"
 
 
 STATUS_BY_SEVERITY = {
@@ -71,9 +76,9 @@ RULES = (
     Rule("output_health", "Output4xxErrors", lambda v: v > 0, "> 0", 30),
     Rule("output_health", "Output5xxErrors", lambda v: v > 0, "> 0", 30),
     Rule("media_health", "FillMsec", lambda v: v > 100, "> 100 ms", 20),
-    Rule("content_quality", "MqcsBlackFrameDetected", lambda v: v > 0, "> 0", 25),
-    Rule("content_quality", "MqcsFreezeFrameDetected", lambda v: v > 0, "> 0", 25),
-    Rule("content_quality", "MqcsContinuityCounterErrors", lambda v: v > 0, "> 0", 15),
+    Rule("content_quality", "MqcsBlackFrameDetected", lambda v: v < 100, "below 100", 25),
+    Rule("content_quality", "MqcsFreezeFrameDetected", lambda v: v < 100, "below 100", 25),
+    Rule("content_quality", "MqcsContinuityCounterErrors", lambda v: v < 100, "below 100", 15),
 )  # fmt: skip
 
 
@@ -81,21 +86,23 @@ class ChannelIssue(BaseModel):
     category: str
     metric: str
     pipeline: str
+    dimensions: dict[str, str] = {}
     severity: str
     description: str
 
 
 class CategoryHealth(BaseModel):
-    score: int
+    score: int | None  # None when no metric of the category emitted
     status: Status
 
 
 class ChannelHealthReport(BaseModel):
     channel_id: str
-    overall_score: int
+    overall_score: int | None
     status: Status
     categories: dict[str, CategoryHealth]
     issues: list[ChannelIssue]
+    not_emitted: list[str]  # metrics queried that returned no datapoints at all
 
 
 def identify_channel_issues(
@@ -114,19 +121,29 @@ def identify_channel_issues(
             category=rule.category,
             metric=rule.metric,
             pipeline=measured.pipeline,
+            dimensions=measured.dimensions,
             severity=severity.name,
             description=describe_issue(rule, measured),
         )
         for rule, measured, severity in sorted(found, key=lambda item: -item[2])
     ]
-    categories = {category: rate_category(category, found) for category in CATEGORY_METRICS}
+    emitted = {measured.metric for measured in series if measured.emitted}
+    categories = {
+        category: rate_category(category, found, emitted) for category in CATEGORY_METRICS
+    }
+    scores = [health.score for health in categories.values() if health.score is not None]
     worst = max((severity for _, _, severity in found), default=None)
+    if worst:
+        status = STATUS_BY_SEVERITY[worst]
+    else:
+        status = Status.HEALTHY if scores else Status.NOT_EMITTED
     return ChannelHealthReport(
         channel_id=channel_id,
-        overall_score=min(health.score for health in categories.values()),
-        status=STATUS_BY_SEVERITY[worst] if worst else Status.HEALTHY,
+        overall_score=min(scores, default=None),
+        status=status,
         categories=categories,
         issues=issues,
+        not_emitted=sorted({measured.metric for measured in series} - emitted),
     )
 
 
@@ -140,12 +157,16 @@ def rate_severity(rule: Rule, measured: MetricSeries) -> Severity:
 
 
 def loss_ratio(measured: MetricSeries) -> float:
-    """Share of the window with input loss; values are seconds lost per period."""
+    """Share of the window with input loss, from the Sum series of seconds lost per period."""
     window = len(measured.values) * PERIOD_SECONDS
-    return min(1.0, sum(measured.values) / window) if window else 0.0
+    return min(1.0, (measured.total or 0.0) / window) if window else 0.0
 
 
-def rate_category(category: str, found: list) -> CategoryHealth:
+def rate_category(category: str, found: list, emitted: set[str]) -> CategoryHealth:
+    """NOT_EMITTED unless a metric this category rates has datapoints."""
+    rated = {rule.metric for rule in RULES if rule.category == category}
+    if not emitted.intersection(rated):
+        return CategoryHealth(score=None, status=Status.NOT_EMITTED)
     in_category = [(rule, severity) for rule, _, severity in found if rule.category == category]
     penalties = sum({rule.metric: rule.penalty for rule, _ in in_category}.values())
     worst = max((severity for _, severity in in_category), default=None)
@@ -157,8 +178,15 @@ def rate_category(category: str, found: list) -> CategoryHealth:
 
 def describe_issue(rule: Rule, measured: MetricSeries) -> str:
     where = f"on pipeline {measured.pipeline}"
+    labels = {"OutputGroupName": "output group", "AudioDescriptionName": "audio"}
+    for name, value in measured.dimensions.items():
+        if name == "Region":
+            where += f" (region-wide metric: all channels in {value} combined, not only this one)"
+        else:
+            where += f", {labels.get(name, name)} {value}"
     now = "still failing in the latest period" if rule.fails(measured.values[-1]) else "recovered"
-    if rule.metric == "InputLossSeconds":
-        lost = sum(measured.values)
-        return f"{lost:g} s of input lost ({loss_ratio(measured):.0%} of the window) {where}, {now}"
-    return f"{rule.metric} {rule.threshold_text} {where}, {now}"
+    if rule.metric == "InputLossSeconds" and measured.total is not None:
+        share = f"{loss_ratio(measured):.0%} of the window"
+        return f"{measured.total:g} s of input lost ({share}) {where}, {now}"
+    worst = min(measured.values) if rule.threshold_text == "below 100" else max(measured.values)
+    return f"{rule.metric} {rule.threshold_text} (worst {worst:g}) {where}, {now}"

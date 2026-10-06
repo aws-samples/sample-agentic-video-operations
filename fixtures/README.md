@@ -10,4 +10,5 @@ with sanitized recordings when those are available.
 
 | Scenario | Story | Used by |
 |---|---|---|
-| `input_loss` | MediaLive pipeline 0 stops receiving its SRT input; the channel stays RUNNING and outputs slate | medialive, langchain EML |
+| `input_loss` | MediaLive pipeline 0 stops receiving its SRT input; the channel stays RUNNING and outputs slate | medialive, hub |
+| `no_input` | A RUNNING MediaLive channel with almost no input: AWS/MediaLive publishes only ActiveAlerts, ComplexFrcPresent, FillMsec, NetworkIn, NetworkOut and PipelinesLocked (ChannelId, Pipeline), shaped after a live probe | medialive |

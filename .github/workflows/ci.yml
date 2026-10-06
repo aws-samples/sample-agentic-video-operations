@@ -5,7 +5,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "release-candidate/**"]
 
 permissions:
   contents: read
@@ -30,9 +30,10 @@ jobs:
           just-version: "1.58.0"
       - run: uv sync --frozen
       - run: just lint
+      - run: just typecheck
       - run: just test
       - run: just smoke
-      # `just eval` joins in step 4a, when the first eval scenarios exist.
+      - run: just eval
       - run: just docs-check
 
   cloudformation-lint:
@@ -52,8 +53,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Add hydrolix in step 5, once `just deploy hydrolix` fetches mcp_hydrolix.
-        app: [samples/hub/cdk, samples/medialive/cdk]
+        include:
+          - app: samples/hub/cdk
+            iam: required
+          - app: samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands
+            iam: required
     defaults:
       run:
         working-directory: ${{ matrix.app }}
@@ -67,4 +71,99 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.app }}/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - run: npm test --if-present
       - run: npx cdk synth --quiet
+      - name: Default-synth IAM gate
+        if: matrix.iam == 'required'
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_synth_iam.py" cdk.out/*.template.json
+      - run: npx cdk synth --quiet -c allowWrites=true
+
+  docker-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      builds: ${{ steps.list.outputs.builds }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - id: list
+        run: echo "builds=$(python3 scripts/list_docker_builds.py)" >> "$GITHUB_OUTPUT"
+
+  docker-build:
+    needs: docker-matrix
+    runs-on: ubuntu-24.04-arm # AgentCore runs arm64 images; build natively
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.docker-matrix.outputs.builds) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.8.4"
+      - name: Plant secrets and local state the context must exclude
+        run: |
+          for dir in . "${{ matrix.context }}"; do
+            printf 'PLANTED=never-in-an-image\n' > "$dir/.env"
+            printf 'PLANTED=never-in-an-image\n' > "$dir/.env.local"
+            mkdir -p "$dir/.claude/plans" "$dir/cdk.out" && touch "$dir/.claude/plans/x" "$dir/cdk.out/x"
+          done
+      - name: Context listing (Docker's .dockerignore rules)
+        run: python3 scripts/list_docker_context.py "${{ matrix.dockerfile }}" "${{ matrix.context }}"
+      - name: Context probe (Docker itself)
+        run: |
+          probe="$RUNNER_TEMP/probe" && mkdir -p "$probe"
+          own="${{ matrix.dockerfile }}.dockerignore"
+          if [ -f "$own" ]; then cp "$own" "$probe/Dockerfile.dockerignore"
+          elif [ -f "${{ matrix.context }}/.dockerignore" ]; then
+            cp "${{ matrix.context }}/.dockerignore" "$probe/Dockerfile.dockerignore"
+          fi
+          cat > "$probe/Dockerfile" <<'PROBE'
+          FROM public.ecr.aws/docker/library/busybox:1.37
+          COPY . /context
+          RUN cd /context && found="$(find . \( -name '.env*' ! -name '.env.example' \) -o -name .claude -o -name .git -o -name cdk.out)" && if [ -n "$found" ]; then echo "$found"; exit 1; fi
+          PROBE
+          docker build -f "$probe/Dockerfile" "${{ matrix.context }}"
+      - name: Remove planted files
+        run: |
+          for dir in . "${{ matrix.context }}"; do rm -rf "$dir/.env" "$dir/.env.local" "$dir/.claude" "$dir/cdk.out"; done
+      - name: Prepare
+        if: matrix.prepare != ''
+        working-directory: scripts
+        run: ${{ matrix.prepare }}
+      - name: Build
+        run: docker build --platform linux/arm64 -f "${{ matrix.dockerfile }}" "${{ matrix.context }}"
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # full history so leaks in past commits are caught too
+      - name: Install gitleaks (pinned, checksum-verified)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      - run: ./gitleaks git --redact --exit-code 1
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Converted samples only; add each remaining Dockerfile when its sample converts.
+        dockerfile:
+          - samples/hub/Dockerfile
+          - samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands/Dockerfile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          failure-threshold: warning # DL3066-style infos stay visible without blocking

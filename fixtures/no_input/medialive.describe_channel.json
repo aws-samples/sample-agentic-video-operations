@@ -1,0 +1,44 @@
+{
+  "Arn": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+  "ChannelClass": "STANDARD",
+  "Id": "1234567",
+  "Name": "demo-channel",
+  "LogLevel": "INFO",
+  "PipelinesRunningCount": 2,
+  "State": "RUNNING",
+  "InputAttachments": [
+    {
+      "InputAttachmentName": "demo-primary-srt",
+      "InputId": "7654321"
+    },
+    {
+      "InputAttachmentName": "demo-backup-srt",
+      "InputId": "7654322"
+    }
+  ],
+  "PipelineDetails": [
+    {
+      "PipelineId": "0",
+      "ActiveInputAttachmentName": "demo-primary-srt"
+    },
+    {
+      "PipelineId": "1",
+      "ActiveInputAttachmentName": "demo-primary-srt"
+    }
+  ],
+  "EncoderSettings": {
+    "GlobalConfiguration": {
+      "OutputLockingMode": "PIPELINE_LOCKING"
+    },
+    "OutputGroups": [
+      {
+        "Name": "demo-hls"
+      }
+    ],
+    "AudioDescriptions": [
+      {
+        "Name": "demo-audio-1"
+      }
+    ]
+  }
+}

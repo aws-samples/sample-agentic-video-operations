@@ -35,6 +35,8 @@ class ChannelDetails(ChannelSummary):
     channel_class: str | None = None
     output_locking_mode: str | None = None
     input_attachments: list[str] = []
+    output_groups: list[str] = []
+    audio_descriptions: list[str] = []
     pipelines: list[PipelineDetail] = []
 
 

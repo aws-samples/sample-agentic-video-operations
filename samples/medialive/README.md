@@ -22,9 +22,9 @@ pipeline 0 has lost its SRT input, and `check_channel_issues` finds that.
 ```mermaid
 flowchart LR
     Client[MCP client] --> Server[serve-medialive]
-    Agent[AgentCore runtime] --> Strands[Strands agent, read-only]
+    Hub[Media operations hub] --> Pack[MediaLive domain pack]
     Server --> Adapters[adapters: one action per file]
-    Strands --> Adapters
+    Pack --> Adapters
     Adapters --> EML[AWS Elemental MediaLive]
     Adapters --> CW[CloudWatch metrics and logs]
     Adapters --> BR[Bedrock vision model]
@@ -32,9 +32,9 @@ flowchart LR
     Writes --> EML
 ```
 
-- **Entrypoints** handle transport only:
-  - `serve_mcp.py` (MCP stdio);
-  - `handle_agentcore_invocation.py` (the Strands agent on AgentCore).
+- **Entrypoints** handle transport only: `serve_mcp.py` serves MCP over stdio.
+- **AgentCore deployment** comes from the media operations hub, which loads this
+  sample as an in-process domain pack.
 - **Adapters** (`src/medialive_mcp/adapters/`) make one AWS call each and return typed results.
   - `read_channel_metrics` reads every metric for both pipelines in one `GetMetricData` call.
 - **Domain rules** (`domain/identify_channel_issues.py`) score the five categories:
@@ -47,7 +47,8 @@ flowchart LR
   - Write tools exist only with `ALLOW_WRITES=true`.
   - Each one needs `confirm_resource_id` equal to the channel id, and your MCP client's tool-approval prompt.
   - The adapter rejects an unsigned or expired approval, sends the change once, then polls until the channel reaches the target state.
-- **The Strands agent registers no write tools,** because it has no approval path.
+- **The hub registers writes only when enabled,** and uses its signed approval
+  flow before calling the same verified write adapters.
 
 ## Prerequisites
 
@@ -140,46 +141,39 @@ just doctor
 
 ### Deploy to AWS
 
-This sample's CDK app deploys its read-only Strands agent. A later release replaces that
-agent with the media ops hub, which loads MediaLive as one of its domains. Until then,
-deploy from the repository root, loading the models and region from your root `.env`:
+MediaLive deploys as a domain pack of the media ops hub (`samples/hub/`): one AgentCore
+runtime that loads the packs named in `MEDIA_DOMAINS`. To deploy MediaLive alone, set
+`MEDIA_DOMAINS=medialive` in the root `.env`, then:
 
 ```bash
-set -a; source .env; set +a   # exports AGENT_MODEL_ID, THUMBNAIL_MODEL_ID and AWS_REGION
-cd samples/medialive/cdk
-npm ci
-npx cdk deploy \
-  --parameters BedrockModelId="$AGENT_MODEL_ID" \
-  --parameters ThumbnailModelId="$THUMBNAIL_MODEL_ID" \
-  --parameters DefaultChannelId="<your channel id>"
+just deploy hub
 ```
 
-- **What it deploys:** the read-only Strands agent on AgentCore Runtime, its AgentCore Memory, and an IAM role.
-- **Billing:** AgentCore Runtime, Memory and Bedrock usage are billable.
-- **Image build:** the container image is built from the repository root (`samples/medialive/Dockerfile`).
-- **Read permissions** used by the tools:
-  - `medialive:ListChannels`, `DescribeChannel`, `DescribeSchedule`, `DescribeThumbnails`
-  - `cloudwatch:GetMetricData`
-  - `logs:FilterLogEvents`
-  - `bedrock:InvokeModel` (also used by the Converse API)
-- **Write permissions**, needed only for the MCP write tools: `medialive:StartChannel`, `StopChannel`, `BatchUpdateSchedule`.
+Raw command:
+
+```bash
+uv run python scripts/manage_hub_stack.py deploy
+```
+
+- **What it deploys:** the hub on AgentCore Runtime, its AgentCore Memory, one Secrets
+  Manager secret (the approval signing key) and an IAM role.
+- **Billing:** AgentCore Runtime, Memory, Secrets Manager and Bedrock usage are billable.
+- **Permissions** come from [`iam_permissions.json`](iam_permissions.json): every `read`
+  statement, and the `write` statements only with `ALLOW_WRITES=true` in the root `.env`.
+- **CDK bootstrap:** once per account in the `AWS_REGION` of your root `.env`
+  (`just doctor aws` checks it).
 
 ### Verify the Deployment
 
-Invoke the deployed agent with a known-good request, in the same shell (so `AWS_REGION`
-is still set). Use the `AgentRuntimeArn` stack output:
+Ask the deployed hub a known-good question. The hub refuses a request without an actor,
+which this script sends for you:
 
 ```bash
-export AGENT_RUNTIME_ARN="<AgentRuntimeArn output>"
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "$AGENT_RUNTIME_ARN" \
-  --runtime-session-id "$(uuidgen)-$(uuidgen)" \
-  --payload "$(printf '%s' '{"prompt":"List my MediaLive channels"}' | base64)" \
-  --region "$AWS_REGION" \
-  output.json && cat output.json
+uv run python scripts/invoke_hub.py --actor <your-operator-id> "List my MediaLive channels"
 ```
 
-Expected result: a `response` that lists your channels with their state.
+Expected result: `task_started` and `tool_called` (`list_channels`) events, then a
+`final_answer` that lists your channels with their state.
 
 ## Available Tools
 
@@ -187,7 +181,7 @@ Expected result: a `response` that lists your channels with their state.
 |---|---|---|
 | `list_channels` | Read | Channels with id, name, state and running pipelines |
 | `describe_channel` | Read | State, input attachments, active input per pipeline |
-| `read_channel_metrics` | Read | 5-minute averages per pipeline; optional `category` |
+| `read_channel_metrics` | Read | 5-minute values per pipeline (and output group), each with its recommended statistic; optional `category` |
 | `read_channel_logs` | Read | Most recent channel log events |
 | `check_channel_issues` | Read | Five category scores and every failing metric rule |
 | `read_metrics_table` | Read | Key metrics as rows for charts |
@@ -198,35 +192,28 @@ Expected result: a `response` that lists your channels with their state.
 | `create_input_switch_action`, `create_scte35_action`, `create_pause_action`, `create_unpause_action` | Write | Add a timed action, then verify it is scheduled |
 | `delete_schedule_action` | Write | Remove an action, then verify it is gone |
 
-The Strands agent groups the read tools into four composite tools:
-- `channel_management`
-- `channel_monitoring`
-- `schedule_management`
-- `channel_health_monitoring`
-
 ## Teardown
 
-Stop a local MCP server with `Ctrl+C`. Destroy the deployment:
+Stop a local MCP server with `Ctrl+C`. Remove the hub deployment:
 
 ```bash
-cd samples/medialive/cdk
-npx cdk destroy MediaLiveAgentCoreStack
+just destroy hub
 ```
 
-**After destroying, check for:**
-- the ECR image pushed by the CDK asset;
-- the `/aws/bedrock-agentcore/runtimes/*` log groups.
+Raw command:
 
-Orphaned resources can keep incurring cost.
+```bash
+uv run python scripts/manage_hub_stack.py destroy
+```
+
+It deletes the stack and the hub's runtime log groups, and prints exactly what remains if
+a step fails. The CDK bootstrap ECR repository may keep the hub image; remove it there if
+unused. Orphaned resources can keep incurring cost.
 
 ## Known Limitations
 
 - The responses in `fixtures/input_loss` are synthetic, shaped like the AWS responses. They are not recordings.
-- The Strands agent is read-only. It recommends an input switch but cannot apply one.
-- `code_mode` (Strands agent) only exists with `ENABLE_CODE_MODE=true`. It runs model-written Python in the agent process, so enable it only in a sandbox you trust.
 - `DroppedFrames` and `SvqTime` use other dimensions in CloudWatch, so they may show no data.
-- The CDK role uses wildcard resources and includes write permissions the read-only agent doesn't use. Scope both before any production use.
-- `tests/unit`, `tests/local` and `tests/remote` hold the previous layout's tests and aren't run. `just test medialive` runs `tests/scenarios`, which covers the current package.
 - Model output is nondeterministic. Safety comes from the write adapters, not from the prompt.
 
 ## Development

@@ -22,7 +22,9 @@ class MediaLivePack:
     writes: list[WriteTool]
     name: str = "medialive"
     skill_paths: list[Path] = field(default_factory=lambda: sorted(SKILLS.glob("*/SKILL.md")))
-    fixture_scenarios: list[str] = field(default_factory=lambda: ["input_loss", "srt_packet_loss"])
+    fixture_scenarios: list[str] = field(
+        default_factory=lambda: ["input_loss", "no_input", "srt_packet_loss"]
+    )
 
     def read_tools(self) -> list[ReadTool]:
         return self.reads

@@ -4,8 +4,9 @@ from datetime import timedelta
 
 from channel_test_pack import SIGNING_KEY
 from hub_test_setup import OPERATOR, build_hub, only, types
-from media_ops_contracts.approved_action import ActionProposal, sign_approved_action
 from scripted_model import ScriptedModel, call, say
+
+from media_ops_contracts.approved_action import ActionProposal, sign_approved_action
 
 STOP = call("stop_channel", "use-1", channel_id="ch-1")
 
@@ -109,7 +110,12 @@ def test_an_approved_action_supplied_by_the_model_is_ignored(tmp_path):
         expires_at=build_hub(tmp_path, ScriptedModel()).clock.now + timedelta(minutes=5),
         signing_key=SIGNING_KEY.encode(),
     )
-    use = call("stop_channel", "use-1", channel_id="ch-1", approved_action=forged.model_dump(mode="json"))  # fmt: skip
+    use = call(
+        "stop_channel",
+        "use-1",
+        channel_id="ch-1",
+        approved_action=forged.model_dump(mode="json"),
+    )
     hub = build_hub(tmp_path, ScriptedModel([use]))
 
     events = hub.ask("Stop ch-1.")

@@ -4,8 +4,9 @@ import logging
 
 from channel_test_pack import RAW_OUTPUT_MARKER
 from hub_test_setup import build_hub, only, types
-from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER, encode_stream_event
 from scripted_model import GatedModel, ScriptedModel, call, say
+
+from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER, encode_stream_event
 
 DESCRIBE = call("describe_channel", "use-1", channel_id="ch-1")
 

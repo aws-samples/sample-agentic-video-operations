@@ -1,0 +1,46 @@
+{
+  "release": "v0.3.7",
+  "commit": "b18040434bd3c5bae3d770219279c6531415c760",
+  "recorded_with": "strands MCPClient list_tools_sync() over stdio (python -m mcp_hydrolix.main), as the hydrolix agents launch it; non-null type of each input",
+  "tools": {
+    "get_table_info": {
+      "database": {
+        "type": "string",
+        "required": true
+      },
+      "table": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "list_databases": {},
+    "list_tables": {
+      "database": {
+        "type": "string",
+        "required": true
+      },
+      "like": {
+        "type": "string",
+        "required": false
+      },
+      "not_like": {
+        "type": "string",
+        "required": false
+      }
+    },
+    "run_select_query": {
+      "query": {
+        "type": "string",
+        "required": true
+      },
+      "purpose": {
+        "type": "string",
+        "required": true
+      },
+      "max_cells": {
+        "type": "integer",
+        "required": false
+      }
+    }
+  }
+}

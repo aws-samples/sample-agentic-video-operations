@@ -56,3 +56,20 @@ def test_a_cdk_app_is_not_a_web_app_so_its_images_fail():
 def test_a_tracked_plan_file_fails():
     [problem] = problems(".claude/plans/handoff/step-1.md")
     assert problem.startswith("tracked plan file")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "samples/hub/coordinator/main.py",
+        "samples/hub/eml/Dockerfile",
+        "samples/hub/emx/main.py",
+        "samples/hub/shared/runtime_client.py",
+        "samples/medialive/cdk/lib/medialive-agentcore-stack.ts",
+        "samples/medialive/Dockerfile",
+        "samples/medialive/src/medialive_mcp/code_interpreter/executor.py",
+        "samples/medialive/src/medialive_mcp/strands_agent/create_composite_tools.py",
+    ],
+)
+def test_a_retired_runtime_path_fails(path):
+    assert problems(path) == [f"retired runtime path: {path}"]

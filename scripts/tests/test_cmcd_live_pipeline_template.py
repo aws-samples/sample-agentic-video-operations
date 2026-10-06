@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from textwrap import dedent
 
@@ -79,10 +80,66 @@ def test_token_provisioner_bounds_retries_and_always_uses_a_stable_identity():
     assert "attempts=3" in provisioner
     assert "except (URLError, TimeoutError)" in provisioner
     assert "physicalResourceId=PHYSICAL_RESOURCE_ID" in provisioner
-    assert "ServiceTimeout: 600" in custom_resource
+    assert "ServiceTimeout: 300" in custom_resource
+    assert "Timeout: 240" in template
     assert "Bucket: !Ref TableName" in custom_resource
     assert "for attempt in range(5):" in provisioner
     assert 'secret_dict.pop("writeToken", None)' in provisioner
+
+
+def test_token_custom_resource_keeps_an_s3_response_path_until_delete_finishes():
+    template = template_text()
+    endpoint = template.split("  S3GatewayEndpoint:", 1)[1].split("  PrivateRoute:", 1)[0]
+    custom_resource = template.split("  UpdateSecretCustomResource:", 1)[1].split(
+        "  # IAM Role for Secret Rotation", 1
+    )[0]
+
+    assert "Type: AWS::EC2::VPCEndpoint" in endpoint
+    assert "VpcEndpointType: Gateway" in endpoint
+    assert "ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'" in endpoint
+    assert "RouteTableIds:\n        - !Ref PrivateRouteTable" in endpoint
+    for dependency in (
+        "PrivateRoute",
+        "PrivateSubnet1RouteTableAssociation",
+        "PrivateSubnet2RouteTableAssociation",
+        "S3GatewayEndpoint",
+    ):
+        assert f"      - {dependency}" in custom_resource
+
+
+def test_s3_gateway_endpoint_allows_only_response_and_stack_bucket_access():
+    endpoint = template_text().split("  S3GatewayEndpoint:", 1)[1].split("  PrivateRoute:", 1)[0]
+
+    assert "PolicyDocument:" in endpoint
+    assert "cloudformation-custom-resource-response-${RegionWithoutDashes}/*" in endpoint
+    assert "Fn::Split:" in endpoint
+    assert "- !Ref AWS::Region" in endpoint
+    assert "- !GetAtt ContentBucket.Arn" in endpoint
+    assert "arn:${AWS::Partition}:s3:::${DeploymentArtifactsBucketName}" in endpoint
+    actions = set(re.findall(r"(?:Action:|-) (s3:[A-Za-z]+)", endpoint))
+    assert actions == {
+        "s3:DeleteObject",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:PutObject",
+    }
+    assert endpoint.count("Resource:") == 3
+    assert endpoint.count("cloudformation-custom-resource-response-") == 1
+    assert endpoint.count("ContentBucket") == 2
+    assert endpoint.count("DeploymentArtifactsBucketName") == 2
+    assert "Action: '*'" not in endpoint
+    assert "Resource: '*'" not in endpoint
+
+
+def test_token_custom_resource_delete_returns_success_before_influxdb_work():
+    provisioner = inline_lambda("UpdateSecretLambda")
+
+    delete_start = provisioner.index('if event["RequestType"] == "Delete":')
+    create_start = provisioner.index("secrets_client = boto3.client('secretsmanager')")
+    assert delete_start < create_start
+    assert '{"TokensProvisioned": False}' in provisioner
+    assert "return\n    try:" in provisioner
 
 
 def test_processor_write_has_an_explicit_timeout():

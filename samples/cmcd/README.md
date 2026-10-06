@@ -37,6 +37,8 @@ flowchart LR
     Stack --> Provisioner[Token provisioner and smoke check]
     Provisioner --> Influx
     Provisioner -->|stores read and write tokens| Secret
+    Provisioner --> Endpoint[S3 gateway endpoint]
+    Endpoint -->|custom-resource response| Stack
 ```
 
 The MCP entrypoint owns stdio transport and selects either fixtures or an
@@ -51,7 +53,11 @@ Manager, and proves the pipeline can write and read a smoke point. The
 processor loads only its write token from the secret; the local MCP command
 copies only the read token into root `.env`. Deployment
 and teardown are separate, confirmed operations; they are not callable through
-MCP.
+MCP. An S3 gateway endpoint on the private route table keeps the token
+provisioner's CloudFormation response path available while the stack is being
+deleted, even if NAT egress is removed first. The provisioner must stay in the
+VPC because the InfluxDB endpoint is private; moving it outside the VPC would
+remove its only route to the database.
 
 ## Prerequisites
 
@@ -201,6 +207,8 @@ aws sts get-caller-identity
    CMCD_ORIGIN_DOMAIN=example.com
    # Full, globally unique bucket name. Leave unset to use cmcd-content-<account id>.
    CMCD_S3_BUCKET_NAME=
+   # Optional deployment-artifact bucket override if the generated name is unavailable.
+   CMCD_ARTIFACTS_BUCKET=
    ```
 
 2. Deploy the `video-ops-cmcd` CloudFormation stack:
@@ -222,7 +230,13 @@ aws sts get-caller-identity
 3. Generate a 30-second test-pattern HLS stream:
 
    ```bash
-   mkdir -p hls && ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 -f lavfi -i sine=frequency=1000 -t 30 -c:v libx264 -pix_fmt yuv420p -c:a aac -f hls -hls_time 6 -hls_playlist_type vod -hls_segment_filename 'hls/segment-%03d.ts' hls/master.m3u8
+   CMCD_HLS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cmcd-hls.XXXXXX")"
+   ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 \
+     -f lavfi -i sine=frequency=1000 -t 30 \
+     -c:v libx264 -pix_fmt yuv420p -c:a aac \
+     -f hls -hls_time 6 -hls_playlist_type vod \
+     -hls_segment_filename "${CMCD_HLS_DIR}/segment-%03d.ts" \
+     "${CMCD_HLS_DIR}/master.m3u8"
    ```
 
    Or use an existing `master.m3u8` playlist and its media segments.
@@ -235,14 +249,15 @@ aws sts get-caller-identity
      --region us-east-1 \
      --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" \
      --output text)"
-   aws s3 cp hls/master.m3u8 \
+   aws s3 cp "${CMCD_HLS_DIR}/master.m3u8" \
      "s3://${CMCD_BUCKET}/videos/master.m3u8" \
      --region us-east-1
-   aws s3 cp hls/ \
+   aws s3 cp "${CMCD_HLS_DIR}/" \
      "s3://${CMCD_BUCKET}/videos/" \
      --recursive \
      --exclude "master.m3u8" \
      --region us-east-1
+   rm -r -- "${CMCD_HLS_DIR}"
    ```
 
 5. Print the generated connection commands and keep the printed Systems
@@ -346,7 +361,7 @@ aws sts get-caller-identity
    just run cmcd
    ```
 
-   Keep the Systems Manager tunnel from step 4 running while using the live
+   Keep the Systems Manager tunnel from step 5 running while using the live
    server. Without it, the first tool call cannot reach InfluxDB and times out.
 
    Raw command:
@@ -412,20 +427,28 @@ Raw command:
 uv run python scripts/manage_cmcd_stack.py destroy
 ```
 
-Before confirmation, the command lists the exact S3 bucket, CloudFormation
-stack, retained InfluxDB instance, and Lambda log groups it will remove. It
-then:
+Before confirmation, the command lists the exact content and deployment
+artifact buckets, CloudFormation stack, retained InfluxDB instance, and Lambda
+log groups it will remove. It then:
 
 1. explicitly deletes the InfluxDB instance retained as a safety net by the
    template and waits, for at most 30 minutes, until its VPC network
    interfaces are gone;
 2. empties the content bucket;
-3. deletes the `video-ops-cmcd` stack and waits for completion; and
-4. deletes the stack's Lambda log groups.
+3. deletes the `video-ops-cmcd` stack and waits for completion. If the earlier
+   token custom resource is already in `DELETE_FAILED` only because
+   CloudFormation did not receive its response, the command retries while
+   retaining only that inert custom-resource record;
+4. deletes the stack's Lambda log groups; and
+5. empties and deletes the stack-named deployment artifact bucket.
 
 Each step treats an already-absent resource as complete. If discovery or any
 deletion fails, fix the reported problem and run `just destroy cmcd` again;
-the next run resumes safely instead of repeating a completed deletion.
+the next run resumes safely instead of repeating a completed deletion. Before
+reporting success or leftovers, the command performs fresh lookups for the
+InfluxDB instance, both buckets, the stack, and its Lambda log groups. It also
+prints separate timings for InfluxDB deletion and CloudFormation deletion; the
+latter includes AWS-managed VPC Lambda network-interface release time.
 
 Confirm the stack and log groups are gone:
 

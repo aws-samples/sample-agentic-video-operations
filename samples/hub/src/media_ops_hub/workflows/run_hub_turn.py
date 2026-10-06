@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from strands import Agent
+from strands.agent.agent_result import AgentResult
 from strands.tools.executors import SequentialToolExecutor
 
 from media_ops_contracts.stream_event import StreamEvent
@@ -33,13 +34,24 @@ def stream_hub_turn(
     session_id: str,
     actor_id: str,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    record_result: Callable[[AgentResult], None] = lambda result: None,
+    record_skill: Callable[[str], None] = lambda skill: None,
 ) -> Iterator[StreamEvent]:
     """Yield the turn's events as they happen; re-raise the worker's exception, if any."""
     events: queue.Queue = queue.Queue()
 
     def run() -> None:
         try:
-            run_hub_turn(hub, request, session_id, actor_id, clock, publish=events.put)
+            run_hub_turn(
+                hub,
+                request,
+                session_id,
+                actor_id,
+                clock,
+                publish=events.put,
+                record_result=record_result,
+                record_skill=record_skill,
+            )
         except Exception as error:  # handed to the consuming thread, which re-raises
             events.put(error)
         finally:
@@ -60,9 +72,15 @@ def run_hub_turn(
     clock: Callable[[], datetime],
     *,
     publish: Callable[[StreamEvent], None],
+    record_result: Callable[[AgentResult], None] = lambda result: None,
+    record_skill: Callable[[str], None] = lambda skill: None,
 ) -> None:
     recorder = StreamEventRecorder(
-        hub.surface, session_id=session_id, actor_id=actor_id, publish=publish
+        hub.surface,
+        session_id=session_id,
+        actor_id=actor_id,
+        publish=publish,
+        record_skill=record_skill,
     )
     budget = ToolCallBudget(hub.settings.hub_tool_budget)
     approvals = ApproveWriteCalls(
@@ -86,6 +104,7 @@ def run_hub_turn(
         recorder.fail(agent_input)
         return
     result = agent(agent_input)
+    record_result(result)
     if budget.exceeded:
         recorder.fail(budget.exceeded)
     elif result.stop_reason != "interrupt":

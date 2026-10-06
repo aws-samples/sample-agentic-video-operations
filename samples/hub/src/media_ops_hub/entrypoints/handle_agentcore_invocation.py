@@ -1,6 +1,8 @@
 """AgentCore Runtime entrypoint of the hub (extend_the_hub.md §1): identify, parse, stream."""
 
 import logging
+import os
+import sys
 from collections.abc import Iterator
 from functools import cache
 from typing import Any
@@ -8,9 +10,12 @@ from typing import Any
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from pydantic import ValidationError
 
+from media_ops_contracts.domain_pack import DomainPackError
+from media_ops_contracts.parse_skill import SkillError
 from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER, ErrorEvent, StreamEvent
-from media_ops_contracts.tool_failure import FailureKind
+from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from media_ops_hub.bootstrap.create_hub import Hub, create_hub
+from media_ops_hub.bootstrap.export_approval_signing_key import export_approval_signing_key
 from media_ops_hub.domain.hub_request import HubRequest
 from media_ops_hub.settings.runtime_settings import load_hub_settings
 from media_ops_hub.workflows.run_hub_turn import stream_hub_turn
@@ -25,6 +30,7 @@ app = BedrockAgentCoreApp()
 
 @cache
 def get_hub() -> Hub:
+    export_approval_signing_key(os.environ)
     return create_hub(load_hub_settings())
 
 
@@ -87,10 +93,31 @@ def failure_event(
     return ErrorEvent(session_id=session_id, kind=kind, message=message, next_action=next_action)
 
 
+STARTUP_ERRORS = (ValidationError, DomainPackError, SkillError, ToolFailure, RuntimeError)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    get_hub()  # a broken pack or skill stops startup
+    try:
+        get_hub()  # a broken setting, pack or skill stops startup, not a request
+    except STARTUP_ERRORS as error:
+        print(f"media-ops-hub cannot start: {describe_startup_error(error)}", file=sys.stderr)
+        print(
+            "Fix the root .env (see .env.example), then run `just run hub` again.", file=sys.stderr
+        )
+        raise SystemExit(2) from None
     app.run()
+
+
+def describe_startup_error(error: Exception) -> str:
+    """One line, without values: a settings error lists its fields and reasons only."""
+    if isinstance(error, ValidationError):
+        return "; ".join(
+            f"{'.'.join(map(str, e['loc'])) or 'settings'}: {e['msg']}" for e in error.errors()
+        )
+    if isinstance(error, ToolFailure):
+        return f"{error.message} {error.next_action}"
+    return str(error)
 
 
 if __name__ == "__main__":

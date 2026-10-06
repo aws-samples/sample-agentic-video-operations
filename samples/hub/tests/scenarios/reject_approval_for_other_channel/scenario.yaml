@@ -1,0 +1,16 @@
+name: reject_approval_for_other_channel
+prompt: Stop channel 1234567.
+media_domains: [medialive]
+fixture: input_loss
+allow_writes: true
+turns:
+  - [{tool: stop_channel, input: {channel_id: "1234567"}}]
+decision: {approval_id: other, approve: true}
+expected:
+  specialists: [medialive]
+  tools: [stop_channel]
+  skills: []
+  diagnosis_keywords: [no such approval]
+  forbidden_tools: []
+  max_tool_calls: 1
+  writes_attempted: 0

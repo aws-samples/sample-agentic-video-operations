@@ -9,8 +9,8 @@ workflows with AI agents. Use the root `justfile` for every common command.
 |---|---|---|---|
 | `cmcd` | [`samples/cmcd/`](samples/cmcd/) | Investigate viewer QoE from CMCD data | `just run cmcd` · `just test cmcd` · `just deploy cmcd` |
 | `mediaconnect` | [`samples/mediaconnect/`](samples/mediaconnect/) | Inspect MediaConnect transport health | `just run mediaconnect` · `just test mediaconnect` |
-| `medialive` | [`samples/medialive/`](samples/medialive/) | Inspect MediaLive channel health | `just run medialive` · `just test medialive` · `just deploy medialive` |
-| `langchain` | [`samples/hub/`](samples/hub/) | Coordinate MediaConnect and MediaLive specialists | `just run langchain` · `just test langchain` · `just deploy langchain` |
+| `medialive` | [`samples/medialive/`](samples/medialive/) | Inspect MediaLive channel health | `just run medialive` · `just test medialive` · deploys through `hub` |
+| `hub` | [`samples/hub/`](samples/hub/) | Investigate across MediaConnect and MediaLive; writes need approval | `just demo` · `just run hub` · `just test hub` · `just deploy hub` |
 | `hydrolix` | [`samples/hydrolix/`](samples/hydrolix/) | Explore CDN and streaming analytics in a web UI | `just deploy hydrolix` · `just destroy hydrolix` |
 
 ## Read Before Editing
@@ -32,11 +32,11 @@ operational safety win over both.
 2. Run one sample locally: `just run <key>`
 3. Run one sample's offline tests: `just test <key>`
 4. Replay the cross-service demo without AWS: `just demo`
-5. Run the quality gate: `just lint && just test && just docs-check`
+5. Run the quality gate: `just lint && just typecheck && just test && just eval && just docs-check`
 
 Run `just` with no arguments to list all recipes. Deployments create billable
 AWS resources; use `just destroy <key>` when finished.
-`just eval` joins the gate in step 4a, when the first eval scenarios exist.
+`just eval` replays the hub's scenarios offline and is part of the gate.
 For changed deploy material, also run `cdk synth` or `cfn-lint`, as applicable.
 
 ## Change Rules

@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 from hub_test_setup import build_hub
-from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER
 from pydantic import ValidationError
 from scripted_model import ScriptedModel, call, say
 
+from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER
 from media_ops_hub.entrypoints import handle_agentcore_invocation as entrypoint
 from media_ops_hub.settings.runtime_settings import HubSettings
 
@@ -17,7 +17,9 @@ ACTOR = "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id"
 
 def invoke(payload, *, session="session-a", headers=None):
     context = SimpleNamespace(session_id=session, request_headers=headers or {})
-    return [STREAM_EVENT_ADAPTER.validate_python(item) for item in entrypoint.invoke(payload, context)]
+    return [
+        STREAM_EVENT_ADAPTER.validate_python(item) for item in entrypoint.invoke(payload, context)
+    ]
 
 
 def test_a_prompt_streams_the_final_answer_for_the_header_actor(tmp_path, monkeypatch):
@@ -30,7 +32,10 @@ def test_a_prompt_streams_the_final_answer_for_the_header_actor(tmp_path, monkey
     assert answer.session_id == "session-a"
 
 
-@pytest.mark.parametrize("payload", [{}, {"prompt": "x", "decision": {"approval_id": "a", "approve": True}}])  # fmt: skip
+@pytest.mark.parametrize(
+    "payload",
+    [{}, {"prompt": "x", "decision": {"approval_id": "a", "approve": True}}],
+)
 def test_a_request_without_exactly_one_of_prompt_or_decision_is_invalid(
     payload, tmp_path, monkeypatch
 ):

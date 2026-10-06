@@ -26,6 +26,9 @@ Contributions via pull requests are much appreciated. Before sending us a pull r
 1. You are working against the latest source on the *main* branch.
 2. You check existing open, and recently merged, pull requests to make sure someone else hasn't addressed the problem already.
 3. You open an issue to discuss any significant work - we would hate for your time to be wasted.
+4. The offline gate passes locally: `just lint`, `just typecheck`, `just test`, `just smoke` and
+   `just docs-check` (the same checks CI runs). Installing the pre-commit hooks runs the fast
+   ones automatically: `uv tool install pre-commit && pre-commit install`.
 
 To send us a pull request, please:
 

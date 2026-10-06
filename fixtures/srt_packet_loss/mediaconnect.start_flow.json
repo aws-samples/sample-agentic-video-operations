@@ -1,0 +1,4 @@
+{
+  "FlowArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+  "Status": "STARTING"
+}

@@ -1,8 +1,8 @@
 # Agent Contract: the media ops hub
 
 One Strands agent on one AgentCore runtime serves every media domain. Domains plug in as
-in-process **domain packs**. The hub replaces the earlier coordinator, EML and EMX runtimes,
-and also the medialive sample's own Strands agent (`hub` with `MEDIA_DOMAINS=medialive`).
+in-process **domain packs**. The hub is the only AgentCore runtime for the MediaLive and
+MediaConnect samples (`hub` with `MEDIA_DOMAINS=medialive` runs only the MediaLive pack).
 
 Enforces guidelines §3–4 (layers), §7 (typed data), §9 (safety), §11 (prompts), §12 (observability), §13 (tests).
 
@@ -16,12 +16,15 @@ Enforces guidelines §3–4 (layers), §7 (typed data), §9 (safety), §11 (prom
 - **Entrypoint:** `entrypoints/handle_agentcore_invocation.py` (`BedrockAgentCoreApp`, port 8080). It parses the request, builds the agent and streams events. Nothing else.
   - **Streaming:** the agent runs on a worker thread, and each `StreamEvent` is yielded as its hook records it, so `task_started` and `tool_called` reach the caller while tools and the model are still running.
   - **Caller identity fails closed:** a request without the actor header or a session id gets `error(InvalidRequest)` and runs nothing. Only `HUB_LOCAL_MODE=true`, which `just run hub` sets and the deployed runtime never does, substitutes one local operator and session.
+  - **Trust boundary:** the actor header is supplied by the caller and not verified. Any principal allowed to invoke the runtime can claim any actor id, so actor isolation (one operator's pending approvals hidden from another) holds only among principals trusted to invoke. The stack outputs `InvokePolicyArn` (invoke this runtime, nothing else); `HUB_INVOKER_ROLE_NAME` attaches it to one role at deploy. Not implemented yet, and the next hardening step: AgentCore inbound JWT authorization, with the actor taken from the verified token's `sub`.
 - **Commands:**
   - `just run hub` runs it locally.
-  - `just demo` is `DEMO=1 just run hub` with a scripted prompt, and needs no AWS.
-  - `just deploy hub` deploys it.
-- **Deploy:** the hub CDK is the existing `samples/medialive/cdk/` (a Strands agent on AgentCore), moved to `samples/hub/cdk/` and generalized.
-  - `MEDIA_DOMAINS` becomes a runtime environment variable.
+  - `just demo` runs one investigation through the real hub and packs on `fixtures/input_loss`, with a scripted model instead of Bedrock. It creates no AWS client.
+  - `just deploy hub` and `just destroy hub` (`scripts/manage_hub_stack.py`) deploy and remove it; `scripts/invoke_hub.py --actor <id>` sends a prompt or decision with the actor header.
+- **Deploy:** the hub CDK lives at `samples/hub/cdk/` and deploys the Strands agent on AgentCore.
+  - `MEDIA_DOMAINS` (default `medialive,mediaconnect`) is passed as `-c mediaDomains=...` and becomes a runtime environment variable. Two packs offering the same tool name stop startup.
+  - **Signing key:** one generated Secrets Manager secret. The runtime gets only `APPROVAL_SIGNING_KEY_SECRET_ARN` (environment variables are visible in the control plane); at startup the hub reads the secret once and exports `APPROVAL_SIGNING_KEY`, so the hub and every pack in every container share it. A CDK test pins this.
+  - **Never set by the CDK:** `HUB_LOCAL_MODE`, `DEMO`, or a plaintext `APPROVAL_SIGNING_KEY`. The runtime allowlists the actor header (`requestHeaderAllowlist`), which the hub requires. CDK tests pin both.
   - **IAM is declared by each pack, not by the hub.** Every pack's sample folder holds `samples/<key>/iam_permissions.json`, in this shape:
 
     ```json
@@ -128,14 +131,7 @@ class DomainPack(Protocol):
 - A decision for an unknown `approval_id`, another session or another actor streams `error(ApprovalRequired)`. The pending tool call is not run.
 - The adapter still checks expiry and the signature (write_safe_tools.md §3) as a second line. The hook's checks don't replace them.
 
-## 5. Code execution (optional, analysis only)
-
-- **`analyze_with_code(code, data_json)`** exists only with `ENABLE_CODE_MODE=true` (default `false`).
-- **Sandbox:** it runs in AgentCore Code Interpreter with network mode `SANDBOX` and no execution role, so it cannot call AWS, including AWS write APIs. The implementation must verify both settings.
-- **Inputs and outputs:** it takes only data that read tools already returned, and returns stdout (capped at 16 KB).
-- **No fallback:** if the sandbox is unavailable, the tool returns an error. There is no local `exec`.
-
-## 6. Observability and evals
+## 5. Observability and evals
 
 - **Logging:** every `StreamEvent` is also logged as structured JSON with:
   - `session.id`
@@ -150,16 +146,19 @@ class DomainPack(Protocol):
 - **`just eval`** replays each scenario under `samples/hub/tests/scenarios/<name>/scenario.yaml`:
   - **Inputs:** the prompt, `MEDIA_DOMAINS`, the fixture scenario, and any decision.
   - **Expected:** tools, skills, diagnosis keywords, forbidden tools, and a maximum number of tool calls.
+  - Write scenarios also name the expected action, before state, after state, and
+    verification result.
 - **Each scenario records:**
   - input and output tokens (`result.metrics.accumulated_usage`);
   - tool calls;
   - skills loaded;
   - wall-clock latency;
   - writes attempted.
+  - verified action transitions.
 - **Output:** the results print as a table, and `eval-results.json` is written for comparison across runs. This is the efficiency evidence.
 - **Models:** the fake model is the default. The real model runs with `EVAL_MODEL=bedrock`.
 
-## 7. Required tests
+## 6. Required tests
 
 | Test | Proves |
 |---|---|

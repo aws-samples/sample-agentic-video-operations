@@ -12,6 +12,9 @@ Goal: one short answer an operator can act on, with every conclusion tied to a m
 3. Read `status`: HEALTHY, WARNING (minor or recovered issues), DEGRADED (an issue is
    still happening) or CRITICAL (ongoing input loss over half the window). Lead with it.
    **HEALTHY:** report the state, the running pipelines and the overall score. Stop there.
+   **NOT_EMITTED** (the whole channel or one category): CloudWatch has no datapoints, so
+   health is unknown, not good. Say which metrics are in `not_emitted`; usually the input
+   is absent or the channel is not producing output. Never report it as healthy.
 4. **Issues found:** for each one, name the category, metric and pipeline. Read only the
    categories involved with `read_channel_metrics(channel_id, category=<category>)` to
    give the latest value and the peak.

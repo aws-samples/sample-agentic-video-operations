@@ -38,6 +38,8 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
       description: "The Hydrolix table name (format: database.table)",
       default: "database.table",
     });
+    const uniqueSuffix = cdk.Names.uniqueId(this).slice(-8).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const runtimeName = `HydrolixRuntime_${uniqueSuffix}`;
 
     // ================================
     // DYNAMODB TABLES
@@ -86,29 +88,13 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
         'AgentCoreExecutionPolicy': new iam.PolicyDocument({
           statements: [
             new iam.PolicyStatement({
-              sid: 'ECRImageAccess',
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'ecr:BatchCheckLayerAvailability',
-                'ecr:BatchGetImage',
-                'ecr:GetDownloadUrlForLayer',
-                'ecr:PutImage',
-                'ecr:InitiateLayerUpload',
-                'ecr:UploadLayerPart',
-                'ecr:CompleteLayerUpload',
-              ],
-              resources: [
-                `arn:aws:ecr:${this.region}:${this.account}:repository/*`
-              ]
-            }),
-            new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
                 'logs:DescribeLogStreams',
                 'logs:CreateLogGroup'
               ],
               resources: [
-                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/runtimes/*`
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/runtimes/${runtimeName}-*`
               ]
             }),
             new iam.PolicyStatement({
@@ -127,7 +113,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
                 'logs:PutLogEvents'
               ],
               resources: [
-                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*`
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/runtimes/${runtimeName}-*:log-stream:*`
               ]
             }),
             new iam.PolicyStatement({
@@ -157,19 +143,6 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
                   'cloudwatch:namespace': 'bedrock-agentcore'
                 }
               }
-            }),
-            new iam.PolicyStatement({
-              sid: 'GetAgentAccessToken',
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'bedrock-agentcore:GetWorkloadAccessToken',
-                'bedrock-agentcore:GetWorkloadAccessTokenForJWT',
-                'bedrock-agentcore:GetWorkloadAccessTokenForUserId'
-              ],
-              resources: [
-                `arn:aws:bedrock-agentcore:${this.region}:${this.account}:workload-identity-directory/default`,
-                `arn:aws:bedrock-agentcore:${this.region}:${this.account}:workload-identity-directory/default/workload-identity/*`
-              ]
             }),
             new iam.PolicyStatement({
               sid: 'BedrockModelInvocation',
@@ -207,25 +180,6 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
               ],
               resources: [
                 rawQueryResults.tableArn
-              ]
-            }),
-            // Permissions for AgentCore Memory
-            new iam.PolicyStatement({
-              sid: 'BedrockAgentCoreMemoryAccess',
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'bedrock-agentcore:GetMemoryRecord',
-                'bedrock-agentcore:GetMemory',
-                'bedrock-agentcore:RetrieveMemoryRecords',
-                'bedrock-agentcore:DeleteMemoryRecord',
-                'bedrock-agentcore:ListMemoryRecords',
-                'bedrock-agentcore:CreateEvent',
-                'bedrock-agentcore:ListSessions',
-                'bedrock-agentcore:ListEvents',
-                'bedrock-agentcore:GetEvent'
-              ],
-              resources: [
-                `*`
               ]
             }),
             new iam.PolicyStatement({
@@ -276,19 +230,40 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
       directory: path.join(__dirname, '../hydrolix-data-assistant-agentcore-strands'),
       platform: ecr_assets.Platform.LINUX_ARM64
     });
+    dockerImageAsset.repository.grantPull(agentCoreRole);
 
     // ================================
     // BEDROCK AGENTCORE MEMORY
     // ================================
 
     // Short-term memory for AgentCore to maintain conversation context
-    const uniqueSuffix = cdk.Names.uniqueId(this).slice(-8).toLowerCase().replace(/[^a-z0-9]/g, '');
     const agentMemory = new bedrockagentcore.CfnMemory(this, 'AgentMemory', {
       name: `HydrolixAssistantMemory_${uniqueSuffix}`,
       eventExpiryDuration: 7, // Events expire after 7 days
       memoryExecutionRoleArn: agentCoreRole.roleArn,
       description: 'Short-term memory for Hydrolix data analyst assistant conversations',
     });
+    const memoryPolicy = new iam.Policy(this, 'AgentMemoryPolicy', {
+      statements: [
+        new iam.PolicyStatement({
+          sid: 'BedrockAgentCoreMemoryAccess',
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'bedrock-agentcore:GetMemoryRecord',
+            'bedrock-agentcore:GetMemory',
+            'bedrock-agentcore:RetrieveMemoryRecords',
+            'bedrock-agentcore:DeleteMemoryRecord',
+            'bedrock-agentcore:ListMemoryRecords',
+            'bedrock-agentcore:CreateEvent',
+            'bedrock-agentcore:ListSessions',
+            'bedrock-agentcore:ListEvents',
+            'bedrock-agentcore:GetEvent'
+          ],
+          resources: [agentMemory.attrMemoryArn]
+        }),
+      ],
+    });
+    memoryPolicy.attachToRole(agentCoreRole);
 
     // ================================
     // BEDROCK AGENTCORE RUNTIME
@@ -296,7 +271,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
 
     // AgentCore Runtime with container type for the Hydrolix data analyst assistant
     const agentRuntime = new bedrockagentcore.CfnRuntime(this, 'AgentRuntime', {
-      agentRuntimeName: `HydrolixRuntime_${uniqueSuffix}`,
+      agentRuntimeName: runtimeName,
       agentRuntimeArtifact: {
         containerConfiguration: {
           containerUri: dockerImageAsset.imageUri,
@@ -317,6 +292,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     });
     
     agentRuntime.addDependency(agentMemory);
+    agentRuntime.node.addDependency(memoryPolicy);
 
     // ================================
     // BEDROCK AGENTCORE RUNTIME ENDPOINT

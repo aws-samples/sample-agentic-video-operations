@@ -1,0 +1,12 @@
+# The image's `COPY . .` must never carry secrets or local state.
+.env
+**/.env*
+!**/.env.example
+.claude
+**/.claude
+.git
+**/.git
+**/cdk.out
+**/.venv
+**/__pycache__
+**/.pytest_cache

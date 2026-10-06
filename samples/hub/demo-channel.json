@@ -1,5 +1,5 @@
 {
-  "Name": "demo-langchain-abr",
+  "Name": "demo-media-ops-abr",
   "ChannelClass": "SINGLE_PIPELINE",
   "RoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/MediaLiveAccessRole",
   "InputAttachments": [

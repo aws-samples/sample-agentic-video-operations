@@ -2,7 +2,7 @@
 # show that raw command too. Contract: docs/build_a_sample.md §4.
 #
 # Install once:  uv tool install rust-just
-# Sample keys:   cmcd · mediaconnect · medialive · hub · langchain · hydrolix
+# Sample keys:   cmcd · mediaconnect · medialive · hub · hydrolix
 
 set dotenv-load
 set shell := ["bash", "-euo", "pipefail", "-c"]
@@ -26,7 +26,6 @@ run sample *args:
       mediaconnect) uv run --package mediaconnect-mcp-server serve-mediaconnect {{ args }} ;;
       medialive)    uv run --package medialive-mcp-server serve-medialive {{ args }} ;;
       hub)          HUB_LOCAL_MODE=true uv run --package media-ops-hub serve-hub {{ args }} ;;
-      langchain)    just _pending langchain 4 ;;
       hydrolix)     just _pending hydrolix 5 ;;
       *)            just _unknown "{{ sample }}" ;;
     esac
@@ -44,7 +43,6 @@ test sample="":
       medialive) uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack ;;
       hub)       uv run pytest samples/hub/tests/contract ;;
       hydrolix)  uv run pytest scripts/tests/test_manage_hydrolix_stack.py ;;
-      langchain) just _pending "{{ sample }}" ;;
       *)         just _unknown "{{ sample }}" ;;
     esac
 
@@ -54,15 +52,20 @@ lint:
     uv run ruff check .
     uv run ruff format --check .
 
+# Static type check (ratchet list in pyproject.toml [tool.mypy])
+[group('develop')]
+typecheck:
+    uv run mypy
+
 # Replay fixture scenarios and score them
 [group('develop')]
 eval:
-    @just _pending_eval
+    uv run pytest -m eval
 
-# Coordinator on recorded incidents, no AWS account needed
+# The hub on a recorded incident with a scripted model: no AWS account, no Bedrock
 [group('develop')]
 demo:
-    @just _pending demo 4
+    uv run --package media-ops-hub demo-hub
 
 # Start every converted MCP server on fixtures and call one read tool
 [group('develop')]
@@ -74,6 +77,7 @@ smoke:
 docs-check:
     uv run python scripts/check_readme_structure.py
     uv run python scripts/check_repository_layout.py
+    uv run python scripts/check_docs_claims.py
     uv run python scripts/check_model_ids.py
 
 # Deploy a sample with its existing deploy material (scripts/confirm_aws_action.py asks first; --yes skips)
@@ -84,7 +88,8 @@ deploy sample *flags:
     case "{{ sample }}" in
       cmcd)     uv run python scripts/manage_cmcd_stack.py deploy {{ flags }} ;;
       hydrolix) uv run python scripts/manage_hydrolix_stack.py deploy {{ flags }} ;;
-      mediaconnect|medialive|langchain) just _pending "{{ sample }}" ;;
+      hub)      uv run python scripts/manage_hub_stack.py deploy {{ flags }} ;;
+      medialive|mediaconnect) echo "{{ sample }} deploys as a hub domain: set MEDIA_DOMAINS, then just deploy hub" >&2; exit 1 ;;
       *) just _unknown "{{ sample }}" ;;
     esac
 
@@ -106,7 +111,8 @@ destroy sample *flags:
     case "{{ sample }}" in
       cmcd)     uv run python scripts/manage_cmcd_stack.py destroy {{ flags }} ;;
       hydrolix) uv run python scripts/manage_hydrolix_stack.py destroy {{ flags }} ;;
-      mediaconnect|medialive|langchain) just _pending "{{ sample }}" ;;
+      hub)      uv run python scripts/manage_hub_stack.py destroy {{ flags }} ;;
+      medialive|mediaconnect) echo "{{ sample }} deploys as a hub domain: set MEDIA_DOMAINS, then just destroy hub" >&2; exit 1 ;;
       *) just _unknown "{{ sample }}" ;;
     esac
 
@@ -115,9 +121,5 @@ _pending sample step="":
     @echo "'{{ sample }}' is not converted yet{{ if step != '' { ' (step ' + step + ')' } else { '' } }}; see its README." >&2; exit 1
 
 [private]
-_pending_eval:
-    @echo "Eval scenarios arrive with the hub in step 4." >&2; exit 1
-
-[private]
 _unknown sample:
-    @echo "Unknown sample '{{ sample }}'. Use: cmcd mediaconnect medialive langchain hydrolix" >&2; exit 1
+    @echo "Unknown sample '{{ sample }}'. Use: cmcd mediaconnect medialive hub hydrolix" >&2; exit 1

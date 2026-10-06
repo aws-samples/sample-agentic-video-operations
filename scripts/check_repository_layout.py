@@ -13,7 +13,8 @@ ALLOWED_ROOT = frozenset(
         "README.md", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md",
         "CODE_OF_CONDUCT.md", "LICENSE",
         "justfile", "pyproject.toml", "uv.lock", ".env.example", ".python-version",
-        ".gitignore", ".github", "docs", "samples", "packages", "fixtures", "scripts",
+        ".gitignore", ".gitleaksignore", ".pre-commit-config.yaml", ".dockerignore", ".github",
+        "docs", "samples", "packages", "fixtures", "scripts",
         ".claude",  # Claude Code instructions; .claude/plans/ is never tracked
     }
 )  # fmt: skip
@@ -22,6 +23,25 @@ IMAGE_EXTENSIONS = frozenset(
     {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp", ".tif", ".tiff"}
 )
 DOCS_IMAGES = re.compile(r"^(docs/images/|samples/[^/]+/docs/images/)")
+RETIRED_PATHS = frozenset(
+    {
+        "samples/medialive/.bedrock_agentcore.yaml",
+        "samples/medialive/Dockerfile",
+        "samples/medialive/Dockerfile.dockerignore",
+        "samples/medialive/src/medialive_mcp/entrypoints/handle_agentcore_invocation.py",
+        "samples/medialive/src/medialive_mcp/prompts/medialive_agent_instructions.md",
+        "samples/medialive/src/medialive_mcp/prompts/medialive_agent_prompt.py",
+    }
+)
+RETIRED_PATH_PREFIXES = (
+    "samples/hub/coordinator/",
+    "samples/hub/eml/",
+    "samples/hub/emx/",
+    "samples/hub/shared/",
+    "samples/medialive/cdk/",
+    "samples/medialive/src/medialive_mcp/code_interpreter/",
+    "samples/medialive/src/medialive_mcp/strands_agent/",
+)
 
 
 def find_layout_problems(tracked_paths: Iterable[str]) -> list[str]:
@@ -34,6 +54,8 @@ def find_layout_problems(tracked_paths: Iterable[str]) -> list[str]:
             problems.add(f"root entry not allowed: {top}")
         if path.startswith(".claude/plans/"):
             problems.add(f"tracked plan file (keep .claude/plans/ local): {path}")
+        if path in RETIRED_PATHS or path.startswith(RETIRED_PATH_PREFIXES):
+            problems.add(f"retired runtime path: {path}")
         if is_image(path) and not is_allowed_image(path, web_apps):
             problems.add(f"image outside docs/images/ or a web app: {path}")
     return sorted(problems)

@@ -12,13 +12,9 @@ DEFAULT_DEMO_SCENARIO = "input_loss"
 
 class RuntimeSettings(BaseSettings):
     aws_region: str = Field(default="us-west-2")
-    # Model ids come only from the root .env (build_a_sample.md §5); no fallback ids in code.
-    agent_model_id: str | None = Field(default=None)
     thumbnail_model_id: str | None = Field(default=None)
-    memory_id: str = Field(default="")
     medialive_channel_id: str = Field(default="")
     allow_writes: bool = Field(default=False)
-    enable_code_mode: bool = Field(default=False)
     demo: bool = Field(default=False)
     demo_scenario: str = Field(default=DEFAULT_DEMO_SCENARIO)
     fixtures_dir: Path = Field(default=Path("fixtures"))

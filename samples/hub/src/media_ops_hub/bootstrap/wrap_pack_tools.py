@@ -15,7 +15,7 @@ from strands import tool
 from strands.types.tools import AgentTool, ToolContext
 
 from media_ops_contracts.approved_action import ApprovedAction
-from media_ops_contracts.domain_pack import DomainPack, ReadTool, WriteTool
+from media_ops_contracts.domain_pack import DomainPack, DomainPackError, ReadTool, WriteTool
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
 
@@ -32,13 +32,20 @@ def wrap_pack_tools(packs: list[DomainPack], *, allow_writes: bool) -> ToolSurfa
     writes: dict[str, WriteTool] = {}
     for pack in packs:
         for function in pack.read_tools():
+            claim_tool_name(pack_by_tool, function.__name__, pack.name)
             tools.append(wrap_read_tool(function))
-            pack_by_tool[function.__name__] = pack.name
         for write in pack.write_tools() if allow_writes else []:
+            claim_tool_name(pack_by_tool, write.function.__name__, pack.name)
             tools.append(wrap_write_tool(write))
-            pack_by_tool[write.function.__name__] = pack.name
             writes[write.function.__name__] = write
     return ToolSurface(tools=tools, pack_by_tool=pack_by_tool, writes=writes)
+
+
+def claim_tool_name(pack_by_tool: dict[str, str], name: str, pack: str) -> None:
+    """Tool names are global to the agent: two packs offering the same name stop startup."""
+    owner = pack_by_tool.setdefault(name, pack)
+    if owner != pack or name == "load_skill":
+        raise DomainPackError(f"Tool name {name!r} is offered by both {owner} and {pack}.")
 
 
 def wrap_read_tool(function: ReadTool) -> AgentTool:

@@ -1,6 +1,6 @@
 # Agentic IOPS Development Guidelines
 
-These guidelines define the target engineering standard for Agentic Intelligent Media Operations, with special focus on the refactored `media-services-langchain`.
+These guidelines define the target engineering standard for Agentic Intelligent Media Operations, with special focus on the media operations hub.
 
 The objective is not merely clean code. The objective is a codebase that makes the correct change obvious, keeps every change small, protects operational safety, and lets a new contributor understand the system without reconstructing it mentally.
 
@@ -236,11 +236,11 @@ Example:
 
 ```text
 AgentCore request
-  → handle_coordinator_invocation.py
-  → coordinate_incident.py
-  → InvokeSpecialist protocol
-  → invoke_agentcore_specialist.py
-  → Bedrock AgentCore Runtime
+  → handle_agentcore_invocation.py
+  → run_hub_turn.py
+  → create_hub.py
+  → selected domain pack
+  → AWS adapter
 ```
 
 ### Entrypoints talk to transport frameworks
@@ -395,11 +395,12 @@ Forbidden dependency directions:
 - Tests importing another test's private helpers.
 - CDK code defining application behavior.
 
-### No cross-specialist reach-through
+### No cross-domain reach-through
 
-The coordinator talks to specialist ports.
+The hub loads domain packs through the shared `DomainPack` contract.
 
-MediaLive and MediaConnect specialists MUST NOT import each other. Cross-service reasoning belongs in the coordinator workflow or domain topology model.
+MediaLive and MediaConnect packs MUST NOT import each other. Cross-service
+reasoning belongs in the hub workflow.
 
 ---
 
@@ -413,202 +414,72 @@ The target layout organizes the same service by responsibility and by the extern
 samples/hub/
 ├── pyproject.toml
 ├── README.md
-├── Makefile
+├── Dockerfile
 ├── .env.example
-│
-├── src/
-│   └── media_iops/
-│       ├── domain/
-│       │   ├── incidents/
-│       │   │   ├── incident.py
-│       │   │   ├── incident_status.py
-│       │   │   ├── incident_task.py
-│       │   │   ├── specialist_finding.py
-│       │   │   ├── remediation_proposal.py
-│       │   │   └── verification_result.py
-│       │   ├── topology/
-│       │   │   ├── live_event.py
-│       │   │   ├── media_resource.py
-│       │   │   ├── signal_path.py
-│       │   │   └── connect_resources.py
-│       │   └── safety/
-│       │       ├── action_risk.py
-│       │       ├── action_approval.py
-│       │       └── require_action_approval.py
-│       │
-│       ├── ports/
-│       │   ├── invoke_specialist.py
-│       │   ├── load_incident_memory.py
-│       │   ├── save_incident_memory.py
-│       │   ├── read_media_live.py
-│       │   ├── control_media_live.py
-│       │   ├── read_media_connect.py
-│       │   ├── control_media_connect.py
-│       │   ├── read_cloudwatch.py
-│       │   └── record_telemetry.py
-│       │
-│       ├── workflows/
-│       │   ├── coordinate_incident/
-│       │   │   ├── build_incident_graph.py
-│       │   │   ├── classify_request.py
-│       │   │   ├── discover_signal_path.py
-│       │   │   ├── plan_investigation.py
-│       │   │   ├── request_action_approval.py
-│       │   │   ├── dispatch_ready_tasks.py
-│       │   │   ├── merge_specialist_findings.py
-│       │   │   ├── propose_remediation.py
-│       │   │   ├── apply_approved_action.py
-│       │   │   ├── verify_remediation.py
-│       │   │   └── write_incident_response.py
-│       │   ├── inspect_media_live/
-│       │   │   ├── build_media_live_graph.py
-│       │   │   ├── inspect_channel.py
-│       │   │   ├── collect_channel_metrics.py
-│       │   │   ├── collect_channel_logs.py
-│       │   │   └── identify_channel_issues.py
-│       │   └── inspect_media_connect/
-│       │       ├── build_media_connect_graph.py
-│       │       ├── inspect_flow.py
-│       │       ├── collect_flow_metrics.py
-│       │       ├── inspect_flow_thumbnail.py
-│       │       └── identify_flow_issues.py
-│       │
-│       ├── prompts/
-│       │   ├── classify_request_prompt.py
-│       │   ├── plan_investigation_prompt.py
-│       │   ├── propose_remediation_prompt.py
-│       │   ├── write_incident_response_prompt.py
-│       │   ├── inspect_media_live_prompt.py
-│       │   └── inspect_media_connect_prompt.py
-│       │
-│       ├── adapters/
-│       │   ├── agentcore/
-│       │   │   ├── invoke_specialist_runtime.py
-│       │   │   ├── load_agentcore_memory.py
-│       │   │   ├── save_agentcore_memory.py
-│       │   │   └── translate_runtime_response.py
-│       │   ├── bedrock/
-│       │   │   ├── create_chat_model.py
-│       │   │   └── classify_model_failure.py
-│       │   ├── cloudwatch/
-│       │   │   ├── read_channel_metrics.py
-│       │   │   ├── read_channel_logs.py
-│       │   │   └── read_flow_metrics.py
-│       │   ├── media_live/
-│       │   │   ├── list_channels.py
-│       │   │   ├── describe_channel.py
-│       │   │   ├── start_channel.py
-│       │   │   ├── stop_channel.py
-│       │   │   ├── describe_schedule.py
-│       │   │   └── switch_channel_input.py
-│       │   ├── media_connect/
-│       │   │   ├── list_flows.py
-│       │   │   ├── describe_flow.py
-│       │   │   ├── start_flow.py
-│       │   │   ├── stop_flow.py
-│       │   │   └── inspect_flow_thumbnail.py
-│       │   └── telemetry/
-│       │       ├── record_workflow_span.py
-│       │       ├── record_tool_call.py
-│       │       └── redact_sensitive_attributes.py
-│       │
-│       ├── entrypoints/
-│       │   └── agentcore/
-│       │       ├── handle_coordinator_invocation.py
-│       │       ├── handle_media_live_invocation.py
-│       │       └── handle_media_connect_invocation.py
-│       │
-│       ├── bootstrap/
-│       │   ├── build_coordinator_runtime.py
-│       │   ├── build_media_live_runtime.py
-│       │   └── build_media_connect_runtime.py
-│       │
-│       └── settings/
-│           ├── load_runtime_settings.py
-│           └── runtime_settings.py
-│
+├── src/media_ops_hub/
+│   ├── bootstrap/
+│   │   ├── create_hub.py
+│   │   ├── create_load_skill_tool.py
+│   │   ├── create_session_manager.py
+│   │   ├── export_approval_signing_key.py
+│   │   └── wrap_pack_tools.py
+│   ├── domain/
+│   │   ├── hub_request.py
+│   │   ├── pending_approval.py
+│   │   └── propose_write_action.py
+│   ├── entrypoints/
+│   │   └── handle_agentcore_invocation.py
+│   ├── prompts/
+│   │   ├── build_system_prompt.py
+│   │   └── hub_instructions.md
+│   ├── settings/
+│   │   └── runtime_settings.py
+│   ├── skills/
+│   │   └── diagnose-signal-path/SKILL.md
+│   └── workflows/
+│       ├── approve_write_calls.py
+│       ├── limit_tool_calls.py
+│       ├── record_stream_events.py
+│       └── run_hub_turn.py
 ├── tests/
-│   ├── unit/
-│   │   ├── domain/
-│   │   ├── workflows/
-│   │   └── adapters/
 │   ├── contract/
-│   │   ├── verify_specialist_contract.py
-│   │   ├── verify_approval_contract.py
-│   │   └── verify_stream_event_contract.py
-│   ├── scenarios/
-│   │   ├── diagnose_input_loss/
-│   │   ├── diagnose_transport_loss/
-│   │   └── reject_unapproved_stop/
-│   └── integration/
-│       ├── invoke_deployed_coordinator.py
-│       └── verify_approved_channel_stop.py
-│
-├── fixtures/
-│   ├── topologies/
-│   ├── incidents/
-│   └── tool_responses/
-│
-└── infrastructure/
-    └── cdk/
-        ├── bin/
-        └── stacks/
+│   ├── eval/
+│   └── scenarios/
+└── cdk/
+    ├── bin/
+    ├── lib/
+    └── test/
 ```
 
 ### Layout intent
 
-- `domain/` knows the business vocabulary.
-- `ports/` says what the workflows need.
-- `workflows/` performs user-visible operations.
-- `prompts/` contains one prompt purpose per file.
-- `adapters/` are grouped by the system they talk to.
+- `domain/` owns requests and approval state.
+- `workflows/` performs one user-visible turn and enforces tool policy.
+- `prompts/` contains the hub instructions and their builder.
 - `entrypoints/` translate incoming transport requests.
-- `bootstrap/` constructs dependencies and runtimes.
+- `bootstrap/` constructs the hub and connects selected domain packs.
 - `settings/` validates configuration.
 - `tests/` mirror production boundaries.
-- `fixtures/` make offline incident replay possible.
-- `infrastructure/` deploys the service but does not define its behavior.
+- root `fixtures/` makes offline incident replay possible.
+- `cdk/` deploys the service but does not define its behavior.
 
 ---
 
-## 6. Current-to-Target File Mapping
+## 6. Remove Migration Shims Promptly
 
-Use this map to refactor incrementally without changing behavior.
-
-| Current file | Target responsibility |
-|---|---|
-| `coordinator/main.py` | `entrypoints/agentcore/handle_coordinator_invocation.py` plus `bootstrap/build_coordinator_runtime.py` |
-| `coordinator/graph.py` | `workflows/coordinate_incident/build_incident_graph.py` |
-| `coordinator/nodes/classify.py` | `workflows/coordinate_incident/classify_request.py` |
-| `coordinator/nodes/plan.py` | `workflows/coordinate_incident/plan_investigation.py` |
-| `coordinator/nodes/approve.py` | `workflows/coordinate_incident/request_action_approval.py` |
-| `coordinator/nodes/route.py` | `workflows/coordinate_incident/dispatch_ready_tasks.py` |
-| `coordinator/nodes/merge.py` | `workflows/coordinate_incident/merge_specialist_findings.py` |
-| `coordinator/nodes/respond.py` | `workflows/coordinate_incident/write_incident_response.py` |
-| `coordinator/prompts.py` | One file per prompt under `prompts/` |
-| `shared/state.py` | Typed models under `domain/incidents/` |
-| `shared/runtime_client.py` | `adapters/agentcore/invoke_specialist_runtime.py` |
-| `shared/memory.py` | Separate load/save adapters under `adapters/agentcore/` |
-| `shared/observability.py` | Focused adapters under `adapters/telemetry/` |
-| `shared/config.py` | `settings/runtime_settings.py` and `settings/load_runtime_settings.py` |
-| `eml/tools.py` | One action per adapter under `adapters/media_live/` and `adapters/cloudwatch/` |
-| `emx/tools.py` | One action per adapter under `adapters/media_connect/` and `adapters/cloudwatch/` |
-| `eml/main.py` | `entrypoints/agentcore/handle_media_live_invocation.py` |
-| `emx/main.py` | `entrypoints/agentcore/handle_media_connect_invocation.py` |
-
-Refactors MUST keep compatibility shims at old import locations until callers and tests migrate.
+Refactors MAY keep a compatibility shim at an old import location while callers
+and tests migrate. A shim MUST contain no behavior and MUST be deleted in the
+same task group that moves the last caller.
 
 Example:
 
 ```python
-# shared/runtime_client.py
+# legacy_hub_turn.py
 """Compatibility shim. Remove after all callers migrate."""
 
-from media_iops.adapters.agentcore.invoke_specialist_runtime import (
-    AgentCoreSpecialistInvoker as AgentCoreRuntimeClient,
-)
+from media_ops_hub.workflows.run_hub_turn import run_hub_turn
 
-__all__ = ["AgentCoreRuntimeClient"]
+__all__ = ["run_hub_turn"]
 ```
 
 Compatibility shims MUST:
@@ -955,7 +826,7 @@ Recommended sequence:
 1. Introduce domain task and finding types.
 2. Extract the specialist invocation port.
 3. Move AgentCore invocation into an adapter.
-4. Move coordinator nodes into action-named workflow modules.
+4. Move orchestration decisions into action-named workflow modules.
 5. Split prompts by purpose.
 6. Split MediaLive tools by action.
 7. Split MediaConnect tools by action.
@@ -1060,7 +931,7 @@ Prefer:
 
 Avoid:
 
-> This is a LangGraph application using three AgentCore runtimes.
+> This is an agent application using a framework and cloud runtime.
 
 #### 2. Architecture
 
@@ -1079,14 +950,14 @@ Example:
 
 ```mermaid
 flowchart LR
-    User[Operator] --> Coordinator[Incident Coordinator]
-    Coordinator --> MediaLive[MediaLive Specialist]
-    Coordinator --> MediaConnect[MediaConnect Specialist]
+    User[Operator] --> Hub[Media Operations Hub]
+    Hub --> MediaLive[MediaLive Domain Pack]
+    Hub --> MediaConnect[MediaConnect Domain Pack]
     MediaLive --> CW[CloudWatch]
     MediaLive --> EML[AWS Elemental MediaLive]
     MediaConnect --> CW
     MediaConnect --> EMX[AWS Elemental MediaConnect]
-    Coordinator --> Approval[Approval Boundary]
+    Hub --> Approval[Approval Boundary]
     Approval --> Verify[Execute and Verify]
 ```
 
@@ -1170,8 +1041,7 @@ Teardown documentation MUST:
 Example:
 
 ```bash
-cd infrastructure/cdk
-npx cdk destroy MediaServicesLangChainStack
+just destroy hub
 ```
 
 Also document cleanup for:
@@ -1367,7 +1237,7 @@ A change reaches the expected standard when:
 - Operational writes cannot bypass approval policy.
 - Every action has observable start, result, and verification events.
 - File and function names reveal intent without reading their contents.
-- Adding a specialist does not require rewriting coordinator branches.
+- Adding a domain pack does not require rewriting hub routing branches.
 - Tests describe customer and operational behavior.
 - The README path to first success is shorter than the architecture explanation.
 - A newcomer finds every sample at `samples/<key>/`, and nothing at the root that isn't on the §20 allowlist.
@@ -1448,7 +1318,7 @@ Stop and redesign before continuing when:
 - a mutation has no verification step;
 - an internal boundary returns JSON text instead of typed data;
 - a unit test requires AWS credentials;
-- adding a specialist requires another coordinator `if/elif`;
+- adding a domain pack requires another hub `if/elif`;
 - a refactor cannot be explained as one responsibility moving behind one boundary.
 - a runnable sample cannot be started by following its README;
 - a deployment creates resources without complete teardown instructions;
@@ -1467,6 +1337,7 @@ The repository is a master-class sample. Its folders teach as much as its code d
 ```text
 README.md  AGENTS.md  CHANGELOG.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
 justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
+.gitleaksignore  .pre-commit-config.yaml  .dockerignore
 .github/    .claude/    docs/    samples/    packages/    fixtures/    scripts/
 ```
 

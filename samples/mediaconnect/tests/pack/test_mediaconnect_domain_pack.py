@@ -25,6 +25,7 @@ from mediaconnect_mcp.tool_surface.create_write_tools import create_write_tools
 SAMPLE = Path(__file__).resolve().parents[2]
 FIXTURES = SAMPLE.parents[1] / "fixtures"
 FLOW_ARN = "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-flow:flow-1"
+SRT_FLOW_ARN = "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1"
 
 
 @pytest.fixture
@@ -142,6 +143,43 @@ def test_an_approval_signed_with_the_shared_process_key_acts_and_verifies(
     result = write(flow_arn=FLOW_ARN, approved_action=approval(f"{action}_flow"))
 
     assert (result.before_state, result.after_state, result.verified) == (before, after, True)
+
+
+def test_srt_fixture_replays_an_approved_stop_and_restart():
+    settings = demo_settings()
+    clients = create_mediaconnect_clients(settings)
+    writes = write_tools_by_name(clients)
+
+    initial = clients.mediaconnect.describe_flow(FlowArn=SRT_FLOW_ARN)
+    stopped = writes["stop_flow"](
+        flow_arn=SRT_FLOW_ARN,
+        approved_action=approval("stop_flow", resource_id=SRT_FLOW_ARN),
+    )
+    restarted = writes["start_flow"](
+        flow_arn=SRT_FLOW_ARN,
+        approved_action=approval("start_flow", resource_id=SRT_FLOW_ARN),
+    )
+
+    assert initial["Flow"]["Status"] == "ACTIVE"
+    assert (stopped.before_state, stopped.after_state, stopped.verified) == (
+        "ACTIVE",
+        "STANDBY",
+        True,
+    )
+    assert (restarted.before_state, restarted.after_state, restarted.verified) == (
+        "STANDBY",
+        "ACTIVE",
+        True,
+    )
+    assert [operation for operation, _ in clients.mediaconnect.calls] == [
+        "describe_flow",
+        "describe_flow",
+        "stop_flow",
+        "describe_flow",
+        "describe_flow",
+        "start_flow",
+        "describe_flow",
+    ]
 
 
 @pytest.mark.parametrize(

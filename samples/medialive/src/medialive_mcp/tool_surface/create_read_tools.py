@@ -41,8 +41,9 @@ def create_read_tools(settings: RuntimeSettings, clients: MediaLiveClients) -> l
     def read_channel_metrics(
         channel_id: str | None = None, hours_back: int = 1, category: str | None = None
     ) -> list[MetricSeries]:
-        """CloudWatch metrics per pipeline (5-minute averages). Categories: channel_health,
-        input_health, output_health, media_health, content_quality; none gives a summary."""
+        """CloudWatch metrics per pipeline, one 5-minute value in each metric's statistic.
+        Categories: channel_health, input_health, output_health, media_health,
+        content_quality; none gives a summary."""
         return health.summarize_channel_metrics(clients, channel(channel_id), hours_back, category)
 
     def read_channel_logs(channel_id: str | None = None, hours_back: int = 1) -> ChannelLogResult:

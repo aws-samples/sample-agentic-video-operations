@@ -1,0 +1,17 @@
+name: reject_expired_approval
+prompt: Stop channel 1234567.
+media_domains: [medialive]
+fixture: input_loss
+allow_writes: true
+turns:
+  - [{tool: stop_channel, input: {channel_id: "1234567"}}]
+  - [{answer: "The approval expired, so the channel remains running."}]
+decision: {approval_id: current, approve: true, advance_minutes: 11}
+expected:
+  specialists: [medialive]
+  tools: [stop_channel]
+  skills: []
+  diagnosis_keywords: [approval expired]
+  forbidden_tools: []
+  max_tool_calls: 2
+  writes_attempted: 0

@@ -1,0 +1,23 @@
+# Local mirror of the CI gate: ruff, mypy and the secrets scan run before a commit
+# lands, so contributors see failures before CI does.
+# Setup: uv tool install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.12 # keep in step with the ruff pin in pyproject.toml
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1 # keep in step with the pinned version in .github/workflows/ci.yml
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (workspace)
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        files: '\.py$'

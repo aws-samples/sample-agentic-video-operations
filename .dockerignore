@@ -1,0 +1,16 @@
+# Default for builds whose context is the repository root and whose Dockerfile has no
+# `<Dockerfile>.dockerignore`. Secrets and local state never enter a build context
+# (scripts/tests/test_docker_build_context.py checks every image).
+.env
+**/.env*
+!**/.env.example
+.claude
+**/.claude
+.git
+**/.git
+**/cdk.out
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+.kiro

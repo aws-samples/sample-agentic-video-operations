@@ -12,18 +12,53 @@ problems with focused AI-agent samples.
 
 Choose the operator outcome you need:
 
-| I want to… | Sample | Start with | Status |
-|---|---|---|---|
-| Find regional buffering, bitrate, or playback-error patterns in CMCD data | [`cmcd`](samples/cmcd/) | `just run cmcd` | From step 1 |
-| Inspect MediaConnect flow health, packet loss, metrics, or thumbnails | [`mediaconnect`](samples/mediaconnect/) | `just run mediaconnect` | From step 2 |
-| Inspect MediaLive channels, inputs, outputs, schedules, or alarms | [`medialive`](samples/medialive/) | `just run medialive` | From step 3 |
-| Investigate a signal path across MediaConnect and MediaLive | [`langchain`](samples/hub/) | `just demo` | From step 4c |
-| Explore CDN and streaming analytics through a web application | [`hydrolix`](samples/hydrolix/) | `just deploy hydrolix` | From step 5 |
+| I want to… | Sample | Start with |
+|---|---|---|
+| Find regional buffering, bitrate, or playback-error patterns in CMCD data | [`cmcd`](samples/cmcd/) | `just run cmcd` |
+| Inspect MediaConnect flow health, packet loss, metrics, or thumbnails | [`mediaconnect`](samples/mediaconnect/) | `just run mediaconnect` |
+| Inspect MediaLive channels, inputs, outputs, schedules, or alarms | [`medialive`](samples/medialive/) | `just run medialive` |
+| Investigate a signal path across MediaConnect and MediaLive, with approved fixes | [`hub`](samples/hub/) | `just demo` |
+| Explore CDN and streaming analytics through a web application | [`hydrolix`](samples/hydrolix/) | `just deploy hydrolix` |
 
 > [!IMPORTANT]
 > These samples are for educational and reference purposes only. They are not
 > intended for production use without security hardening, thorough testing,
 > and customization for your environment.
+
+## Try It First — No AWS Account
+
+Three commands after cloning. No credentials, no `.env`, no cost:
+
+```bash
+uv tool install rust-just
+just doctor
+just smoke
+```
+
+```text
+ok   cmcd             analyze_buffer_events
+ok   mediaconnect     list_flows
+ok   medialive        list_channels
+Demo smoke passed without AWS clients.
+```
+
+Every sample just started as a real MCP server and answered from **fixtures** —
+recorded AWS responses for scripted incidents (a MediaLive input loss, an SRT
+packet-loss event, a viewer buffering spike). Nothing touched AWS.
+
+Then watch the hub agent investigate a recorded incident, still offline:
+
+```bash
+just demo
+```
+
+It streams each tool call and ends with the diagnosis (impact, evidence, next
+action) for a MediaLive channel whose pipeline 0 lost its SRT input.
+
+From there, [`docs/walkthrough.md`](docs/walkthrough.md) takes you the rest of
+the way in order of commitment: investigate a recorded incident from your own
+MCP client (still no AWS account), run the hub agent locally against fixtures
+(Bedrock only, cents per question), then deploy for real.
 
 ## Architecture
 
@@ -37,8 +72,8 @@ flowchart LR
     ML --> CDN[Content delivery]
     CDN --> Players[Video players]
 
-    Langchain[langchain coordinator] --> MCPkg[mediaconnect package]
-    Langchain --> MLPkg[medialive package]
+    Hub[hub agent] --> MCPkg[mediaconnect pack]
+    Hub --> MLPkg[medialive pack]
     MCPkg --> MC
     MLPkg --> ML
 
@@ -47,7 +82,7 @@ flowchart LR
 ```
 
 - `mediaconnect` and `medialive` expose focused operational tools.
-- `langchain` coordinates those packages as specialist agents.
+- `hub` is one agent that loads both as domain packs, and asks an operator before any write.
 - `cmcd` analyzes player telemetry stored in InfluxDB.
 - `hydrolix` provides multi-agent CDN analytics with a web UI.
 
@@ -89,7 +124,7 @@ same values.
 
 | Role | Default | Used by | Change it |
 |---|---|---|---|
-| Reasoning agent | `us.anthropic.claude-sonnet-4-6` | LangChain coordinator, EML, EMX, MediaLive agent, Hydrolix agents, CMCD client | Edit `AGENT_MODEL_ID` in `.env` |
+| Reasoning agent | `us.anthropic.claude-sonnet-4-6` | The hub agent, Hydrolix agents | Edit `AGENT_MODEL_ID` in `.env` |
 | Thumbnail vision | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | MediaLive and MediaConnect thumbnail adapters | Edit `THUMBNAIL_MODEL_ID` in `.env` |
 | Chart generation | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Hydrolix web UI | Edit `CHART_MODEL_ID` in `.env` |
 
@@ -130,25 +165,35 @@ A reasoning agent must not use a Haiku model.
    just doctor
    ```
 
-5. From step 4c, run the fixture-backed cross-service demo:
+5. Prove every sample works offline:
+
+   ```bash
+   just smoke
+   ```
+
+6. Run the hub's offline investigation:
 
    ```bash
    just demo
    ```
 
-Until step 4c lands, use the individual sample READMEs for their currently
-available run paths. The demo requires no AWS account. It replays a MediaConnect
-transport problem, shows the MediaConnect and MediaLive specialist work, and
-prints the final diagnosis without calling AWS.
+Neither step needs an AWS account or a Bedrock call. `just smoke` starts each
+sample's MCP server on recorded fixtures and calls one tool. `just demo` replays
+a recorded MediaLive input-loss incident through the real hub and medialive pack
+with a scripted model, and prints the diagnosis: pipeline 0 lost its SRT input.
 
-Run an individual sample with:
+Then follow [`docs/walkthrough.md`](docs/walkthrough.md): it connects a sample
+to your MCP client on fixtures (no AWS account), runs the hub agent locally,
+and only then deploys.
+
+Run an individual sample's MCP server with:
 
 ```bash
 just run <key>
 ```
 
-See that sample's README for configuration, MCP client setup, and a known-good
-request.
+Set `DEMO=1` for the fixture-backed run. See that sample's README for
+configuration, MCP client setup, and a known-good request.
 
 ### Deploy to AWS
 
@@ -177,12 +222,6 @@ Destroy everything created by a sample deployment:
 just destroy <key>
 ```
 
-If you created the demonstration MediaLive channel, remove it separately:
-
-```bash
-just demo-channel delete
-```
-
 Confirm the related CloudFormation stacks and manually created media resources
 are gone. Orphaned infrastructure can continue to incur cost.
 
@@ -206,7 +245,7 @@ just doctor
 just doctor aws
 just test <key>
 just lint
-just eval  # from step 4
+just eval
 ```
 
 Read [`AGENTS.md`](AGENTS.md) before changing code. Sample READMEs follow

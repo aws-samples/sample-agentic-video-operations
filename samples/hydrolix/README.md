@@ -154,15 +154,18 @@ backend without creating AWS resources.
 > Deployment creates billable AgentCore, ECR, DynamoDB, Secrets Manager, and
 > logging resources. Confirm the account and region printed by the command.
 
-1. If the target environment has not been bootstrapped, bootstrap it once:
+1. If the target environment has not been bootstrapped, bootstrap it once. The first
+   command installs the CDK app's pinned CDK:
 
    ```bash
    set -a
    source .env
    set +a
    AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-   samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/node_modules/.bin/cdk \
-     bootstrap "aws://$AWS_ACCOUNT_ID/$AWS_REGION"
+   cd samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands
+   npm ci --no-audit --no-fund
+   npx cdk bootstrap "aws://$AWS_ACCOUNT_ID/$AWS_REGION"
+   cd ../../..
    unset AWS_ACCOUNT_ID
    ```
 
@@ -329,9 +332,16 @@ Amplify, Cognito, ECR, or database resources can continue to incur cost.
 - The deployment command creates the backend only. Amplify, Cognito, browser
   configuration, and authenticated-role permissions remain manual.
 - The browser application uses deprecated Create React App tooling.
-- The runtime's Python requirements are not pinned to exact versions.
-- Backend IAM includes broad Bedrock, ECR, CloudWatch, X-Ray, and AgentCore
-  Memory permissions that require production least-privilege review.
+- The runtime's Python requirements are not pinned to exact versions. The
+  Hydrolix MCP dependencies follow the version ranges of the pinned release.
+- The pinned Hydrolix MCP release logs a deprecation warning for
+  `HYDROLIX_HOST` and `HYDROLIX_PORT`, which the agents pass from the secret.
+  They still work over stdio.
+- Bedrock model invocation remains broad across foundation models and inference
+  profiles; production deployments should restrict it to the selected model.
+- Runtime writes are limited to its own DynamoDB table, AgentCore memory, and
+  runtime log groups. The runtime can pull only from the CDK asset repository
+  and has no ECR push permissions.
 - The generated secret starts with placeholders and must be updated before the
   first live query.
 - The UI invokes a chart model directly and has no configured Bedrock

@@ -18,6 +18,7 @@ runtime = ["aws-opentelemetry-distro>=0.10.1,<1"]
 
 [project.scripts]
 serve-hub = "media_ops_hub.entrypoints.handle_agentcore_invocation:main"
+demo-hub = "media_ops_hub.demo.run_demo:main"
 
 [tool.uv.sources]
 media-ops-contracts = { workspace = true }

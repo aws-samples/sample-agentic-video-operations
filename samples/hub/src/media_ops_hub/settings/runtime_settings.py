@@ -11,7 +11,7 @@ class HubSettings(BaseSettings):
 
     aws_region: str = Field(default="us-west-2")
     agent_model_id: str | None = Field(default=None)
-    media_domains: str = Field(default="medialive")
+    media_domains: str = Field(default="medialive,mediaconnect")
     allow_writes: bool = Field(default=False)
     memory_id: str = Field(default="")
     approval_signing_key: str = Field(default="")

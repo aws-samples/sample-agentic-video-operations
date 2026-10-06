@@ -1,3 +1,5 @@
+import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -78,6 +80,54 @@ def test_docker_requirement_cannot_be_parsed_as_a_shell_redirect():
 
     assert 'uv pip install "aws-opentelemetry-distro>=0.10.1"' in dockerfile
     assert "uv pip install aws-opentelemetry-distro>=" not in dockerfile
+
+
+def test_mcp_pin_is_a_full_commit_sha_named_by_its_release_tag():
+    # Offline shape check only; the CI docker-build proves the commit exists upstream.
+    script = Path(manage_hydrolix_stack.__file__).read_text()
+    pin = re.search(r'^MCP_COMMIT = "([0-9a-f]{40})"  # (v\d+\.\d+\.\d+)$', script, re.M)
+
+    assert pin, "MCP_COMMIT must be a full 40-hex SHA followed by '# vX.Y.Z'"
+    assert pin.group(1) == manage_hydrolix_stack.MCP_COMMIT
+    requirements = (manage_hydrolix_stack.AGENT_DIRECTORY / "requirements.txt").read_text()
+    assert f"mcp_hydrolix {pin.group(2)}," in requirements
+    assert f"constraint-dependencies (mcp_hydrolix {pin.group(2)})" in requirements
+
+
+MCP_TOOL_INPUTS = Path(__file__).parent / "fixtures" / "mcp_hydrolix_tool_inputs.json"
+PROMPTS = ("hydrolix_agent", "cache_origin", "qoe_analysis")
+
+
+def read_documented_inputs(prompt: str) -> dict[str, dict[str, dict[str, object]]]:
+    """Read each "* `tool`" heading and its "* Input: `name` (type, required)" lines."""
+    tools: dict[str, dict[str, dict[str, object]]] = {}
+    current = None
+    for line in prompt.splitlines():
+        if heading := re.match(r"^\* `(\w+)`$", line):
+            current = tools.setdefault(heading.group(1), {})
+        elif (field := re.match(r"^  \* Input: `(\w+)` \((\w+), (required|optional)\)", line)) and (
+            current is not None
+        ):
+            current[field.group(1)] = {
+                "type": field.group(2),
+                "required": field.group(3) == "required",
+            }
+    return tools
+
+
+@pytest.mark.parametrize("prompt", PROMPTS)
+def test_prompts_document_the_pinned_mcp_tool_inputs_exactly(prompt):
+    recorded = json.loads(MCP_TOOL_INPUTS.read_text())
+    assert recorded["commit"] == manage_hydrolix_stack.MCP_COMMIT
+    text = (
+        manage_hydrolix_stack.AGENT_DIRECTORY / "src" / "tools" / f"{prompt}_instructions.txt"
+    ).read_text()
+    documented = read_documented_inputs(text)
+
+    for tool, inputs in recorded["tools"].items():
+        assert documented.get(tool) == inputs, (
+            f"{prompt}: {tool} inputs differ from {recorded['release']}"
+        )
 
 
 def test_orchestrator_fallback_names_only_available_hydrolix_agents():

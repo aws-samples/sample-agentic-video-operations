@@ -1,12 +1,8 @@
 #!/usr/bin/env node
-import "source-map-support/register";
-import * as cdk from "aws-cdk-lib";
-import { MediaServicesLangChainStack } from "../lib/media-services-langchain-stack";
+import * as cdk from 'aws-cdk-lib';
+import { MediaOpsHubStack } from '../lib/media-ops-hub-stack';
 
 const app = new cdk.App();
-new MediaServicesLangChainStack(app, "MediaServicesLangChainStack", {
-  env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION || "us-west-2",
-  },
+new MediaOpsHubStack(app, 'MediaOpsHubStack', {
+  description: 'Media ops hub: one Strands agent on AgentCore over the selected domain packs',
 });

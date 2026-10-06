@@ -1,294 +1,196 @@
-# Media Services LangChain — Multi-Agent System
+# Media Ops Hub
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+One agent that investigates live-video problems across AWS Elemental MediaLive and
+MediaConnect, and asks an operator before it changes anything.
 
 > [!IMPORTANT]
-> This sample is for **educational and reference purposes only**. It demonstrates multi-agent patterns with LangChain/LangGraph and Amazon Bedrock AgentCore. It is not intended for production use without security hardening, thorough testing, and customization for your environment.
+> This sample is for educational and reference purposes. It is not
+> production-ready without security hardening, testing, and customization.
 
-A multi-agent system for live streaming operations using **LangChain/LangGraph** and **Amazon Bedrock AgentCore**. Three independently-deployed runtimes coordinate to manage MediaLive encoding and MediaConnect transport.
+## Purpose
 
----
+Use the hub when an operator needs to know why viewers see a problem, and where on the
+signal path from MediaConnect flow to MediaLive channel it starts.
+
+It is one Strands agent on Amazon Bedrock AgentCore. Each media service plugs in as a
+**domain pack** (`samples/medialive`, `samples/mediaconnect`), chosen with `MEDIA_DOMAINS`.
+The first successful run, `just demo`, replays a recorded input-loss incident through the
+real hub and needs no AWS account.
 
 ## Architecture
 
-```
-User → Coordinator Runtime (LangGraph ReAct)
-         ├── invoke_eml ──→ EML Runtime (LangGraph + MediaLive tools)
-         │
-         └── invoke_emx ──→ EMX Runtime (LangGraph + MediaConnect tools)
-```
-
-| Runtime | Role | Tools |
-|---------|------|-------|
-| **Coordinator** | Classifies intent, plans tasks, routes to specialists, merges results | `invoke_eml`, `invoke_emx`, `write_todos` |
-| **EML** | MediaLive specialist — encoding, channel management, monitoring | list/describe/start/stop channels, metrics, logs, schedule, issue detection |
-| **EMX** | MediaConnect specialist — transport, flow management, routing | list/describe/start/stop flows, metrics, thumbnails, issue detection |
-
----
-
-## Key Features
-
-- **write_todos pattern** — Coordinator decomposes complex goals into structured, trackable tasks
-- **LangGraph interrupt** — Destructive operations (start/stop/switch) pause for human approval
-- **AgentCore Memory** — Single shared memory with `actor_id` namespace isolation per agent
-- **Code Interpreter** — Lazy-initialized sandbox for data processing (scaffolded, Phase 2)
-- **OpenTelemetry** — Full tracing with custom span names and attributes
-- **Tool reuse** — EML/EMX wrap existing `medialive-mcp-server` and `mediaconnect-mcp-server` implementations (no domain logic duplication)
-
----
-
-## Model Selection
-
-The system uses `langchain.chat_models.init_chat_model` which supports multiple providers. Configure via environment variables:
-
-| Provider | `AGENT_MODEL_ID` | `model_provider` | Notes |
-|----------|-------------------|------------------|-------|
-| **Bedrock cross-region** (default) | `us.anthropic.claude-sonnet-4-6` | `bedrock_converse` | Recommended. Auto-routes across regions for availability. |
-| **Bedrock single-region** | `anthropic.claude-sonnet-4-6` | `bedrock_converse` | Pin to one region. Use when cross-region is unavailable. |
-| **Anthropic direct** | `claude-sonnet-4-6-20250514` | `anthropic` | Requires `ANTHROPIC_API_KEY` env var. Bypasses Bedrock. |
-| **OpenAI** | `gpt-4o` | `openai` | Requires `OPENAI_API_KEY` env var. |
-
-### How to switch models
-
-1. Set the environment variable before deploy:
-   ```bash
-   export AGENT_MODEL_ID="us.anthropic.claude-sonnet-4-6"
-   ```
-
-2. Or pass as a CDK parameter:
-   ```bash
-   cdk deploy --parameters BedrockModelId="us.anthropic.claude-sonnet-4-6"
-   ```
-
-3. For non-Bedrock providers, update `model_provider` in `shared/config.py` and add the provider's SDK to `requirements.txt`:
-   ```bash
-   # For Anthropic direct
-   pip install langchain-anthropic
-   
-   # For OpenAI
-   pip install langchain-openai
-   ```
-
-> [!NOTE]
-> Non-Bedrock providers require API key environment variables set in the container. Add them to the CDK stack's `environmentVariables` configuration.
-
----
-
-## Environment Setup
-
-Copy the example env file and fill in your values:
-
-```bash
-cp .env.example .env
-# Edit .env with your AWS account ID, region, and credentials profile
+```mermaid
+flowchart LR
+    Operator --> Invoke[scripts/invoke_hub.py]
+    Invoke --> Runtime[AgentCore Runtime: the hub]
+    Runtime --> Agent[Strands agent]
+    Agent --> ML[medialive pack]
+    Agent --> MC[mediaconnect pack]
+    Agent --> Skills[SKILL.md, loaded on demand]
+    ML --> MediaLive[AWS Elemental MediaLive and CloudWatch]
+    MC --> MediaConnect[AWS Elemental MediaConnect and CloudWatch]
+    Runtime --> Memory[AgentCore Memory: sessions, paused approvals]
+    Runtime --> Secret[Secrets Manager: approval signing key]
 ```
 
-After `cdk deploy`, update the `.env` with the stack outputs (runtime ARNs, memory ID). The integration tests and CLI examples read from this file.
+- **Reads** run freely. **Writes** (start, stop, input switch, schedule actions) exist only
+  with `ALLOW_WRITES=true`. They pause for an operator decision, are signed for exactly
+  the approved action, and are verified after they run.
+- **Events stream** as each happens: `task_started`, `tool_called`, `approval_requested`,
+  `action_completed`, `verification_completed`, `final_answer`, `error`.
+- The design is in [`docs/extend_the_hub.md`](../../docs/extend_the_hub.md).
 
-| Variable | Source |
-|----------|--------|
-| `AWS_ACCOUNT_ID` | Your AWS account |
-| `COORDINATOR_ARN` | CDK output: `CoordinatorRuntimeArn` |
-| `EML_RUNTIME_ARN` | CDK output: `EMLRuntimeArn` |
-| `EMX_RUNTIME_ARN` | CDK output: `EMXRuntimeArn` |
-| `BEDROCK_AGENTCORE_MEMORY_ID` | CDK output: `MemoryId` |
+### Trust model
 
----
+- **Who may call the hub:** only principals your IAM allows to invoke the runtime. The
+  stack outputs `InvokePolicyArn`, a policy that allows invoking this runtime and nothing
+  else. Set `HUB_INVOKER_ROLE_NAME` in the root `.env` to attach it to one role at deploy.
+- **Who the actor is:** the `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id` header.
+  It is **supplied by the caller and not verified**. The hub uses it to keep one
+  operator's pending approvals from another's, but any principal that may invoke can
+  claim any actor id. Actor isolation therefore holds only among principals you trust to
+  invoke. A request without the header is refused.
+- **Next hardening step:** AgentCore inbound JWT authorization, with the actor taken from
+  the verified token's `sub`. It is not implemented yet.
 
 ## Prerequisites
 
-- Python 3.11+
-- Node.js 18+ and npm (for CDK)
-- Docker (for container builds — Colima or Docker Desktop)
-- AWS credentials with Bedrock AgentCore permissions
-- AWS CDK CLI (`npm install -g aws-cdk`)
+- Python 3.12 or newer (`uv` installs it from the root `.python-version`).
+- [`uv`](https://docs.astral.sh/uv/) and [`just`](https://just.systems/)
+  (`uv tool install rust-just`).
+- For AWS: credentials for a non-production account, Node.js 20+, Docker, a CDK
+  bootstrap in your `AWS_REGION`, and access to the Bedrock model in `AGENT_MODEL_ID`.
 
----
-
-## CDK Deployment
-
-### Deploy
+Check them:
 
 ```bash
-cd samples/hub/cdk
-npm install
-npx cdk deploy --parameters BedrockModelId="us.anthropic.claude-sonnet-4-6"
+just doctor        # offline checks
+just doctor aws    # also AWS, Docker, CDK bootstrap
 ```
 
-### Stack Outputs
-
-After deployment, the stack outputs:
-
-| Output | Description |
-|--------|-------------|
-| `CoordinatorRuntimeArn` | ARN to invoke the coordinator |
-| `EMLRuntimeArn` | ARN to invoke EML directly |
-| `EMXRuntimeArn` | ARN to invoke EMX directly |
-| `CoordinatorEndpointName` | Endpoint name for the coordinator |
-| `MemoryId` | Shared AgentCore memory resource ID |
-
-### Validate Deployment
+Raw command:
 
 ```bash
-# Check stack outputs
-aws cloudformation describe-stacks \
-  --stack-name MediaServicesLangChainStack \
-  --query 'Stacks[0].Outputs' --output table
-
-# Test coordinator
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "<CoordinatorRuntimeArn>" \
-  --runtime-session-id "test-$(uuidgen)" \
-  --payload "$(echo -n '{"prompt": "List all MediaLive channels"}' | base64)" \
-  --region us-west-2 --cli-read-timeout 300 output.json
-
-cat output.json
+uv run python scripts/check_prerequisites.py
 ```
 
-### Cleanup
+## Setup and Run
+
+### Run Locally
+
+1. Clone the repository and enter it:
+
+   ```bash
+   git clone https://github.com/aws-samples/sample-agentic-video-operations.git
+   cd sample-agentic-video-operations
+   ```
+
+2. Replay the recorded incident. No AWS account and no Bedrock call are needed:
+
+   ```bash
+   just demo
+   ```
+
+   Raw command:
+
+   ```bash
+   uv run --package media-ops-hub demo-hub
+   ```
+
+   Expected result: the hub calls `list_channels`, `load_skill`, `check_channel_issues`
+   and `read_channel_logs`, then answers that pipeline 0 of `demo-channel` lost its SRT
+   input.
+
+3. Run the hub server locally with a real model (Bedrock is billed). Copy and edit the root
+   `.env` first:
+
+   ```bash
+   cp .env.example .env    # set AGENT_MODEL_ID; DEMO=1 keeps AWS reads on fixtures
+   just run hub
+   ```
+
+   It listens on `http://localhost:8080` (`/ping`, `/invocations`).
+
+### Deploy to AWS
+
+> [!WARNING]
+> Deployment creates billable AgentCore Runtime and Memory, a Secrets Manager secret,
+> Bedrock usage and an ECR image. Confirm the account and region the command prints.
 
 ```bash
-npx cdk destroy
+just deploy hub
 ```
 
-> [!NOTE]
-> AgentCore runtimes incur costs while containers are running. Destroy the stack when not in use.
-
----
-
-## Examples & Use Cases
-
-### Simple query — single agent
+Raw command:
 
 ```bash
-export COORDINATOR_ARN="<your-coordinator-arn>"
-export SESSION=$(uuidgen)
-
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "$COORDINATOR_ARN" \
-  --runtime-session-id "$SESSION" \
-  --payload "$(echo -n '{"prompt": "List all MediaLive channels"}' | base64)" \
-  --region us-west-2 --cli-read-timeout 300 output.json
+uv run python scripts/manage_hub_stack.py deploy
 ```
 
-**Result:** Coordinator routes to EML, returns channel list with IDs and states.
+- `MEDIA_DOMAINS` (default `medialive,mediaconnect`) selects the packs. IAM comes from
+  each pack's `iam_permissions.json`. Write permissions are added only with
+  `ALLOW_WRITES=true`.
+- Outputs: `AgentRuntimeArn`, `AgentRuntimeId`, `AgentEndpointName`, `MemoryId`,
+  `MediaDomains`, `InvokePolicyArn`.
 
-### Multi-agent pipeline health check
+### Verify the Deployment
 
 ```bash
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "$COORDINATOR_ARN" \
-  --runtime-session-id "$SESSION" \
-  --payload "$(echo -n '{"prompt": "Check the health of my full streaming pipeline — both the MediaConnect flow and the MediaLive channel"}' | base64)" \
-  --region us-west-2 --cli-read-timeout 300 output.json
+uv run python scripts/invoke_hub.py --actor <your-operator-id> "List my MediaLive channels"
 ```
 
-**Result:** Coordinator routes to BOTH EML and EMX, merges results into a unified pipeline status report with an end-to-end flow diagram.
+Expected result: `task_started`, `tool_called` (`list_channels`), then a `final_answer`
+listing your channels. A paused write prints an `approval_requested` event; answer it
+with `--session <id> --approve <approval_id>` (or `--reject`).
 
-### Destructive operation with approval
+## Teardown
 
 ```bash
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "$COORDINATOR_ARN" \
-  --runtime-session-id "$SESSION" \
-  --payload "$(echo -n '{"prompt": "Stop channel 5133350"}' | base64)" \
-  --region us-west-2 --cli-read-timeout 300 output.json
+just destroy hub
 ```
 
-**Result:** Coordinator identifies this as destructive, asks for confirmation before executing.
-
-### Session memory
+Raw command:
 
 ```bash
-# Store context
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "$COORDINATOR_ARN" \
-  --runtime-session-id "$SESSION" \
-  --payload "$(echo -n '{"prompt": "Remember: my escalation contact is ops-team@example.com"}' | base64)" \
-  --region us-west-2 --cli-read-timeout 300 output.json
-
-# Recall in same session
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "$COORDINATOR_ARN" \
-  --runtime-session-id "$SESSION" \
-  --payload "$(echo -n '{"prompt": "What is my escalation contact?"}' | base64)" \
-  --region us-west-2 --cli-read-timeout 300 output.json
+uv run python scripts/manage_hub_stack.py destroy
 ```
 
-**Result:** Agent recalls stored information within the same session via AgentCore Memory.
+It deletes the stack (runtime, endpoint, memory, signing-key secret, roles, invoke
+policy) and the log groups of this runtime only. If a step fails, it prints exactly what
+remains. The CDK bootstrap ECR repository may keep the hub image; remove it there if
+unused.
 
----
+## Known Limitations
 
-## Testing
+- **Actor ids are not authenticated.** See the trust model above. Inbound JWT
+  authorization is the next hardening step.
+- **The demo is scripted.** `just demo` uses a scripted model over synthetic fixtures; it
+  shows the plumbing, not model quality.
+- **One hub per account and region:** the runtime name is fixed.
+- **Not covered by the offline tests:** the container build and a real deployment. Run
+  `just deploy hub` in a sandbox account to check them.
 
-### Unit Tests
+## Development
 
 ```bash
-cd samples/hub
-python -m pytest tests/ -v
+just test hub
+just lint
+just docs-check
+cd samples/hub/cdk && npm ci && npm test && npx cdk synth --quiet
 ```
 
-Tests validate graph routing logic with mocked state — no AWS calls required:
+## Contributing
 
-| Test File | What It Validates |
-|-----------|-------------------|
-| `test_coordinator_graph.py` | `classify_router` (fast_path vs planning), `approval_router` (approved/rejected), `merge_router` (pending vs complete) |
-| `test_memory_isolation.py` | `actor_id` namespace isolation ensures agents don't cross-contaminate memory |
+Read the root [`AGENTS.md`](../../AGENTS.md) and
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md) before opening a pull request.
 
-### Integration Tests
+## Security
 
-After deployment, run the examples above against the live stack. Verify:
-1. EML agent returns channel data
-2. EMX agent returns flow data
-3. Coordinator routes to correct specialist(s)
-4. Memory persists across turns in the same session
-
----
-
-## Memory Model
-
-All agents share one AgentCore Memory resource. Isolation via `actor_id`:
-
-| Agent | actor_id | thread_id |
-|-------|----------|-----------|
-| Coordinator | `coordinator-{user_id}` | `session-{uuid}` |
-| EML | `eml-{task_id}` | `task-{uuid}` |
-| EMX | `emx-{task_id}` | `task-{uuid}` |
-
----
-
-## IAM Separation
-
-Each runtime has its own IAM role:
-- **Coordinator** can only invoke EML/EMX runtimes (scoped to their ARNs)
-- **EML** has MediaLive + CloudWatch permissions only
-- **EMX** has MediaConnect + CloudWatch permissions only
-
----
-
-## Observability
-
-All runtimes emit OpenTelemetry traces:
-
-| Span | Agent |
-|------|-------|
-| `coordinator.classify` | Coordinator |
-| `coordinator.plan` | Coordinator |
-| `coordinator.route` | Coordinator |
-| `coordinator.respond` | Coordinator |
-| `eml.execute` | EML |
-| `emx.execute` | EMX |
-
----
-
-## Related Samples
-
-- [medialive-mcp-server](../medialive/) — Source of EML tool implementations
-- [mediaconnect-mcp-server](../mediaconnect/) — Source of EMX tool implementations
-- [hydrolix-cdn-insights](../hydrolix/) — Reference CDK pattern (Strands Agents SDK version)
-
----
+Never commit `.env` files, account ids, ARNs, or real channel and flow ids. Report
+security issues through the process in
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md#security-issue-notifications).
 
 ## License
 
-Apache-2.0
+This project is licensed under the MIT No Attribution License. See
+[`LICENSE`](../../LICENSE).

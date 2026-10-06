@@ -133,19 +133,17 @@ uv run scripts/check_prerequisites.py
 
 ### Deploy to AWS
 
-This sample has no standalone deployment. It runs in AWS as the MediaConnect
-specialist in the `langchain` sample:
+This sample has no standalone deployment. It runs in AWS as a domain pack of the
+`hub` sample:
 
 ```bash
-just deploy langchain
+just deploy hub
 ```
 
 Raw command:
 
 ```bash
-cd samples/hub/cdk
-npx cdk deploy \
-  --parameters BedrockModelId="$AGENT_MODEL_ID"
+uv run python scripts/manage_hub_stack.py deploy
 ```
 
 > [!WARNING]
@@ -154,25 +152,19 @@ npx cdk deploy \
 
 ### Verify the Deployment
 
-Invoke the deployed coordinator with a known-good request:
+Invoke the deployed hub with a known-good request:
 
 ```bash
-export COORDINATOR_ARN="<CoordinatorRuntimeArn>"
-export SESSION_ID="$(uuidgen)"
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "$COORDINATOR_ARN" \
-  --runtime-session-id "$SESSION_ID" \
-  --payload "$(printf '%s' '{"prompt":"List all MediaConnect flows"}' | base64)" \
-  --region "$AWS_REGION" \
-  --cli-read-timeout 300 \
-  output.json
+uv run python scripts/invoke_hub.py \
+  --actor example-operator \
+  "List all MediaConnect flows"
 ```
 
 Expected result:
 
 ```text
-The coordinator routes the request to the MediaConnect specialist and returns
-the available flows with their names and current states.
+The hub calls the MediaConnect domain pack and returns the available flows with
+their names and current states.
 ```
 
 ## Available Tools
@@ -191,21 +183,19 @@ Stop the local MCP process with `Ctrl+C`.
 Destroy the AWS deployment:
 
 ```bash
-just destroy langchain
+just destroy hub
 ```
 
 Raw command:
 
 ```bash
-cd samples/hub/cdk
-npx cdk destroy
+uv run python scripts/manage_hub_stack.py destroy
 ```
 
 Teardown checklist:
 
 - [ ] Stop local processes.
 - [ ] Run `just destroy <key>` for every deployed sample.
-- [ ] Run `just demo-channel delete` if a demo channel was created.
 - [ ] Confirm the CloudFormation stacks are deleted.
 - [ ] Remove manually created media resources.
 - [ ] Check for retained log groups, container images, secrets, or data.

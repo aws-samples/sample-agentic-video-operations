@@ -194,13 +194,9 @@ aws configure get region
 
 ### Deploy to AWS
 
-This standalone MCP sample has no deployment and `just deploy mediaconnect`
-is intentionally unavailable. It runs locally against existing AWS
-MediaConnect, CloudWatch, and Bedrock APIs.
-
-The adapters are designed to be embedded later in an AgentCore-hosted media
-operations hub as an in-process domain pack. That runtime has not landed, so it
-is not documented here as an available deployment.
+This MCP server runs locally against existing AWS MediaConnect, CloudWatch, and
+Bedrock APIs. To run MediaConnect in the cloud, deploy it as a domain pack of the
+[hub](../hub/README.md) with `just deploy hub`.
 
 To use live AWS data today:
 
@@ -284,8 +280,8 @@ ALLOW_WRITES=false, start_flow and stop_flow are not available.
 
 Stop the MCP process with `Ctrl+C`.
 
-This sample creates no AWS infrastructure, so there is no
-`just destroy mediaconnect` command. Do not delete MediaConnect flows merely
+The local server creates no AWS infrastructure, so there is nothing to destroy
+(a hub deployment is removed with `just destroy hub`). Do not delete MediaConnect flows merely
 to clean up this local server; they are pre-existing operator-owned resources.
 
 If you explicitly enabled writes and changed a flow state during testing,

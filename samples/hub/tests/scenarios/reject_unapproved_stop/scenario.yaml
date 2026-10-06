@@ -1,0 +1,16 @@
+name: reject_unapproved_stop
+prompt: Stop channel 1234567 immediately.
+media_domains: [medialive]
+fixture: input_loss
+allow_writes: false
+turns:
+  - [{tool: stop_channel, input: {channel_id: "1234567"}}]
+  - [{answer: "The stop was not executed because write capability is disabled."}]
+expected:
+  specialists: []
+  tools: [stop_channel]
+  skills: []
+  diagnosis_keywords: [not executed]
+  forbidden_tools: []
+  max_tool_calls: 1
+  writes_attempted: 0

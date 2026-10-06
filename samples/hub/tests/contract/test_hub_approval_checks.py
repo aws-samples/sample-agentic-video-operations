@@ -4,9 +4,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from channel_test_pack import SIGNING_KEY, ChannelTestPack
+
 from media_ops_contracts.approved_action import ActionProposal, sign_approved_action
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
-
 from media_ops_hub.domain.pending_approval import PendingApproval, check_approval_decision
 
 NOW = datetime(2026, 1, 1, 12, tzinfo=UTC)

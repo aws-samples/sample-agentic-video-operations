@@ -1,0 +1,11 @@
+# gitleaks false positive, reviewed and confirmed.
+# Commit c2c1a3c9 added mcp/.env (later renamed to cmcd-mcp-server/.env, then removed).
+# Its INFLUXDB_TOKEN value is the literal placeholder `<INFLUX_DB_TOKEN>` and its URL is
+# https://localhost:8086, so no credential was ever committed: no rotation or history rewrite.
+# Allowlisted by exact fingerprint only, so any real secret anywhere else still fails the scan.
+c2c1a3c92a9eda3fb9c4b8431da0fbb576e30123:mcp/.env:generic-api-key:2
+
+# Commit 937d69b6 (G4.3) gave the offline eval a fake APPROVAL_SIGNING_KEY value. It signs
+# test approvals only, inside fixture replays, and never reached any deployment. The value
+# is now `eval-only-not-a-secret`; this exact fingerprint covers the historical commit.
+937d69b683bc41de990d51ed2c508d574f73ca0f:samples/hub/tests/eval/run_eval_scenario.py:generic-api-key:96

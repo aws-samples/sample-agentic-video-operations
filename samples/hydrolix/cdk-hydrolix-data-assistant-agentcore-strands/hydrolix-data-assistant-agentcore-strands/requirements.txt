@@ -5,8 +5,26 @@ boto3
 bedrock-agentcore
 bedrock-agentcore-starter-toolkit
 botocore
-mcp
-clickhouse-connect
-fastmcp
 gunicorn
 pydantic-settings
+# Runtime dependencies of mcp_hydrolix v0.3.7, the MCP_COMMIT pin in
+# scripts/manage_hydrolix_stack.py, copied from its pyproject.toml.
+# Change them together with the pin.
+fastmcp>=3.4.0,<3.5
+mcp>=1.30.0,<2
+anyio>=4.14.2,<5
+python-dotenv>=1.1,<1.3
+clickhouse-connect>=0.15,<0.16
+truststore>=0.10
+uvicorn[standard]>=0.34,<1.0
+pyjwt>=2.14.0,<3
+sqlglot>=26.0,<27.0
+prometheus-client>=0.21,<1.0
+# CVE floors from upstream constraint-dependencies (mcp_hydrolix v0.3.7) for
+# transitive packages; pip doesn't read uv constraints. oauthlib is dev-only there.
+cryptography>=50.0.0
+authlib>=1.6.12
+urllib3>=2.8.0
+platformdirs>=4.11.11
+markdown-it-py>=4.1.0
+idna>=3.15

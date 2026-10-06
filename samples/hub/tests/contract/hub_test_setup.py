@@ -47,9 +47,7 @@ class HubUnderTest:
     ) -> list:
         request = HubRequest(decision=ApprovalDecision(approval_id=approval_id, approve=approve))
         return list(
-            stream_hub_turn(
-                self.hub, request, session_id=session, actor_id=actor, clock=self.clock
-            )
+            stream_hub_turn(self.hub, request, session_id=session, actor_id=actor, clock=self.clock)
         )
 
 

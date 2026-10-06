@@ -11,6 +11,7 @@ Pinned to us-east-1: the template's WAF WebACL has Scope CLOUDFRONT, which AWS o
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -24,7 +25,14 @@ from create_cmcd_read_token import (
     create_cmcd_read_token,
 )
 from create_influxdb_read_token import create_influxdb_read_token
-from destroy_cmcd_stack import REGION, STACK, destroy_cmcd_stack
+from destroy_cmcd_stack import (
+    REGION,
+    STACK,
+    artifact_bucket_name,
+    destroy_cmcd_stack,
+    failure_detail,
+    is_missing_resource,
+)
 
 TEMPLATE = "samples/cmcd/cloudfront-cmcd-kinesis.yaml"
 DEPLOY_ACTION = (
@@ -33,6 +41,7 @@ DEPLOY_ACTION = (
 TUNNEL_URL = "https://localhost:8086"
 
 Runner = Callable[[Sequence[str], bool], subprocess.CompletedProcess[str]]
+BUCKET_ALREADY_EXISTS = re.compile(r"An error occurred \(BucketAlreadyExists\)")
 
 
 def run_aws(arguments: Sequence[str], capture: bool) -> subprocess.CompletedProcess[str]:
@@ -56,6 +65,107 @@ def read_stack_output(runner: Runner, key: str) -> str | None:
     return look_up(runner, [*arguments, "--query", query, "--output", "text"])
 
 
+def explain_foreign_bucket(bucket: str) -> None:
+    print(
+        f"Deployment artifacts bucket {bucket} is not owned by this AWS account. "
+        "Set CMCD_ARTIFACTS_BUCKET to a bucket name you own."
+    )
+
+
+def verify_artifact_bucket_owner(runner: Runner, bucket: str, account: str) -> int:
+    result = runner(
+        [
+            "s3api",
+            "head-bucket",
+            "--bucket",
+            bucket,
+            "--region",
+            REGION,
+            "--expected-bucket-owner",
+            account,
+        ],
+        True,
+    )
+    if result.returncode != 0:
+        explain_foreign_bucket(bucket)
+        print(f"AWS detail: {failure_detail(result)}")
+    return result.returncode
+
+
+def prepare_artifact_bucket(runner: Runner, bucket: str, account: str) -> int:
+    """Create and secure the bucket used by CloudFormation for oversized templates."""
+    lookup = runner(
+        [
+            "s3api", "head-bucket", "--bucket", bucket, "--region", REGION,
+            "--expected-bucket-owner", account,
+        ],
+        True,
+    )  # fmt: skip
+    if lookup.returncode != 0:
+        if not is_missing_resource(lookup):
+            explain_foreign_bucket(bucket)
+            print(f"AWS detail: {failure_detail(lookup)}")
+            return lookup.returncode
+        created = runner(
+            ["s3api", "create-bucket", "--bucket", bucket, "--region", REGION],
+            True,
+        )
+        if created.returncode != 0:
+            if BUCKET_ALREADY_EXISTS.search(f"{created.stdout}\n{created.stderr}"):
+                explain_foreign_bucket(bucket)
+                return created.returncode
+            print(
+                f"Could not create deployment artifact bucket {bucket}: {failure_detail(created)}"
+            )
+            return created.returncode
+    public_access = runner(
+        [
+            "s3api",
+            "put-public-access-block",
+            "--bucket",
+            bucket,
+            "--region",
+            REGION,
+            "--expected-bucket-owner",
+            account,
+            "--public-access-block-configuration",
+            (
+                "BlockPublicAcls=true,IgnorePublicAcls=true,"
+                "BlockPublicPolicy=true,RestrictPublicBuckets=true"
+            ),
+        ],
+        True,
+    )
+    if public_access.returncode != 0:
+        print(
+            f"Could not block public access on deployment artifact bucket {bucket}: "
+            f"{failure_detail(public_access)}"
+        )
+        return public_access.returncode
+    encryption = runner(
+        [
+            "s3api",
+            "put-bucket-encryption",
+            "--bucket",
+            bucket,
+            "--region",
+            REGION,
+            "--expected-bucket-owner",
+            account,
+            "--server-side-encryption-configuration",
+            '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}',
+        ],
+        True,
+    )
+    if encryption.returncode != 0:
+        print(
+            f"Could not enable encryption on deployment artifact bucket {bucket}: "
+            f"{failure_detail(encryption)}"
+        )
+        return encryption.returncode
+    return 0
+
+
 def deploy_stack(
     runner: Runner, *, assume_yes: bool, environ: Mapping[str, str], ask: Callable[[str], str]
 ) -> int:
@@ -68,11 +178,20 @@ def deploy_stack(
         return 1
     origin = environ.get("CMCD_ORIGIN_DOMAIN") or "example.com"
     bucket = environ.get("CMCD_S3_BUCKET_NAME") or f"cmcd-content-{account}"
+    artifacts = environ.get("CMCD_ARTIFACTS_BUCKET") or artifact_bucket_name(account)
+    status = prepare_artifact_bucket(runner, artifacts, account)
+    if status != 0:
+        return status
+    status = verify_artifact_bucket_owner(runner, artifacts, account)
+    if status != 0:
+        return status
     result = runner(
         [
             "cloudformation", "deploy", "--region", REGION, "--stack-name", STACK,
             "--template-file", TEMPLATE, "--capabilities", "CAPABILITY_IAM", "CAPABILITY_NAMED_IAM",
+            "--s3-bucket", artifacts, "--s3-prefix", STACK,
             "--parameter-overrides", f"OriginDomainName={origin}", f"S3BucketName={bucket}",
+            f"DeploymentArtifactsBucketName={artifacts}",
         ],
         False,
     )  # fmt: skip

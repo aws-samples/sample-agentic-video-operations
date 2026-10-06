@@ -185,7 +185,7 @@ def check_cdk_bootstrap(region: str) -> CheckResult:
         CheckGroup.AWS,
         "cdk bootstrap",
         passed,
-        "CDKToolkit found" if passed else "missing",
+        f"CDKToolkit found in {region}" if passed else f"missing in {region} (CDK deploys there)",
         f"npx cdk bootstrap aws://<account>/{region}",
     )
 

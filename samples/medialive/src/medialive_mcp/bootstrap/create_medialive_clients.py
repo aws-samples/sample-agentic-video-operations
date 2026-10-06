@@ -14,6 +14,7 @@ class MediaLiveClients:
     logs: Any
     sts: Any
     bedrock: Any
+    region: str = ""  # the Region dimension of region-wide metrics
 
 
 def create_medialive_clients(settings: RuntimeSettings) -> MediaLiveClients:
@@ -32,4 +33,5 @@ def create_medialive_clients(settings: RuntimeSettings) -> MediaLiveClients:
         logs=client("logs"),
         sts=client("sts"),
         bedrock=client("bedrock-runtime"),
+        region=settings.aws_region,
     )

@@ -23,7 +23,7 @@ CDK_DIRECTORY = (
 AGENT_DIRECTORY = CDK_DIRECTORY / "hydrolix-data-assistant-agentcore-strands"
 MCP_DESTINATION = AGENT_DIRECTORY / "src" / "mcp" / "mcp_hydrolix"
 MCP_REPOSITORY = "https://github.com/hydrolix/mcp-hydrolix.git"
-MCP_COMMIT = "21eb1fe0b39028c2e91957086138bba9bc84bc1d"
+MCP_COMMIT = "b18040434bd3c5bae3d770219279c6531415c760"  # v0.3.7
 CDK_EXECUTABLE = CDK_DIRECTORY / "node_modules" / ".bin" / "cdk"
 
 Runner = Callable[[Sequence[str], Path | None, bool], subprocess.CompletedProcess[str]]

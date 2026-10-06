@@ -11,6 +11,7 @@ from medialive_mcp.domain.identify_channel_issues import (
     Status,
     identify_channel_issues,
 )
+from medialive_mcp.domain.metric_catalog import DEFAULT_STATISTIC, STATISTIC_BY_METRIC
 from medialive_mcp.domain.metric_series import MetricSeries
 
 STANDARD_LOCKED = ChannelContext("STANDARD", "PIPELINE_LOCKING")
@@ -19,7 +20,10 @@ STANDARD_LOCKED = ChannelContext("STANDARD", "PIPELINE_LOCKING")
 def series(metric, values, pipeline="0"):
     start = datetime(2026, 10, 5, 11, 0, tzinfo=UTC)
     stamps = [start + timedelta(minutes=5 * i) for i in range(len(values))]
-    return MetricSeries(metric=metric, pipeline=pipeline, timestamps=stamps, values=values)
+    statistic = STATISTIC_BY_METRIC.get(metric, DEFAULT_STATISTIC)
+    return MetricSeries(
+        metric=metric, pipeline=pipeline, statistic=statistic, timestamps=stamps, values=values
+    )
 
 
 def severities(report):
@@ -55,7 +59,9 @@ def test_overall_rating_is_the_worst_finding_not_an_average():
         "1", [series("ActiveAlerts", [1]), series("Output5xxErrors", [3])]
     )
     assert report.status is Status.DEGRADED
-    assert report.overall_score == min(health.score for health in report.categories.values())
+    assert report.overall_score == min(
+        h.score for h in report.categories.values() if h.score is not None
+    )
     assert report.overall_score == 70
 
 

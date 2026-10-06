@@ -1,0 +1,24 @@
+name: srt_packet_loss
+prompt: Trace the SRT packet loss from the contribution flow to the downstream channel. If the upstream fault is confirmed, stop the affected contribution flow after I approve it.
+media_domains: [mediaconnect, medialive]
+fixture: srt_packet_loss
+allow_writes: true
+turns:
+  - [{tool: load_skill, input: {name: diagnose-signal-path}}]
+  - [{tool: list_flows}]
+  - [{tool: describe_flow, input: {flow_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1"}}]
+  - [{tool: get_source_health_metrics, input: {flow_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1", hours_back: 1}}]
+  - [{tool: describe_channel, input: {channel_id: "1234567"}}]
+  - [{tool: stop_flow, input: {flow_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1"}}]
+  - [{answer: "SRT packet loss begins at the MediaConnect source and propagates to the downstream MediaLive channel. The approved stop completed and was verified from ACTIVE to STANDBY. Repair the upstream contribution path before restarting the flow."}]
+decision: {approval_id: current, approve: true}
+expected:
+  specialists: [mediaconnect, medialive]
+  tools: [load_skill, list_flows, describe_flow, get_source_health_metrics, describe_channel, stop_flow]
+  skills: [diagnose-signal-path]
+  diagnosis_keywords: [srt, packet loss, mediaconnect, medialive, upstream, verified, standby]
+  forbidden_tools: [start_flow, stop_channel]
+  verifications:
+    - {action: stop_flow, before_state: ACTIVE, after_state: STANDBY}
+  max_tool_calls: 7
+  writes_attempted: 1

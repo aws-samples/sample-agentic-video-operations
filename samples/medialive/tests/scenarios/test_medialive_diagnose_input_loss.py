@@ -56,7 +56,9 @@ def test_issue_report_names_input_loss_on_pipeline_0(clients):
     assert report.categories["input_health"].score == 70
     # Pipeline 0 is still on slate and alerting: the channel is degraded, not "good".
     assert report.status == "DEGRADED"
-    assert report.overall_score == min(health.score for health in report.categories.values())
+    assert report.overall_score == min(
+        h.score for h in report.categories.values() if h.score is not None
+    )
     assert severities_of(report)[("InputLossSeconds", "0")] == "HIGH"
     keys = [(issue.metric, issue.pipeline) for issue in report.issues]
     assert len(keys) == len(set(keys))

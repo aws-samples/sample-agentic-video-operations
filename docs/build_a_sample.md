@@ -16,8 +16,8 @@ The sample key is the argument to every `just` recipe.
 |---|---|---|---|
 | `cmcd` | Viewer QoE from CMCD data in InfluxDB | `cloudfront-cmcd-kinesis.yaml` (CloudFormation) | `cmcd-mcp-server/` |
 | `mediaconnect` | MediaConnect flow health and control | No own deploy. Runs in the cloud as a domain pack of `hub` | `mediaconnect-mcp-server/` |
-| `medialive` | MediaLive channel health and control | No own deploy after step 4. Runs as a domain pack of `hub`; its `cdk/` becomes the hub's | `medialive-mcp-server/` |
-| `hub` | One agent that investigates across the selected media domains (extend_the_hub.md) | `samples/hub/cdk/`, moved from `samples/medialive/cdk/` · `demo-channel.json` | replaces `media-services-langchain/` |
+| `medialive` | MediaLive channel health and control | No own deploy. Runs in the cloud as a domain pack of `hub`; its former `cdk/` is now the hub's | `medialive-mcp-server/` |
+| `hub` | One agent that investigates across the selected media domains (extend_the_hub.md) | `samples/hub/cdk/` · `demo-channel.json` | consolidates the earlier multi-runtime sample |
 | `hydrolix` | CDN analytics with a web UI | Its existing CDK + Amplify | `hydrolix-cdn-insights/` |
 
 Adding a sample means adding a row here, a `samples/<key>/` folder that follows section 2, and its recipes in the `justfile`.
@@ -70,6 +70,7 @@ The root holds only these entries. `scripts/check_repository_layout.py`, run by 
 ```
 README.md  AGENTS.md  CHANGELOG.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
 justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
+.gitleaksignore  .pre-commit-config.yaml  .dockerignore
 .github/workflows/ci.yml
 .claude/              # Claude Code instructions; .claude/plans/ is never tracked
 docs/                 # repo-level documentation; repo-level images in docs/images/
@@ -104,7 +105,6 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | `just demo` | Hub on fixtures, with no AWS account | `DEMO=1 uv run --package media-ops-hub demo` |
 | `just deploy <key>` | Deploy with the sample's existing material | per sample, see section 1 |
 | `just destroy <key>` | Remove everything `deploy` created | per sample |
-| `just demo-channel create\|delete` | Create or delete the MediaLive channel from `demo-channel.json` | `aws medialive create-channel --cli-input-json …` |
 
 **Rules:**
 - A recipe is a thin wrapper. It contains no logic beyond choosing the native command and passing `.env` values. Logic belongs in a script or in the sample.
@@ -130,7 +130,6 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | `FIXTURES_DIR` | `fixtures` (relative to the repo root, where `just` runs) | Fixture root override |
 | `APPROVAL_SIGNING_KEY` | random per process locally; from Secrets Manager when deployed | HMAC key for `ApprovedAction` |
 | `MEDIA_DOMAINS` | `medialive,mediaconnect` | Domain packs the hub loads (extend_the_hub.md §2) |
-| `ENABLE_CODE_MODE` | `false` | Register the hub's analysis-only code tool (extend_the_hub.md §5) |
 
 **Names that are retired**, replaced by the shared ones above:
 - `BEDROCK_AGENTCORE_MEMORY_ID` → `MEMORY_ID`.
@@ -182,7 +181,7 @@ Follow guidelines §16 exactly. Use its skeleton and section order:
   - *Deploy to AWS* uses `just deploy <key>`.
   - Include one known-good request and its expected result.
 - **MCP samples:** also include the `mcp.json` snippet, plus a Tools table with three columns: tool, read/write, what it does.
-- **Teardown:** `just destroy <key>`, plus every manual cleanup step, such as `just demo-channel delete`.
+- **Teardown:** `just destroy <key>`, plus every manual cleanup step the sample needs.
 - **Detail beyond the first run** goes in `docs/<action_name>.md` (§16 "Supporting documentation").
 
 ## 7. Done when (for any sample change)

@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 dependencies = ["media-ops-contracts", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server", "media-ops-hub"]
 
 [dependency-groups]
-dev = ["pytest>=8.3,<9", "ruff>=0.12,<0.13"]
+dev = ["mypy>=1.14,<2", "pytest>=8.3,<9", "pyyaml>=6,<7", "ruff>=0.12,<0.13"]
 
 [tool.uv]
 package = false
@@ -41,17 +41,6 @@ src = [
 ]
 # Unconverted samples; remove each entry in the step that converts the sample.
 extend-exclude = [
-  "samples/medialive/cdk",
-  "samples/medialive/tests/local",
-  "samples/medialive/tests/remote",
-  "samples/medialive/tests/unit",  # ported onto the new package in G3.2
-  # The legacy LangChain runtimes; the Strands hub in samples/hub/src replaces them.
-  "samples/hub/cdk",
-  "samples/hub/coordinator",
-  "samples/hub/eml",
-  "samples/hub/emx",
-  "samples/hub/shared",
-  "samples/hub/tests/*.py",
   "samples/hydrolix",
 ]
 
@@ -65,6 +54,38 @@ select = ["E", "F", "I", "B", "UP", "SIM", "S"]
 # InfluxDB tunnel URL from validated settings; nothing user-supplied.
 "scripts/*.py" = ["S310", "S603", "S607"]
 
+# Non-strict baseline over the converted packages; ratchet per package as they harden.
+# Same conversion contract as ruff: a sample joins `files` when it is converted.
+[tool.mypy]
+files = [
+  "packages/media_ops_contracts/src",
+  "samples/cmcd/src",
+  "samples/mediaconnect/src",
+  "samples/medialive/src",
+  "samples/hub/src",
+]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# Ratchet list: modules with pre-existing errors at mypy adoption. Fix a module,
+# remove its entry; never add to this list.
+[[tool.mypy.overrides]]
+module = [
+  "media_ops_contracts.domain_pack",
+  "cmcd_mcp.adapters.influxdb.query_influxdb",
+  "cmcd_mcp.adapters.influxdb.replay_influxdb_query",
+  "media_ops_hub.bootstrap.wrap_pack_tools",
+  "media_ops_hub.workflows.record_stream_events",
+  "media_ops_hub.workflows.run_hub_turn",
+  "medialive_mcp.domain.metric_series",
+  "medialive_mcp.tool_surface.create_read_tools",
+  "medialive_mcp.tool_surface.create_write_tools",
+]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 # Add each converted sample's tests/ directory here.
 testpaths = [
@@ -75,10 +96,15 @@ testpaths = [
   "samples/medialive/tests/scenarios",
   "samples/medialive/tests/pack",
   "samples/hub/tests/contract",
+  "samples/hub/tests/eval",
 ]
 pythonpath = ["scripts"]
 addopts = "--strict-markers --tb=short -m 'not eval and not integration'"
+# Third-party deprecations raised at import time by bedrock-agentcore and strands; not ours to fix.
 filterwarnings = [
+  "ignore:Support for class-based `config` is deprecated:DeprecationWarning",
+  "ignore:strands.experimental.bidi is deprecated:DeprecationWarning",
+  "ignore:strands.experimental.hooks.multiagent is deprecated:DeprecationWarning",
   "ignore::DeprecationWarning:botocore.*",
 ]
 markers = [

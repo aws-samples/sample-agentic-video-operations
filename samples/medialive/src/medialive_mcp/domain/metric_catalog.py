@@ -41,3 +41,53 @@ TABLE_METRICS: dict[str, tuple[str, ...]] = {
 }
 
 ALL_METRICS = tuple(dict.fromkeys(m for metrics in CATEGORY_METRICS.values() for m in metrics))
+
+# The statistic AWS recommends per metric (MediaLive user guide, "CloudWatch metrics"). A
+# 5-minute Sum of InputLossSeconds is the seconds lost in that period; an Average is not.
+STATISTIC_BY_METRIC: dict[str, str] = {
+    "ActiveAlerts": "Maximum",
+    "InputLossSeconds": "Sum",
+    "ChannelInputErrorSeconds": "Sum",
+    "RtpPacketsLost": "Sum",
+    "RtpPacketsReceived": "Sum",
+    "RtpPacketsRecoveredViaFec": "Sum",
+    "FecRowPacketsReceived": "Sum",
+    "FecColumnPacketsReceived": "Sum",
+    "InputVideoFrameRate": "Maximum",
+    "PrimaryInputActive": "Minimum",
+    "PipelinesLocked": "Minimum",
+    "InputTimecodesPresent": "Minimum",
+    "FillMsec": "Maximum",
+    "DroppedFrames": "Sum",
+    "SvqTime": "Maximum",
+    "ComplexFrcPresent": "Maximum",
+    "ActiveOutputs": "Minimum",
+    "Output4xxErrors": "Sum",
+    "Output5xxErrors": "Sum",
+    "MinMQCS": "Minimum",
+    # AWS lists Minimum or Maximum; Minimum shows a silent or dropped audio track.
+    "OutputAudioLevelDbfs": "Minimum",
+    "OutputAudioLevelLkfs": "Minimum",
+    "MqcsBlackFrameDetected": "Minimum",
+    "MqcsFreezeFrameDetected": "Minimum",
+    "MqcsContinuityCounterErrors": "Minimum",
+}
+DEFAULT_STATISTIC = "Average"
+
+# The dimension set MediaLive publishes each metric with (same reference). Querying any other
+# set returns no datapoints. OutputGroupName and AudioDescriptionName take every name the
+# channel defines; DroppedFrames and SvqTime are published per pipeline and Region only.
+CHANNEL_DIMENSIONS = ("ChannelId", "Pipeline")
+DIMENSIONS_BY_METRIC: dict[str, tuple[str, ...]] = {
+    "MinMQCS": ("ChannelId", "Pipeline", "OutputGroupName"),
+    "ActiveOutputs": ("ChannelId", "Pipeline", "OutputGroupName"),
+    "Output4xxErrors": ("ChannelId", "Pipeline", "OutputGroupName"),
+    "Output5xxErrors": ("ChannelId", "Pipeline", "OutputGroupName"),
+    "OutputAudioLevelDbfs": ("ChannelId", "Pipeline", "AudioDescriptionName"),
+    "OutputAudioLevelLkfs": ("ChannelId", "Pipeline", "AudioDescriptionName"),
+    "DroppedFrames": ("Pipeline", "Region"),
+    "SvqTime": ("Pipeline", "Region"),
+}
+
+# Dimensions whose values come from the channel's configuration, one query per value.
+CHANNEL_CONFIGURED_DIMENSIONS = frozenset({"OutputGroupName", "AudioDescriptionName"})
