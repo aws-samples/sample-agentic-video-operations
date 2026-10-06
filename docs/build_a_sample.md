@@ -70,6 +70,7 @@ The root holds only these entries. `scripts/check_repository_layout.py`, run by 
 ```
 README.md  AGENTS.md  CHANGELOG.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
 justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
+.gitleaksignore  .pre-commit-config.yaml
 .github/workflows/ci.yml
 .claude/              # Claude Code instructions; .claude/plans/ is never tracked
 docs/                 # repo-level documentation; repo-level images in docs/images/

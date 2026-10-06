@@ -1,5 +1,6 @@
-# Known historical leak, acknowledged — NOT a pass to leave it unfixed.
-# An InfluxDB token was committed in mcp/.env (commit c2c1a3c9, later deleted).
-# Required remediation: rotate the token, rewrite history (e.g. git filter-repo),
-# then delete this entry so the scan guards the full history again.
+# gitleaks false positive, reviewed and confirmed.
+# Commit c2c1a3c9 added mcp/.env (later renamed to cmcd-mcp-server/.env, then removed).
+# Its INFLUXDB_TOKEN value is the literal placeholder `<INFLUX_DB_TOKEN>` and its URL is
+# https://localhost:8086, so no credential was ever committed: no rotation or history rewrite.
+# Allowlisted by exact fingerprint only, so any real secret anywhere else still fails the scan.
 c2c1a3c92a9eda3fb9c4b8431da0fbb576e30123:mcp/.env:generic-api-key:2

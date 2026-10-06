@@ -1467,6 +1467,7 @@ The repository is a master-class sample. Its folders teach as much as its code d
 ```text
 README.md  AGENTS.md  CHANGELOG.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
 justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
+.gitleaksignore  .pre-commit-config.yaml
 .github/    .claude/    docs/    samples/    packages/    fixtures/    scripts/
 ```
 

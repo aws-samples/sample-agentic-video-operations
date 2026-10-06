@@ -13,7 +13,8 @@ ALLOWED_ROOT = frozenset(
         "README.md", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md",
         "CODE_OF_CONDUCT.md", "LICENSE",
         "justfile", "pyproject.toml", "uv.lock", ".env.example", ".python-version",
-        ".gitignore", ".github", "docs", "samples", "packages", "fixtures", "scripts",
+        ".gitignore", ".gitleaksignore", ".pre-commit-config.yaml", ".github",
+        "docs", "samples", "packages", "fixtures", "scripts",
         ".claude",  # Claude Code instructions; .claude/plans/ is never tracked
     }
 )  # fmt: skip
