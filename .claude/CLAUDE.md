@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Required Development Standard
 
 Before adding or refactoring application code, read and follow
-[`DEVELOPMENT_GUIDELINES.md`](DEVELOPMENT_GUIDELINES.md).
+[`docs/follow_development_guidelines.md`](../docs/follow_development_guidelines.md).
 
 The development guidelines are normative for new work in
 `media-services-langchain`. They define action-oriented naming, small file and
@@ -17,7 +17,7 @@ When guidance conflicts, use this priority:
 
 1. Explicit user requirements.
 2. Security and operational-safety rules.
-3. `DEVELOPMENT_GUIDELINES.md`.
+3. `docs/follow_development_guidelines.md`.
 4. Existing repository conventions.
 
 ## Project Overview
@@ -28,13 +28,13 @@ A collection of AI agent samples for intelligent media operations — monitoring
 
 | Directory | What It Is | Agent Framework | Entry Points |
 |-----------|-----------|-----------------|--------------|
-| `medialive-mcp-server/` | MediaLive channel management + monitoring | Strands Agent + FastMCP | `server.py` (MCP stdio), `main.py` (AgentCore) |
-| `mediaconnect-mcp-server/` | MediaConnect flow management + monitoring | FastMCP only | `server.py` (MCP stdio) |
-| `cmcd-mcp-server/` | CMCD streaming QoE analytics via InfluxDB | FastMCP only | `cmcd_server.py` (MCP stdio) |
-| `hydrolix-cdn-insights/` | Multi-agent CDN analytics (orchestrator + 3 subagents) | Strands Agent + AgentCore | `app.py` (AgentCore), CDK + Amplify |
-| `media-services-langchain/` | Multi-agent streaming ops (Coordinator + EML + EMX) | LangChain/LangGraph + AgentCore | `coordinator/main.py`, `eml/main.py`, `emx/main.py` |
+| `samples/medialive/` | MediaLive channel management + monitoring | Strands Agent + FastMCP | `server.py` (MCP stdio), `main.py` (AgentCore) |
+| `samples/mediaconnect/` | MediaConnect flow management + monitoring | FastMCP only | `server.py` (MCP stdio) |
+| `samples/cmcd/` | CMCD streaming QoE analytics via InfluxDB | FastMCP only | `cmcd_server.py` (MCP stdio) |
+| `samples/hydrolix/` | Multi-agent CDN analytics (orchestrator + 3 subagents) | Strands Agent + AgentCore | `app.py` (AgentCore), CDK + Amplify |
+| `samples/hub/` | Multi-agent streaming ops (Coordinator + EML + EMX) | LangChain/LangGraph + AgentCore | `coordinator/main.py`, `eml/main.py`, `emx/main.py` |
 
-`mcp-eml-reference/` is gitignored — superseded by `medialive-mcp-server/`.
+`mcp-eml-reference/` is gitignored — superseded by `samples/medialive/`.
 
 ## Architecture Patterns
 
@@ -64,8 +64,8 @@ Orchestrator routes to specialized subagents (`hydrolix_agent`, `qoe_analysis_ag
 
 Three AgentCore runtimes using `langgraph.prebuilt.create_react_agent`:
 - **Coordinator** (`coordinator/main.py`): ReAct agent with `invoke_eml`, `invoke_emx`, `write_todos` tools. Routes to specialists via `AgentCoreRuntimeClient`.
-- **EML** (`eml/main.py`): ReAct agent wrapping `medialive-mcp-server/src/tools/` as LangChain `@tool` decorators.
-- **EMX** (`emx/main.py`): ReAct agent wrapping `mediaconnect-mcp-server/tools/` as LangChain `@tool` decorators.
+- **EML** (`eml/main.py`): ReAct agent wrapping `samples/medialive/src/tools/` as LangChain `@tool` decorators.
+- **EMX** (`emx/main.py`): ReAct agent wrapping `samples/mediaconnect/tools/` as LangChain `@tool` decorators.
 
 Key patterns:
 - `shared/state.py`: `CoordinatorState(MessagesState)` with custom `merge_todos` reducer
@@ -87,8 +87,8 @@ Also maintain `TOOL_DISPATCH_MAP` for backward-compatible code_mode command name
 ### Memory Integration
 
 Two approaches in use:
-1. **AgentCoreMemorySessionManager** (global singleton agent): Simpler, but accumulates stale tool results across requests. Used in `medialive-mcp-server/main.py`.
-2. **MemoryHookProvider** (per-request agent): Avoids stale state by creating fresh agent per invocation. Recommended for production. Used in `hydrolix-cdn-insights/`.
+1. **AgentCoreMemorySessionManager** (global singleton agent): Simpler, but accumulates stale tool results across requests. Used in `samples/medialive/main.py`.
+2. **MemoryHookProvider** (per-request agent): Avoids stale state by creating fresh agent per invocation. Recommended for production. Used in `samples/hydrolix/`.
 
 Memory creation uses `semanticMemoryStrategy` with configurable `eventExpiryDuration` (7-30 days).
 
@@ -101,7 +101,7 @@ Available as `code_mode` tool — sends data + Python script to sandboxed runtim
 ### Local MCP Server Development
 
 ```bash
-cd medialive-mcp-server   # or mediaconnect-mcp-server, cmcd-mcp-server
+cd samples/medialive   # or samples/mediaconnect, samples/cmcd
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 python3 server.py          # starts MCP server via stdio
@@ -110,7 +110,7 @@ python3 server.py          # starts MCP server via stdio
 ### AgentCore Deployment
 
 ```bash
-cd medialive-mcp-server
+cd samples/medialive
 export AWS_REGION=us-west-2
 export AGENT_MODEL_ID=us.anthropic.claude-sonnet-4-6
 uv run agentcore launch --auto-update-on-conflict
@@ -119,7 +119,7 @@ uv run agentcore launch --auto-update-on-conflict
 ### CDK Deployment (hydrolix-cdn-insights)
 
 ```bash
-cd hydrolix-cdn-insights/cdk-hydrolix-data-assistant-agentcore-strands
+cd samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands
 npm install
 cdk deploy --parameters BedrockModelId="global.anthropic.claude-haiku-4-5-20251001-v1:0" --parameters HydrolixTable="your_database.your_table"
 ```
@@ -127,7 +127,7 @@ cdk deploy --parameters BedrockModelId="global.anthropic.claude-haiku-4-5-202510
 ### CDK Deployment (media-services-langchain)
 
 ```bash
-cd media-services-langchain/cdk
+cd samples/hub/cdk
 npm install
 npx cdk deploy --parameters BedrockModelId="us.anthropic.claude-sonnet-4-6"
 # After deploy, update .env with stack outputs (runtime ARNs, memory ID)
@@ -136,7 +136,7 @@ npx cdk deploy --parameters BedrockModelId="us.anthropic.claude-sonnet-4-6"
 ### Integration Tests (media-services-langchain)
 
 ```bash
-cd media-services-langchain
+cd samples/hub
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r tests/requirements.txt
 # Requires .env with valid runtime ARNs + AWS credentials
@@ -147,7 +147,7 @@ python -m pytest tests/test_integration.py -v --timeout=300
 
 ```bash
 # Integration tests (require running agent + AWS credentials)
-cd medialive-mcp-server/tests && python3 -m pytest -v
+cd samples/medialive/tests && python3 -m pytest -v
 
 # Unit tests (mocked, no network)
 cd <agent>/tests/unit && python3 -m pytest -v --tb=short
@@ -156,7 +156,7 @@ cd <agent>/tests/unit && python3 -m pytest -v --tb=short
 ### Local Agent Testing
 
 ```bash
-cd hydrolix-cdn-insights/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands
+cd samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands
 python3 app.py  # starts on port 8080
 
 # In another terminal:
@@ -179,7 +179,7 @@ curl -X POST http://localhost:8080/invocations -H "Content-Type: application/jso
 | `EML_RUNTIME_ARN` | _(none)_ | LangChain coordinator → EML |
 | `EMX_RUNTIME_ARN` | _(none)_ | LangChain coordinator → EMX |
 
-For `media-services-langchain/`, all configuration is in `.env` (copied from `.env.example`). The `.env` file is gitignored.
+For `samples/hub/`, all configuration is in `.env` (copied from `.env.example`). The `.env` file is gitignored.
 
 ### .bedrock_agentcore.yaml
 

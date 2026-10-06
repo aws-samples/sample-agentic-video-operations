@@ -1,6 +1,6 @@
 # Fixtures
 
-Recorded-style AWS responses for `DEMO=1` and the offline tests (tool-contract §4).
+Recorded-style AWS responses for `DEMO=1` and the offline tests (write_safe_tools.md §4).
 `fixtures/<scenario>/<service>.<operation>.json` answers `client.<operation>(...)`.
 A `{"sequence": [...]}` file answers successive calls in order, and the last answer repeats.
 

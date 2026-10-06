@@ -1,0 +1,14 @@
+# Used by `docker build -f samples/medialive/Dockerfile .` (context = repository root).
+**/.git
+**/.venv
+**/node_modules
+**/cdk.out
+**/__pycache__
+**/.pytest_cache
+.claude
+.kiro
+images
+samples/hydrolix
+samples/hub/cdk
+samples/medialive/cdk
+samples/medialive/tests

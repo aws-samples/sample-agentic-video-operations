@@ -18,7 +18,7 @@ from confirm_aws_action import NO_CREDENTIALS_FIX, ConfirmationPrompt, ask_to_co
 
 STACK = "video-ops-cmcd"
 REGION = "us-east-1"
-TEMPLATE = "cmcd-mcp-server/cloudfront-cmcd-kinesis.yaml"
+TEMPLATE = "samples/cmcd/cloudfront-cmcd-kinesis.yaml"
 DEPLOY_ACTION = (
     "deploy (billable: CloudFront, Kinesis, InfluxDB db.influx.medium, NAT gateway, EC2)"
 )

@@ -15,7 +15,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Migration reference — superseded by medialive-mcp-server/
+# Migration reference — superseded by samples/medialive/
 mcp-eml-reference/
 **/cdk.out/
 node_modules/
+# Builder process notes stay local (docs/ holds the public design docs).
+.claude/contracts/collaboration-contract.md

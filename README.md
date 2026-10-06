@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./images/genai.png" alt="Agentic Intelligent Media Operations" width="120">
+  <img src="./docs/images/genai.png" alt="Agentic Intelligent Media Operations" width="120">
   <h1>Agentic Intelligent Media Operations</h1>
 
   [![License](https://img.shields.io/badge/License-MIT--0-blue.svg)](https://github.com/aws/mit-0)
@@ -14,11 +14,11 @@ Choose the operator outcome you need:
 
 | I want to… | Sample | Start with | Status |
 |---|---|---|---|
-| Find regional buffering, bitrate, or playback-error patterns in CMCD data | [`cmcd`](cmcd-mcp-server/) | `just run cmcd` | From step 1 |
-| Inspect MediaConnect flow health, packet loss, metrics, or thumbnails | [`mediaconnect`](mediaconnect-mcp-server/) | `just run mediaconnect` | From step 2 |
-| Inspect MediaLive channels, inputs, outputs, schedules, or alarms | [`medialive`](medialive-mcp-server/) | `just run medialive` | From step 3 |
-| Investigate a signal path across MediaConnect and MediaLive | [`langchain`](media-services-langchain/) | `just demo` | From step 4c |
-| Explore CDN and streaming analytics through a web application | [`hydrolix`](hydrolix-cdn-insights/) | `just deploy hydrolix` | From step 5 |
+| Find regional buffering, bitrate, or playback-error patterns in CMCD data | [`cmcd`](samples/cmcd/) | `just run cmcd` | From step 1 |
+| Inspect MediaConnect flow health, packet loss, metrics, or thumbnails | [`mediaconnect`](samples/mediaconnect/) | `just run mediaconnect` | From step 2 |
+| Inspect MediaLive channels, inputs, outputs, schedules, or alarms | [`medialive`](samples/medialive/) | `just run medialive` | From step 3 |
+| Investigate a signal path across MediaConnect and MediaLive | [`langchain`](samples/hub/) | `just demo` | From step 4c |
+| Explore CDN and streaming analytics through a web application | [`hydrolix`](samples/hydrolix/) | `just deploy hydrolix` | From step 5 |
 
 > [!IMPORTANT]
 > These samples are for educational and reference purposes only. They are not

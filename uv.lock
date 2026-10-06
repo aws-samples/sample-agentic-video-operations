@@ -498,7 +498,7 @@ wheels = [
 [[package]]
 name = "cmcd-mcp-server"
 version = "0.1.0"
-source = { editable = "cmcd-mcp-server" }
+source = { editable = "samples/cmcd" }
 dependencies = [
     { name = "fastmcp" },
     { name = "influxdb-client" },
@@ -511,7 +511,7 @@ dependencies = [
 requires-dist = [
     { name = "fastmcp", specifier = ">=3.2,<4" },
     { name = "influxdb-client", specifier = ">=1.48,<2" },
-    { name = "media-ops-contracts", editable = "media_ops_contracts" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pydantic-settings", specifier = ">=2.6,<3" },
 ]
@@ -1040,7 +1040,7 @@ wheels = [
 [[package]]
 name = "media-ops-contracts"
 version = "0.1.0"
-source = { editable = "media_ops_contracts" }
+source = { editable = "packages/media_ops_contracts" }
 dependencies = [
     { name = "boto3" },
     { name = "pydantic" },
@@ -1055,7 +1055,7 @@ requires-dist = [
 [[package]]
 name = "mediaconnect-mcp-server"
 version = "0.1.0"
-source = { editable = "mediaconnect-mcp-server" }
+source = { editable = "samples/mediaconnect" }
 dependencies = [
     { name = "botocore" },
     { name = "fastmcp" },
@@ -1068,7 +1068,7 @@ dependencies = [
 requires-dist = [
     { name = "botocore", specifier = ">=1.35,<2" },
     { name = "fastmcp", specifier = ">=3.2,<4" },
-    { name = "media-ops-contracts", editable = "media_ops_contracts" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pydantic-settings", specifier = ">=2.6,<3" },
 ]
@@ -1076,7 +1076,7 @@ requires-dist = [
 [[package]]
 name = "medialive-mcp-server"
 version = "0.2.0"
-source = { editable = "medialive-mcp-server" }
+source = { editable = "samples/medialive" }
 dependencies = [
     { name = "bedrock-agentcore" },
     { name = "boto3" },
@@ -1098,7 +1098,7 @@ requires-dist = [
     { name = "bedrock-agentcore", specifier = ">=1.0,<2" },
     { name = "boto3", specifier = ">=1.35,<2" },
     { name = "fastmcp", specifier = ">=3.2,<4" },
-    { name = "media-ops-contracts", editable = "media_ops_contracts" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pydantic-settings", specifier = ">=2.5,<3" },
     { name = "strands-agents", specifier = ">=1.0,<2" },
@@ -2591,10 +2591,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cmcd-mcp-server", editable = "cmcd-mcp-server" },
-    { name = "media-ops-contracts", editable = "media_ops_contracts" },
-    { name = "mediaconnect-mcp-server", editable = "mediaconnect-mcp-server" },
-    { name = "medialive-mcp-server", editable = "medialive-mcp-server" },
+    { name = "cmcd-mcp-server", editable = "samples/cmcd" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
+    { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
+    { name = "medialive-mcp-server", editable = "samples/medialive" },
 ]
 
 [package.metadata.requires-dev]

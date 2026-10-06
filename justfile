@@ -1,5 +1,5 @@
 # One entry point for every sample. Each recipe wraps one native command; the samples' READMEs
-# show that raw command too. Contract: .claude/contracts/sample-contract.md §4.
+# show that raw command too. Contract: docs/build_a_sample.md §4.
 #
 # Install once:  uv tool install rust-just
 # Sample keys:   cmcd · mediaconnect · medialive · langchain · hydrolix
@@ -30,17 +30,17 @@ run sample *args:
       *)            just _unknown "{{ sample }}" ;;
     esac
 
-# Offline tests: all, or one sample (`just test contracts` for media_ops_contracts)
+# Offline tests: all, or one sample (`just test contracts` for packages/media_ops_contracts)
 [group('develop')]
 test sample="":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{ sample }}" in
       "")        uv run pytest ;;
-      contracts) uv run pytest media_ops_contracts/tests ;;
-      cmcd)      uv run pytest cmcd-mcp-server/tests ;;
-      mediaconnect) uv run pytest mediaconnect-mcp-server/tests ;;
-      medialive) uv run pytest medialive-mcp-server/tests/scenarios ;;
+      contracts) uv run pytest packages/media_ops_contracts/tests ;;
+      cmcd)      uv run pytest samples/cmcd/tests ;;
+      mediaconnect) uv run pytest samples/mediaconnect/tests ;;
+      medialive) uv run pytest samples/medialive/tests/scenarios ;;
       langchain|hydrolix) just _pending "{{ sample }}" ;;
       *)         just _unknown "{{ sample }}" ;;
     esac

@@ -1,5 +1,5 @@
 # Offline checks for every PR: no AWS credentials, no secrets, no deploys.
-# Gate: .claude/contracts/collaboration-contract.md §4.
+# Gate: just lint, just test and just docs-check (docs/build_a_sample.md §4).
 name: ci
 
 on:
@@ -44,7 +44,7 @@ jobs:
         with:
           version: "0.8.4"
       # Add each sample's CloudFormation template here when the sample converts.
-      - run: uvx cfn-lint==1.57.1 --non-zero-exit-code error cmcd-mcp-server/cloudfront-cmcd-kinesis.yaml
+      - run: uvx cfn-lint==1.57.1 --non-zero-exit-code error samples/cmcd/cloudfront-cmcd-kinesis.yaml
 
   cdk-synth:
     runs-on: ubuntu-latest
@@ -52,7 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         # Add hydrolix in step 5, once `just deploy hydrolix` fetches mcp_hydrolix.
-        app: [media-services-langchain/cdk, medialive-mcp-server/cdk]
+        app: [samples/hub/cdk, samples/medialive/cdk]
     defaults:
       run:
         working-directory: ${{ matrix.app }}

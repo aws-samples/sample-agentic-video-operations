@@ -21,7 +21,8 @@ def test_the_target_layout_passes():
             "samples/hydrolix/web/src/logo.svg",
             "packages/media_ops_contracts/pyproject.toml",
             "fixtures/input_loss/medialive.describe_channel.json",
-            ".claude/contracts/sample-contract.md",
+            "docs/build_a_sample.md",
+            ".claude/CLAUDE.md",
         )
         == []
     )

@@ -1,4 +1,4 @@
-"""`just docs-check`: the repository layout (guidelines §20, sample-contract §3).
+"""`just docs-check`: the repository layout (guidelines §20, build_a_sample.md §3).
 
 Checks git-tracked paths only, so local artifacts (.venv, cdk.out) never fail it.
 """
@@ -13,20 +13,12 @@ ALLOWED_ROOT = frozenset(
         "README.md", "AGENTS.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "LICENSE",
         "justfile", "pyproject.toml", "uv.lock", ".env.example", ".python-version",
         ".gitignore", ".github", "docs", "samples", "packages", "fixtures", "scripts",
-        ".claude",  # agent instructions and contracts; .claude/plans/ is never tracked
+        ".claude",  # Claude Code instructions; .claude/plans/ is never tracked
     }
 )  # fmt: skip
 
-# Today's folders and their destinations. Task R1 moves them and empties this mapping.
-PENDING_MOVES = {
-    "cmcd-mcp-server": "samples/cmcd",
-    "mediaconnect-mcp-server": "samples/mediaconnect",
-    "medialive-mcp-server": "samples/medialive",
-    "media-services-langchain": "samples/hub",
-    "hydrolix-cdn-insights": "samples/hydrolix",
-    "media_ops_contracts": "packages/media_ops_contracts",
-    "images": "docs/images",
-}
+# Task R1 is complete. Future layout migrations must add an explicit temporary exception.
+PENDING_MOVES: dict[str, str] = {}
 
 IMAGE_EXTENSIONS = frozenset(
     {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp", ".tif", ".tiff"}

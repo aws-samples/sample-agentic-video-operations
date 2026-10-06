@@ -143,7 +143,7 @@ just deploy langchain
 Raw command:
 
 ```bash
-cd media-services-langchain/cdk
+cd samples/hub/cdk
 npx cdk deploy \
   --parameters BedrockModelId="$AGENT_MODEL_ID"
 ```
@@ -197,7 +197,7 @@ just destroy langchain
 Raw command:
 
 ```bash
-cd media-services-langchain/cdk
+cd samples/hub/cdk
 npx cdk destroy
 ```
 

@@ -1,6 +1,6 @@
 # Root of the uv workspace. One lock, one virtual environment, one set of tool settings.
 # Each sample joins `members` (and leaves the ruff/pytest exclusions) when it is converted
-# to .claude/contracts/sample-contract.md.
+# to docs/build_a_sample.md.
 [project]
 name = "sample-agentic-video-operations"
 version = "0.1.0"
@@ -14,7 +14,12 @@ dev = ["pytest>=8.3,<9", "ruff>=0.12,<0.13"]
 package = false
 
 [tool.uv.workspace]
-members = ["media_ops_contracts", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server"]
+members = [
+  "packages/media_ops_contracts",
+  "samples/cmcd",
+  "samples/mediaconnect",
+  "samples/medialive",
+]
 
 [tool.uv.sources]
 media-ops-contracts = { workspace = true }
@@ -25,14 +30,20 @@ medialive-mcp-server = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+src = [
+  "packages/media_ops_contracts/src",
+  "samples/cmcd/src",
+  "samples/mediaconnect/src",
+  "samples/medialive/src",
+]
 # Unconverted samples; remove each entry in the step that converts the sample.
 extend-exclude = [
-  "medialive-mcp-server/cdk",
-  "medialive-mcp-server/tests/local",
-  "medialive-mcp-server/tests/remote",
-  "medialive-mcp-server/tests/unit",  # ported onto the new package in G3.2
-  "media-services-langchain",
-  "hydrolix-cdn-insights",
+  "samples/medialive/cdk",
+  "samples/medialive/tests/local",
+  "samples/medialive/tests/remote",
+  "samples/medialive/tests/unit",  # ported onto the new package in G3.2
+  "samples/hub",
+  "samples/hydrolix",
 ]
 
 [tool.ruff.lint]
@@ -41,11 +52,11 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.pytest.ini_options]
 # Add each converted sample's tests/ directory here.
 testpaths = [
-  "media_ops_contracts/tests",
+  "packages/media_ops_contracts/tests",
   "scripts/tests",
-  "cmcd-mcp-server/tests",
-  "mediaconnect-mcp-server/tests",
-  "medialive-mcp-server/tests/scenarios",
+  "samples/cmcd/tests",
+  "samples/mediaconnect/tests",
+  "samples/medialive/tests/scenarios",
 ]
 pythonpath = ["scripts"]
 addopts = "--strict-markers --tb=short -m 'not eval and not integration'"

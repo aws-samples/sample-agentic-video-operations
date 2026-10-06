@@ -7,24 +7,23 @@ workflows with AI agents. Use the root `justfile` for every common command.
 
 | Key | Folder | Operator outcome | Common commands |
 |---|---|---|---|
-| `cmcd` | [`cmcd-mcp-server/`](cmcd-mcp-server/) | Investigate viewer QoE from CMCD data | `just run cmcd` · `just test cmcd` · `just deploy cmcd` |
-| `mediaconnect` | [`mediaconnect-mcp-server/`](mediaconnect-mcp-server/) | Inspect MediaConnect transport health | `just run mediaconnect` · `just test mediaconnect` |
-| `medialive` | [`medialive-mcp-server/`](medialive-mcp-server/) | Inspect MediaLive channel health | `just run medialive` · `just test medialive` · `just deploy medialive` |
-| `langchain` | [`media-services-langchain/`](media-services-langchain/) | Coordinate MediaConnect and MediaLive specialists | `just run langchain` · `just test langchain` · `just deploy langchain` |
-| `hydrolix` | [`hydrolix-cdn-insights/`](hydrolix-cdn-insights/) | Explore CDN and streaming analytics in a web UI | `just deploy hydrolix` · `just destroy hydrolix` |
+| `cmcd` | [`samples/cmcd/`](samples/cmcd/) | Investigate viewer QoE from CMCD data | `just run cmcd` · `just test cmcd` · `just deploy cmcd` |
+| `mediaconnect` | [`samples/mediaconnect/`](samples/mediaconnect/) | Inspect MediaConnect transport health | `just run mediaconnect` · `just test mediaconnect` |
+| `medialive` | [`samples/medialive/`](samples/medialive/) | Inspect MediaLive channel health | `just run medialive` · `just test medialive` · `just deploy medialive` |
+| `langchain` | [`samples/hub/`](samples/hub/) | Coordinate MediaConnect and MediaLive specialists | `just run langchain` · `just test langchain` · `just deploy langchain` |
+| `hydrolix` | [`samples/hydrolix/`](samples/hydrolix/) | Explore CDN and streaming analytics in a web UI | `just deploy hydrolix` · `just destroy hydrolix` |
 
 ## Read Before Editing
 
 Read these sources in order:
 
-1. [`collaboration-contract.md`](.claude/contracts/collaboration-contract.md)
-2. [`sample-contract.md`](.claude/contracts/sample-contract.md)
-3. [`tool-contract.md`](.claude/contracts/tool-contract.md)
-4. [`agent-contract.md`](.claude/contracts/agent-contract.md)
-5. [`DEVELOPMENT_GUIDELINES.md`](.claude/DEVELOPMENT_GUIDELINES.md)
-6. [`CLAUDE.md`](.claude/CLAUDE.md)
+1. [`build_a_sample.md`](docs/build_a_sample.md)
+2. [`write_safe_tools.md`](docs/write_safe_tools.md)
+3. [`extend_the_hub.md`](docs/extend_the_hub.md)
+4. [`follow_development_guidelines.md`](docs/follow_development_guidelines.md)
+5. [`CLAUDE.md`](.claude/CLAUDE.md)
 
-The contracts win where they differ from the guidelines. Security and
+The first three win where they differ from the guidelines. Security and
 operational safety win over both.
 
 ## Five Common Tasks
