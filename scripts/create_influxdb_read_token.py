@@ -30,7 +30,7 @@ class InfluxAdminCredentials:
     read_token: str | None = None
 
 
-READ_TOKEN_DESCRIPTION = "cmcd-mcp-server read-only"
+READ_TOKEN_DESCRIPTION = "cmcd-mcp-server read-only"  # noqa: S105 - a label, not a secret
 
 
 def _build_tunnel_opener() -> OpenerDirector:

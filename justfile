@@ -69,11 +69,12 @@ demo:
 smoke:
     uv run python scripts/smoke_demo_servers.py
 
-# Check README structure and relative links of converted samples
+# Check README structure, relative links and model-ID consistency
 [group('develop')]
 docs-check:
     uv run python scripts/check_readme_structure.py
     uv run python scripts/check_repository_layout.py
+    uv run python scripts/check_model_ids.py
 
 # Deploy a sample with its existing deploy material (scripts/confirm_aws_action.py asks first; --yes skips)
 [group('deploy')]

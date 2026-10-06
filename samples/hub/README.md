@@ -44,7 +44,7 @@ The system uses `langchain.chat_models.init_chat_model` which supports multiple 
 | Provider | `AGENT_MODEL_ID` | `model_provider` | Notes |
 |----------|-------------------|------------------|-------|
 | **Bedrock cross-region** (default) | `us.anthropic.claude-sonnet-4-6` | `bedrock_converse` | Recommended. Auto-routes across regions for availability. |
-| **Bedrock single-region** | `anthropic.claude-sonnet-4-6-20250514` | `bedrock_converse` | Pin to one region. Use when cross-region is unavailable. |
+| **Bedrock single-region** | `anthropic.claude-sonnet-4-6` | `bedrock_converse` | Pin to one region. Use when cross-region is unavailable. |
 | **Anthropic direct** | `claude-sonnet-4-6-20250514` | `anthropic` | Requires `ANTHROPIC_API_KEY` env var. Bypasses Bedrock. |
 | **OpenAI** | `gpt-4o` | `openai` | Requires `OPENAI_API_KEY` env var. |
 
