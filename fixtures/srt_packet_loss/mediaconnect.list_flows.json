@@ -1,0 +1,12 @@
+{
+  "Flows": [
+    {
+      "AvailabilityZone": "us-west-2a",
+      "Description": "Upstream contribution flow feeding the demo MediaLive channel",
+      "FlowArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+      "Name": "demo-contribution",
+      "SourceType": "OWNED",
+      "Status": "ACTIVE"
+    }
+  ]
+}

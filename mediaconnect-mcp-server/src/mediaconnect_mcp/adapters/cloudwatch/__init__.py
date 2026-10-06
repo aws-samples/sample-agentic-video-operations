@@ -1,0 +1,1 @@
+"""CloudWatch metric adapters."""

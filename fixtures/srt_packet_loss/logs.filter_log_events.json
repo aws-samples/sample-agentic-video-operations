@@ -1,0 +1,19 @@
+{
+  "events": [
+    {
+      "logStreamName": "demo-downstream-channel/pipeline-0",
+      "message": "pipeline 0: input demo-mediaconnect-srt lost packets; input loss behavior active",
+      "timestamp": 1791280200000
+    },
+    {
+      "logStreamName": "demo-downstream-channel/pipeline-0",
+      "message": "pipeline 0: input demo-mediaconnect-srt recovered",
+      "timestamp": 1791280500000
+    },
+    {
+      "logStreamName": "demo-downstream-channel/pipeline-0",
+      "message": "pipeline 0: input demo-mediaconnect-srt lost packets again",
+      "timestamp": 1791280800000
+    }
+  ]
+}

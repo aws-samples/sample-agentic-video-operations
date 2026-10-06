@@ -1,0 +1,18 @@
+{
+  "output": {
+    "message": {
+      "content": [
+        {
+          "text": "Program video is visible. The frame alone does not explain the transport packet loss."
+        }
+      ],
+      "role": "assistant"
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": {
+    "inputTokens": 120,
+    "outputTokens": 18,
+    "totalTokens": 138
+  }
+}

@@ -23,7 +23,7 @@ run sample *args:
     set -euo pipefail
     case "{{ sample }}" in
       cmcd)         uv run --package cmcd-mcp-server serve-cmcd {{ args }} ;;
-      mediaconnect) just _pending mediaconnect 2 ;;
+      mediaconnect) uv run --package mediaconnect-mcp-server serve-mediaconnect {{ args }} ;;
       medialive)    just _pending medialive 3 ;;
       langchain)    just _pending langchain 4 ;;
       hydrolix)     just _pending hydrolix 5 ;;
@@ -39,7 +39,8 @@ test sample="":
       "")        uv run pytest ;;
       contracts) uv run pytest media_ops_contracts/tests ;;
       cmcd)      uv run pytest cmcd-mcp-server/tests ;;
-      mediaconnect|medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
+      mediaconnect) uv run pytest mediaconnect-mcp-server/tests ;;
+      medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
       *)         just _unknown "{{ sample }}" ;;
     esac
 

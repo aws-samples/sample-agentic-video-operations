@@ -1,0 +1,9 @@
+{
+  "ThumbnailDetails": {
+    "FlowArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+    "Thumbnail": "ZmFrZS1kZW1vLWpwZWc=",
+    "ThumbnailMessages": [],
+    "Timecode": "12:00:00:00",
+    "Timestamp": "2026-10-06T12:00:00Z"
+  }
+}

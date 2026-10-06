@@ -1,0 +1,32 @@
+{
+  "Flow": {
+    "AvailabilityZone": "us-west-2a",
+    "Description": "Upstream contribution flow feeding the demo MediaLive channel",
+    "Entitlements": [],
+    "FlowArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+    "Name": "demo-contribution",
+    "Outputs": [
+      {
+        "Description": "SRT output to the downstream MediaLive input",
+        "Destination": "192.0.2.20",
+        "Name": "demo-medialive-srt-output",
+        "OutputArn": "arn:aws:mediaconnect:us-west-2:111122223333:output:demo-output:output-1",
+        "Port": 5000,
+        "Protocol": "srt-caller"
+      }
+    ],
+    "Source": {
+      "Description": "Connected SRT contribution source",
+      "IngestIp": "192.0.2.10",
+      "IngestPort": 5000,
+      "Name": "demo-upstream-srt",
+      "Protocol": "srt-listener",
+      "SourceArn": "arn:aws:mediaconnect:us-west-2:111122223333:source:demo-source:source-1",
+      "WhitelistCidr": "192.0.2.0/24"
+    },
+    "Status": "ACTIVE"
+  },
+  "Messages": {
+    "Errors": []
+  }
+}

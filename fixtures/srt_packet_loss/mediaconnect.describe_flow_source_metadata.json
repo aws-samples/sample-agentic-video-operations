@@ -1,0 +1,31 @@
+{
+  "FlowArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+  "Messages": [
+    {
+      "Code": "INFO",
+      "Message": "Source remains connected while SRT retransmission recovery increases"
+    }
+  ],
+  "Timestamp": "2026-10-06T12:00:00Z",
+  "TransportMediaInfo": {
+    "Programs": [
+      {
+        "ProgramName": "demo-program",
+        "ProgramNumber": 1,
+        "PcrPid": 256,
+        "Streams": [
+          {
+            "Codec": "H.264",
+            "Pid": 257,
+            "StreamType": "Video"
+          },
+          {
+            "Codec": "AAC",
+            "Pid": 258,
+            "StreamType": "Audio"
+          }
+        ]
+      }
+    ]
+  }
+}

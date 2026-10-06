@@ -1,0 +1,24 @@
+{
+  "Arn": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+  "ChannelClass": "STANDARD",
+  "Id": "1234567",
+  "InputAttachments": [
+    {
+      "InputAttachmentName": "demo-mediaconnect-srt",
+      "InputId": "7654321"
+    }
+  ],
+  "Name": "demo-downstream-channel",
+  "PipelineDetails": [
+    {
+      "ActiveInputAttachmentName": "demo-mediaconnect-srt",
+      "PipelineId": "0"
+    },
+    {
+      "ActiveInputAttachmentName": "demo-mediaconnect-srt",
+      "PipelineId": "1"
+    }
+  ],
+  "PipelinesRunningCount": 2,
+  "State": "RUNNING"
+}

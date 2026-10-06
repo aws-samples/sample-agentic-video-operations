@@ -1,0 +1,125 @@
+{
+  "Messages": [],
+  "MetricDataResults": [
+    {
+      "Id": "m0_sourcearqrecovered",
+      "Label": "SourceARQRecovered",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [2.0, 14.0, 38.0, 91.0]
+    },
+    {
+      "Id": "m1_sourcebitrate",
+      "Label": "SourceBitRate",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [6200000.0, 6180000.0, 6050000.0, 5980000.0]
+    },
+    {
+      "Id": "m2_sourceconnected",
+      "Label": "SourceConnected",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "Id": "m3_sourcedisconnections",
+      "Label": "SourceDisconnections",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [0.0, 0.0, 0.0, 0.0]
+    },
+    {
+      "Id": "m5_sourcenotrecoveredpackets",
+      "Label": "SourceNotRecoveredPackets",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [0.0, 3.0, 17.0, 44.0]
+    },
+    {
+      "Id": "m6_sourcepacketlosspercent",
+      "Label": "SourcePacketLossPercent",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [0.1, 1.5, 4.8, 9.7]
+    },
+    {
+      "Id": "input_loss_seconds_p0",
+      "Label": "InputLossSeconds pipeline 0",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [0.0, 60.0, 0.0, 120.0]
+    },
+    {
+      "Id": "input_loss_seconds_p1",
+      "Label": "InputLossSeconds pipeline 1",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [0.0, 0.0, 0.0, 0.0]
+    },
+    {
+      "Id": "network_in_p0",
+      "Label": "NetworkIn pipeline 0",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [6.2, 0.8, 6.1, 0.0]
+    },
+    {
+      "Id": "network_in_p1",
+      "Label": "NetworkIn pipeline 1",
+      "StatusCode": "Complete",
+      "Timestamps": [
+        "2026-10-06T11:45:00Z",
+        "2026-10-06T11:50:00Z",
+        "2026-10-06T11:55:00Z",
+        "2026-10-06T12:00:00Z"
+      ],
+      "Values": [6.2, 6.2, 6.1, 6.2]
+    }
+  ]
+}

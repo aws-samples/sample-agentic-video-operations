@@ -1,0 +1,1 @@
+"""AWS Elemental MediaConnect adapters."""

@@ -1,385 +1,366 @@
 # MediaConnect MCP Server
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+Investigate live-video transport health, packet loss, connectivity, and visual
+evidence from an MCP-compatible assistant.
 
-A Model Context Protocol (MCP) server for managing and monitoring AWS Elemental MediaConnect flows. This server provides AI-powered tools for live video transport operations including flow management, CloudWatch metrics analysis, content quality monitoring, and visual thumbnail analysis using Amazon Bedrock.
+> [!IMPORTANT]
+> This AWS sample is for educational and reference purposes. It requires
+> security hardening, testing, and customization before production use.
 
-## What is AWS Elemental MediaConnect?
+## Purpose
 
-[AWS Elemental MediaConnect](https://aws.amazon.com/mediaconnect/) is a reliable, secure, and flexible transport service for live video. It enables broadcasters and content owners to build live video workflows by connecting sources to destinations using protocols such as SRT, RIST, Zixi, RTP-FEC, and CDI. MediaConnect provides the reliability and security needed for both contribution and distribution of live video content.
+Use this sample when an operator needs to determine whether an incident begins
+in contribution or distribution transport before investigating downstream
+encoding and delivery.
+
+The first successful run needs no AWS account. It replays an SRT incident where
+the MediaConnect flow remains active and connected while packet loss,
+retransmission recovery, and unrecovered packets rise.
 
 ## Architecture
 
-This MCP server connects directly to the AWS MediaConnect and CloudWatch APIs to provide flow management and monitoring tools that can be used by AI assistants and other MCP clients.
+```mermaid
+flowchart LR
+    Operator --> Client[MCP-compatible client]
+    Client --> Server[MediaConnect MCP server]
+    Server -->|demo| Fixtures[Recorded AWS responses]
+    Server --> MC[AWS Elemental MediaConnect]
+    Server --> CW[Amazon CloudWatch]
+    Server --> BR[Amazon Bedrock]
 
+    Client --> Approval[Human tool permission]
+    Approval --> Confirm[Exact flow ARN confirmation]
+    Confirm --> Write[Start or stop adapter]
+    Write --> Verify[Bounded state verification]
+    Verify --> MC
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌──────────────────────────┐
-│   MCP Client    │───▶│  MediaConnect    │───▶│  AWS APIs                │
-│  (AI Assistant) │    │  MCP Server      │    │  ├─ MediaConnect         │
-└─────────────────┘    └──────────────────┘    │  ├─ CloudWatch           │
-                                               │  └─ Bedrock (thumbnails) │
-                                               └──────────────────────────┘
-```
 
-## Features
+The stdio entrypoint creates regional clients and registers typed tools.
+Action-named adapters each talk to MediaConnect, CloudWatch, or Bedrock.
+Workflows combine typed adapter results for issue detection, metric tables, and
+thumbnail descriptions.
 
-### 🎬 Flow Management
-- **List Flows** — Enumerate all MediaConnect flows in your account
-- **Describe Flow** — Get detailed flow information with EventBridge-style health monitoring
-- **Start/Stop Flow** — Control flow lifecycle
-- **Source Metadata** — Retrieve transport stream details including codec, resolution, frame rate, and audio configuration
-
-### 👁️ Visual Analysis
-- **Thumbnail Analysis** — AI-powered visual analysis of flow thumbnails using Claude via Amazon Bedrock, providing content description and stream health assessment
-
-### 📊 CloudWatch Monitoring (5 Categories)
-- **Flow Health** — Bitrate, packet loss, ARQ recovery, disconnections, TR 101 290 Priority 1 & 2 compliance
-- **Source Health** — Source connection status, dropped packets, merge warnings, FEC recovery
-- **Output Health** — Output connections, disconnections, NDI receivers, CDI payload tracking
-- **Media Health** — Network jitter, latency, connection attempts, consecutive drops
-- **Content Quality** — Black frames, frozen frames, silent audio, missing streams, timecode presence
-
-### 🔍 Issue Detection
-- **Cross-Category Issue Detection** — Scan all monitoring categories for problems with severity classification
-- **Metrics Table** — Export key metrics in tabular format for charting and visualization
+Read tools are always available. Write tools do not exist unless
+`ALLOW_WRITES=true`; when enabled, the MCP client must obtain human permission,
+the operator must repeat the exact flow ARN, and the adapter verifies the final
+flow state.
 
 ## Prerequisites
 
-- Python 3.11+
-- AWS credentials configured (`aws configure`)
-- AWS region set in your AWS config
-- Required IAM permissions (see [Required Permissions](#required-permissions))
-- Amazon Bedrock access (for thumbnail analysis with Claude)
+For the fixture demo:
 
-## Setup
+- Python 3.12 or newer. `uv` installs the repository's Python version from
+  `.python-version`.
+- [`uv`](https://docs.astral.sh/uv/).
+- [`just`](https://just.systems/), installed with
+  `uv tool install rust-just`.
+- An MCP-compatible client, such as Amazon Q CLI, Claude Desktop, Cursor, or
+  another client that can launch a stdio server.
 
-### 1. Set Up Virtual Environment
+For live AWS reads, also provide:
 
-```bash
-# Create virtual environment
-python3 -m venv venv
+- AWS CLI v2 and configured AWS credentials.
+- An AWS region containing at least one MediaConnect flow.
+- IAM permission for `mediaconnect:ListFlows`, `mediaconnect:DescribeFlow`,
+  `mediaconnect:DescribeFlowSourceMetadata`,
+  `mediaconnect:DescribeFlowSourceThumbnail`, `cloudwatch:GetMetricData`, and
+  `bedrock:InvokeModel`.
+- Access to the model named by `THUMBNAIL_MODEL_ID` when using thumbnail
+  analysis.
 
-# Activate virtual environment
-source venv/bin/activate  # On macOS/Linux
-# or
-venv\Scripts\activate     # On Windows
-```
+For optional writes, also provide `mediaconnect:StartFlow` and
+`mediaconnect:StopFlow`. Existing MediaConnect flows and their data transfer
+can incur AWS charges; this sample does not create those resources.
 
-### 2. Install Dependencies
-
-```bash
-cd sample-agentic-video-operations/mediaconnect-mcp-server
-pip install -r requirements.txt
-```
-
-### 3. Verify the MCP Configuration File
-
-The file at `mcp.json` should have the following content:
-
-```json
-{
-  "mcpServers": {
-    "mediaconnect-mcp": {
-      "command": "python3",
-      "args": ["server.py"],
-      "cwd": "<DIRECTORY_PATH>",
-      "env": {
-        "FASTMCP_LOG_LEVEL": "INFO"
-      }
-    }
-  }
-}
-```
-
-**Example mcp.json:**
-
-```json
-{
-  "mcpServers": {
-    "mediaconnect-mcp": {
-      "command": "python3",
-      "args": ["server.py"],
-      "cwd": "/Users/johndoe/Downloads/sample-agentic-video-operations/mediaconnect-mcp-server",
-      "env": {
-        "FASTMCP_LOG_LEVEL": "INFO"
-      }
-    }
-  }
-}
-```
-
-## Integration with Amazon Q CLI
-
-### 1. Copy the mcp.json File to Q CLI Directory
+Check the local tools:
 
 ```bash
-cp mcp.json ~/.aws/amazonq/mcp.json
+python3 --version
+uv --version
+just --version
 ```
 
-**OR based on your directory structure:**
+Before live use, check the AWS identity and configured region:
 
 ```bash
-cp mcp.json ~/.q/mcp.json
+aws sts get-caller-identity
+aws configure get region
 ```
 
-### 2. Set Execute Permissions
+## Setup and Run
 
-```bash
-chmod +x ~/.aws/amazonq/mcp.json
+### Run Locally
+
+1. Clone the repository and enter its root:
+
+   ```bash
+   git clone https://github.com/aws-samples/sample-agentic-video-operations.git
+   cd sample-agentic-video-operations
+   ```
+
+2. Install `just`:
+
+   ```bash
+   uv tool install rust-just
+   ```
+
+3. Create the shared configuration:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+4. Add the required runtime values to the root `.env`. Keep writes disabled:
+
+   ```dotenv
+   AWS_REGION=us-west-2
+   THUMBNAIL_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
+   ALLOW_WRITES=false
+   ```
+
+5. Start the fixture-backed server:
+
+   ```bash
+   DEMO=1 DEMO_SCENARIO=srt_packet_loss just run mediaconnect
+   ```
+
+   Raw command:
+
+   ```bash
+   DEMO=1 DEMO_SCENARIO=srt_packet_loss uv run --env-file .env \
+     --package mediaconnect-mcp-server \
+     serve-mediaconnect
+   ```
+
+   A stdio MCP server waits silently for a client connection. Stop this smoke
+   check with `Ctrl+C`; the client configuration in the next step launches the
+   same server.
+
+6. Add the live and demo entries from [`mcp.json`](mcp.json) to your MCP
+   client. Replace the repository path with its absolute path:
+
+   ```json
+   {
+     "mcpServers": {
+       "mediaconnect": {
+         "command": "uv",
+         "args": [
+           "run",
+           "--directory",
+           "/absolute/path/to/sample-agentic-video-operations",
+           "--env-file",
+           ".env",
+           "--package",
+           "mediaconnect-mcp-server",
+           "serve-mediaconnect"
+         ]
+       },
+       "mediaconnect-demo": {
+         "command": "uv",
+         "args": [
+           "run",
+           "--directory",
+           "/absolute/path/to/sample-agentic-video-operations",
+           "--env-file",
+           ".env",
+           "--package",
+           "mediaconnect-mcp-server",
+           "serve-mediaconnect"
+         ],
+         "env": {
+           "DEMO": "1",
+           "DEMO_SCENARIO": "srt_packet_loss",
+           "ALLOW_WRITES": "false"
+         }
+       }
+     }
+   }
+   ```
+
+7. Restart the MCP client and send this known-good request:
+
+   ```text
+   Inspect source health for the demo MediaConnect flow. Is the source still
+   connected, and what transport evidence explains downstream input loss?
+   ```
+
+   Expected result:
+
+   ```text
+   The assistant lists or describes demo-contribution, then reads source
+   health metrics. It reports that the flow is ACTIVE and SourceConnected
+   remains 1 while SourcePacketLossPercent rises from 0.1 to 9.7,
+   SourceARQRecovered rises from 2 to 91, and unrecovered packets reach 44.
+   The evidence points to upstream SRT packet loss rather than a stopped flow.
+   ```
+
+### Deploy to AWS
+
+This standalone MCP sample has no deployment and `just deploy mediaconnect`
+is intentionally unavailable. It runs locally against existing AWS
+MediaConnect, CloudWatch, and Bedrock APIs.
+
+The adapters are designed to be embedded later in an AgentCore-hosted media
+operations hub as an in-process domain pack. That runtime has not landed, so it
+is not documented here as an available deployment.
+
+To use live AWS data today:
+
+1. Set these values in the root `.env`:
+
+   ```dotenv
+   AWS_REGION=us-west-2
+   THUMBNAIL_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
+   ALLOW_WRITES=false
+   DEMO=false
+   ```
+
+2. Confirm that the active identity can see flows:
+
+   ```bash
+   export AWS_REGION=us-west-2
+   aws mediaconnect list-flows \
+     --region "$AWS_REGION" \
+     --query "Flows[].{Name:Name,State:Status,Arn:FlowArn}"
+   ```
+
+3. Start the server:
+
+   ```bash
+   just run mediaconnect
+   ```
+
+   Raw command:
+
+   ```bash
+   uv run --env-file .env \
+     --package mediaconnect-mcp-server \
+     serve-mediaconnect
+   ```
+
+4. Use the `mediaconnect` live entry from the local MCP configuration.
+
+Keep `ALLOW_WRITES=false` for diagnosis. To opt into start/stop tools, set it
+to `true`, configure a private `APPROVAL_SIGNING_KEY`, and restart the server.
+Every write still requires the MCP client's human permission prompt and an
+exact `confirm_resource_id`.
+
+### Verify the Deployment
+
+There is no deployed runtime to verify yet. Verify the live local connection
+through your MCP client with:
+
+```text
+List MediaConnect flows in the configured region and summarize their states.
+For one ACTIVE flow, check source health over the last hour.
 ```
 
-**OR based on your directory structure:**
+Expected result:
 
-```bash
-chmod +x ~/.q/mcp.json
-```
-
-### 3. Running Amazon Q CLI
-
-```bash
-q chat
-```
-
-## Integration with Kiro
-
-Add the MCP server configuration to your Kiro workspace:
-
-1. Open the MCP configuration file at `.kiro/settings/mcp.json`
-2. Add the MediaConnect MCP server entry:
-
-```json
-{
-  "mcpServers": {
-    "mediaconnect-mcp": {
-      "command": "python3",
-      "args": ["server.py"],
-      "cwd": "/path/to/sample-agentic-video-operations/mediaconnect-mcp-server",
-      "env": {
-        "FASTMCP_LOG_LEVEL": "INFO"
-      }
-    }
-  }
-}
-```
-
-## Integration with Claude Code
-
-Add the MCP server to your Claude Code project configuration:
-
-```bash
-claude mcp add mediaconnect-mcp -- python3 /path/to/sample-agentic-video-operations/mediaconnect-mcp-server/server.py
-```
-
-Or add it manually to `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "mediaconnect-mcp": {
-      "command": "python3",
-      "args": ["/path/to/sample-agentic-video-operations/mediaconnect-mcp-server/server.py"],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "INFO"
-      }
-    }
-  }
-}
+```text
+The assistant calls list_flows, selects a returned ARN, and reports typed
+source connection, loss, recovery, bitrate, and round-trip evidence. With
+ALLOW_WRITES=false, start_flow and stop_flow are not available.
 ```
 
 ## Available Tools
 
-### Flow Management
+| Tool | Read/write | What it does |
+|---|---|---|
+| `list_flows` | Read | Lists flows visible in the configured region |
+| `describe_flow` | Read | Returns state, source, outputs, and AWS errors for one flow |
+| `describe_flow_source_metadata` | Read | Returns transport-stream and NDI source metadata |
+| `describe_flow_thumbnail` | Read | Describes the current source thumbnail with Bedrock |
+| `get_flow_health_metrics` | Read | Reads flow transport and TR 101 290 metrics |
+| `get_source_health_metrics` | Read | Reads source connection, packet loss, recovery, and merge metrics |
+| `get_output_health_metrics` | Read | Reads output connection, packet, and payload metrics |
+| `get_media_health_metrics` | Read | Reads source jitter, latency, uptime, and drop metrics |
+| `get_content_quality_metrics` | Read | Reads missing-stream, black-frame, freeze, silence, and timecode metrics |
+| `get_all_metrics` | Read | Reads all five metric categories |
+| `check_flow_issues` | Read | Flags non-zero loss, drops, disconnects, errors, and missing streams |
+| `get_metrics_table` | Read | Flattens metric points into chronological rows |
+| `start_flow` | Write | Starts one approved flow and verifies `ACTIVE` |
+| `stop_flow` | Write | Stops one approved flow and verifies `STANDBY` |
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `list_flows` | List all MediaConnect flows | None |
-| `describe_flow` | Get detailed flow info with health monitoring | `flow_arn` (required) |
-| `start_flow` | Start a MediaConnect flow | `flow_arn` (required) |
-| `stop_flow` | Stop a MediaConnect flow | `flow_arn` (required) |
-| `describe_flow_source_metadata` | Get transport stream details (codec, resolution, audio) | `flow_arn` (required) |
+## Teardown
 
-### Visual Analysis
+Stop the MCP process with `Ctrl+C`.
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `describe_flow_thumbnail` | AI-powered visual analysis of flow thumbnail | `flow_arn` (required) |
+This sample creates no AWS infrastructure, so there is no
+`just destroy mediaconnect` command. Do not delete MediaConnect flows merely
+to clean up this local server; they are pre-existing operator-owned resources.
 
-### CloudWatch Monitoring
+If you explicitly enabled writes and changed a flow state during testing,
+restore the intended state through another separately approved `start_flow` or
+`stop_flow` call. Remove the local `.env` when it is no longer needed because
+it may contain the approval signing key.
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `get_all_metrics` | Get all metrics organized by category | `flow_arn` (required), `hours_back` (default: 1) |
-| `get_flow_health_metrics` | Flow health: bitrate, packet loss, TR 101 290 | `flow_arn` (required), `hours_back` (default: 1) |
-| `get_source_health_metrics` | Source health: connection, drops, merge status | `flow_arn` (required), `hours_back` (default: 1) |
-| `get_output_health_metrics` | Output health: connections, NDI, CDI payloads | `flow_arn` (required), `hours_back` (default: 1) |
-| `get_media_health_metrics` | Media health: jitter, latency, drops | `flow_arn` (required), `hours_back` (default: 1) |
-| `get_content_quality_metrics` | Content quality: black/frozen frames, missing streams | `flow_arn` (required), `hours_back` (default: 1) |
+When the AgentCore hub deployment lands, its README must own complete runtime,
+log, image, memory, and role cleanup. Orphaned AWS resources can continue to
+incur cost.
 
-### Issue Detection & Analysis
+## Known Limitations
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `check_flow_issues` | Cross-category issue detection with severity | `flow_arn` (required), `hours_back` (default: 24) |
-| `get_metrics_table` | Metrics in tabular format for graphing | `flow_arn` (required), `hours_back` (default: 6) |
+- This is an educational sample, not a production-ready operations service.
+- The MCP server currently runs locally over stdio; an AgentCore hub deployment
+  is approved but not implemented.
+- The sample inspects existing MediaConnect resources and does not provision a
+  test flow.
+- IAM, tenant isolation, audit retention, rate limiting, retries, and
+  high-availability behavior require production review.
+- Issue detection uses explicit metric-name and threshold rules; it is not a
+  complete transport fault classifier.
+- Thumbnail descriptions are model-dependent and may vary.
+- The `srt_packet_loss` fixture is one representative incident and does not
+  reproduce every MediaConnect or CloudWatch behavior.
+- Write tools are safe-by-default but still require organization-specific
+  authorization, change-management, and rollback controls.
+- Metric reads use a maximum seven-day window and five-minute periods.
 
-## Sample Questions
+## Development
 
-### Flow Management & Status
-- "List all my MediaConnect flows"
-- "Show me the status of all flows"
-- "Describe the flow with ARN arn:aws:mediaconnect:us-west-2:123456789:flow:abc-123"
-- "Start the production flow"
-- "What's the source metadata for this flow?"
+Run the MediaConnect tests:
 
-### Visual Content Analysis
-- "Analyze the thumbnail of my active flow"
-- "What does the video content look like for this flow?"
-- "Describe the visual quality of the current stream"
-
-### Health Monitoring
-- "Show me all metrics for my flow from the past hour"
-- "Get comprehensive health metrics for the last 2 hours"
-- "What's the overall health status of my flow?"
-- "Check flow health metrics for packet loss and bitrate"
-- "Get source health metrics for the past day"
-- "Check output health for connected receivers"
-- "Check media health for jitter and latency"
-- "Get content quality metrics — any black frames or frozen video?"
-
-### Issue Detection & Troubleshooting
-- "Check for issues in the past 24 hours"
-- "Were there any connection problems today?"
-- "Analyze flow problems across all categories"
-- "Show me TR 101 290 compliance errors"
-- "How is the SRT recovery performance?"
-
-### Performance Analysis
-- "Get metrics in table format for graphing"
-- "Show me jitter and latency trends over 6 hours"
-- "Compare source vs output bitrates"
-
-## CloudWatch Metrics Reference
-
-### Flow Health Metrics
-
-| Metric | Description | Unit |
-|--------|-------------|------|
-| `BitRate` | Bitrate of incoming source video | Bits/Second |
-| `Connected` | Source connection status (1=connected, 0=disconnected) | None |
-| `Disconnections` | Number of source disconnections | Count |
-| `DroppedPackets` | Packets lost during transit (before error correction) | Count |
-| `PacketLossPercent` | Percentage of packets lost | Percent |
-| `ARQRecovered` | Dropped packets recovered by ARQ | Count |
-| `FECRecovered` | FEC packets lost and recovered | Count |
-| `RoundTripTime` | Signal round-trip time | Milliseconds |
-| `ContinuityCounter` | TR 101 290 P1: Continuity errors | Count |
-| `PATError` | TR 101 290 P1: Program Association Table errors | Count |
-| `PMTError` | TR 101 290 P1: Program Map Table errors | Count |
-| `CRCError` | TR 101 290 P2: Data corruption errors | Count |
-
-### Content Quality Metrics
-
-| Metric | Description | Unit |
-|--------|-------------|------|
-| `BlackFramesBreaching` | Duration of black frames surpassing threshold | Count |
-| `FrozenFramesBreaching` | Video unchanged longer than threshold | Count |
-| `SilentAudioBreaching` | Silent audio exceeding threshold | Count |
-| `AudioStreamMissing` | Expected audio stream not detected | Count |
-| `VideoStreamMissing` | Expected video stream absent | Count |
-| `TimecodePresent` | Valid timecode present in media stream | Count |
-
-## Required Permissions
-
-The following IAM permissions are required:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "mediaconnect:ListFlows",
-        "mediaconnect:DescribeFlow",
-        "mediaconnect:StartFlow",
-        "mediaconnect:StopFlow",
-        "mediaconnect:DescribeFlowSourceThumbnail",
-        "mediaconnect:DescribeFlowSourceMetadata"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "cloudwatch:GetMetricStatistics"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel"
-      ],
-      "Resource": "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0"
-    }
-  ]
-}
+```bash
+just test mediaconnect
 ```
 
-## Troubleshooting
+Raw command:
 
-### Common Issues
+```bash
+uv run pytest mediaconnect-mcp-server/tests
+```
 
-1. **No Flows Returned**:
-   - Verify AWS credentials are configured (`aws sts get-caller-identity`)
-   - Check that the AWS region is set correctly
-   - Ensure IAM permissions include `mediaconnect:ListFlows`
+Run repository lint and formatting checks:
 
-2. **Thumbnail Analysis Fails**:
-   - Flow must be in ACTIVE state with thumbnail generation enabled
-   - Verify Bedrock access is configured in your region
-   - Check IAM permissions include `bedrock:InvokeModel`
+```bash
+just lint
+```
 
-3. **No Metrics Data**:
-   - Flow must be or have been in ACTIVE state during the queried time range
-   - Verify CloudWatch permissions
-   - MediaConnect metrics may take a few minutes to appear after flow activation
+Raw commands:
 
-4. **Connection Errors**:
-   - Verify AWS credentials are not expired
-   - Check network connectivity to AWS APIs
-   - Ensure the correct AWS region is configured
+```bash
+uv run ruff check .
+uv run ruff format --check .
+```
 
-## Security Considerations
-
-⚠️ **Important Security Notice**
-
-This sample is provided for demonstration and educational purposes only. **It is not recommended for production deployment without significant security hardening.**
-
-### Before Production Use:
-
-- Review and restrict IAM permissions to specific flow ARNs rather than using wildcard resources
-- Implement proper credential rotation and management
-- Enable CloudTrail logging for all MediaConnect API calls
-- Review Bedrock model access policies
-- Conduct security testing appropriate for your environment
+Keep adapters importable as plain typed functions so the future in-process
+domain pack can wrap them without importing MCP transport.
 
 ## Contributing
 
-Contributions are welcome! Please ensure:
+Read [`AGENTS.md`](../AGENTS.md) and
+[`CONTRIBUTING.md`](../CONTRIBUTING.md) before opening a pull request.
 
-1. Code follows existing patterns
-2. New tools include proper documentation
-3. Error handling is comprehensive
-4. Tests cover new functionality
+## Security
+
+Never commit credentials, `.env` files, approval keys, account IDs, ARNs, or
+real flow identifiers. Keep writes disabled unless the operator intends to
+change an exact flow, and review IAM permissions for least privilege. Report
+security issues through the process in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#security-issue-notifications).
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Related Projects
-
-- [CMCD MCP Server](../cmcd-mcp-server/) — MCP server for CMCD streaming telemetry analysis
-- [Hydrolix CDN Insights](../hydrolix-cdn-insights/) — Multi-agent CDN analytics with Amazon Bedrock AgentCore
-- [AWS Elemental MediaConnect Documentation](https://docs.aws.amazon.com/mediaconnect/)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
+This project is licensed under the MIT No Attribution License. See
+[`LICENSE`](../LICENSE).

@@ -1,11 +1,34 @@
 {
   "mcpServers": {
-    "mediaconnect-mcp": {
-      "command": "python3",
-      "args": ["server.py"],
-      "cwd": "<DIRECTORY_PATH>",
+    "mediaconnect": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/sample-agentic-video-operations",
+        "--env-file",
+        ".env",
+        "--package",
+        "mediaconnect-mcp-server",
+        "serve-mediaconnect"
+      ]
+    },
+    "mediaconnect-demo": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/sample-agentic-video-operations",
+        "--env-file",
+        ".env",
+        "--package",
+        "mediaconnect-mcp-server",
+        "serve-mediaconnect"
+      ],
       "env": {
-        "FASTMCP_LOG_LEVEL": "INFO"
+        "DEMO": "1",
+        "DEMO_SCENARIO": "srt_packet_loss",
+        "ALLOW_WRITES": "false"
       }
     }
   }

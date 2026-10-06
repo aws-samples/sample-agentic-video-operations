@@ -12,6 +12,7 @@ resolution-markers = [
 members = [
     "cmcd-mcp-server",
     "media-ops-contracts",
+    "mediaconnect-mcp-server",
     "sample-agentic-video-operations",
 ]
 
@@ -755,6 +756,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "mediaconnect-mcp-server"
+version = "0.1.0"
+source = { editable = "mediaconnect-mcp-server" }
+dependencies = [
+    { name = "botocore" },
+    { name = "fastmcp" },
+    { name = "media-ops-contracts" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "botocore", specifier = ">=1.35,<2" },
+    { name = "fastmcp", specifier = ">=3.2,<4" },
+    { name = "media-ops-contracts", editable = "media_ops_contracts" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pydantic-settings", specifier = ">=2.6,<3" },
+]
+
+[[package]]
 name = "more-itertools"
 version = "11.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1323,6 +1345,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "cmcd-mcp-server" },
     { name = "media-ops-contracts" },
+    { name = "mediaconnect-mcp-server" },
 ]
 
 [package.dev-dependencies]
@@ -1335,6 +1358,7 @@ dev = [
 requires-dist = [
     { name = "cmcd-mcp-server", editable = "cmcd-mcp-server" },
     { name = "media-ops-contracts", editable = "media_ops_contracts" },
+    { name = "mediaconnect-mcp-server", editable = "mediaconnect-mcp-server" },
 ]
 
 [package.metadata.requires-dev]
