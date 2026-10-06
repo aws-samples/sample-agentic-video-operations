@@ -25,6 +25,32 @@ Choose the operator outcome you need:
 > intended for production use without security hardening, thorough testing,
 > and customization for your environment.
 
+## Try It First — No AWS Account
+
+Three commands after cloning. No credentials, no `.env`, no cost:
+
+```bash
+uv tool install rust-just
+just doctor
+just smoke
+```
+
+```text
+ok   cmcd             analyze_buffer_events
+ok   mediaconnect     list_flows
+ok   medialive        list_channels
+Demo smoke passed without AWS clients.
+```
+
+Every sample just started as a real MCP server and answered from **fixtures** —
+recorded AWS responses for scripted incidents (a MediaLive input loss, an SRT
+packet-loss event, a viewer buffering spike). Nothing touched AWS.
+
+From there, [`docs/walkthrough.md`](docs/walkthrough.md) takes you the rest of
+the way in order of commitment: investigate a recorded incident from your own
+MCP client (still no AWS account), run the hub agent locally against fixtures
+(Bedrock only, cents per question), then deploy for real.
+
 ## Architecture
 
 The samples cover two connected views of a live-video workflow: the upstream
@@ -130,25 +156,25 @@ A reasoning agent must not use a Haiku model.
    just doctor
    ```
 
-5. From step 4c, run the fixture-backed cross-service demo:
+5. Prove the offline demo works:
 
    ```bash
-   just demo
+   just smoke
    ```
 
-Until step 4c lands, use the individual sample READMEs for their currently
-available run paths. The demo requires no AWS account. It replays a MediaConnect
-transport problem, shows the MediaConnect and MediaLive specialist work, and
-prints the final diagnosis without calling AWS.
+Then follow [`docs/walkthrough.md`](docs/walkthrough.md): it connects a sample
+to your MCP client on fixtures (no AWS account), runs the hub agent locally,
+and only then deploys. From step 4c, `just demo` will additionally replay the
+fixture-backed cross-service demo without an MCP client.
 
-Run an individual sample with:
+Run an individual sample's MCP server with:
 
 ```bash
 just run <key>
 ```
 
-See that sample's README for configuration, MCP client setup, and a known-good
-request.
+Set `DEMO=1` for the fixture-backed run. See that sample's README for
+configuration, MCP client setup, and a known-good request.
 
 ### Deploy to AWS
 
