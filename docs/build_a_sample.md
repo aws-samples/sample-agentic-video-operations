@@ -107,7 +107,8 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | `just docs-check` | README structure, repository layout, documentation claims and model ids | `uv run python scripts/check_readme_structure.py && uv run python scripts/check_repository_layout.py && uv run python scripts/check_docs_claims.py && uv run python scripts/check_model_ids.py` |
 | `just run cmcd\|mediaconnect\|medialive` | Run one MCP stdio server | `uv run --package <distribution> serve-<key>` |
 | `just run agentic-iops-streaming` | Run the agentic-iops-streaming server locally | `AGENTIC_IOPS_LOCAL_MODE=true uv run --package agentic-iops-streaming serve-agentic-iops-streaming` |
-| `just test` | All offline unit and scenario tests | `uv run pytest` |
+| `just test` | All offline unit and scenario tests, except those that start real processes | `uv run pytest` |
+| `just test-slow` | The tests that start real processes (MCP servers, a hung server the deadline must kill); CI runs them | `uv run pytest -m slow` |
 | `just test contracts` | Shared contract tests | `uv run pytest packages/media_ops_contracts/tests` |
 | `just test cmcd` | CMCD tests | `uv run pytest samples/cmcd/tests` |
 | `just test mediaconnect` | MediaConnect tests | `uv run pytest samples/mediaconnect/tests` |

@@ -13,6 +13,7 @@ ALLOWED_ROOT = frozenset(
         "README.md", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md",
         "CODE_OF_CONDUCT.md", "LICENSE",
         "justfile", "pyproject.toml", "uv.lock", ".env.example", ".python-version",
+        "conftest.py",  # the offline guard every test suite runs under
         ".gitignore", ".gitleaksignore", ".pre-commit-config.yaml", ".dockerignore", ".github",
         "docs", "samples", "packages", "fixtures", "scripts",
         ".claude",  # Claude Code instructions; .claude/plans/ is never tracked

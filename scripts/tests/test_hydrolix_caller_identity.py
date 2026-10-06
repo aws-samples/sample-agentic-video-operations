@@ -51,6 +51,18 @@ class FakeAgent:
         yield {"data": SECRET_ANSWER}
 
 
+class OfflineMemoryClient:
+    """The memory hook's AgentCore client, offline. A real one resolves AWS credentials when
+    it is built, down to the EC2 metadata endpoint, which off AWS costs about a second per
+    request and makes the test reach the network."""
+
+    def __init__(self) -> None:
+        self.saved: list[dict] = []
+
+    def save_conversation(self, **kwargs) -> None:
+        self.saved.append(kwargs)
+
+
 @pytest.fixture
 def app(monkeypatch):
     monkeypatch.setenv("AGENT_MODEL_ID", "us.anthropic.claude-sonnet-4-6")
@@ -75,6 +87,8 @@ def app(monkeypatch):
         return []
 
     monkeypatch.setattr(module, "get_agentcore_memory_messages", read_memory)
+    hooks = importlib.import_module("src.utils.MemoryHookProvider")
+    monkeypatch.setattr(hooks, "MemoryClient", OfflineMemoryClient)
     monkeypatch.setattr(module, "BedrockModel", lambda **_: object())
     monkeypatch.setattr(module, "Agent", FakeAgent)
     FakeAgent.built = []

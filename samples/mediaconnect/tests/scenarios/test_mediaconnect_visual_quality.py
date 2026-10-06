@@ -20,6 +20,7 @@ from generate_quality_fixtures import (
 
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from media_ops_video_quality.assess_window import Status
+from media_ops_video_quality.quality_thresholds import DEFAULT_THRESHOLDS
 from mediaconnect_mcp.adapters.cloudwatch.read_flow_metrics import METRICS_BY_CATEGORY
 from mediaconnect_mcp.adapters.media_connect.sample_flow_frames import sample_flow_frames
 from mediaconnect_mcp.bootstrap.create_mediaconnect_clients import create_mediaconnect_clients
@@ -111,6 +112,7 @@ HEALTHY_TRANSPORT = {
     "VideoStreamMissing": 0.0,
 }
 SHARP = synthetic_sequences()["sharp"]
+TRUSTED = DEFAULT_THRESHOLDS.trusted_vision_confidence.value
 
 
 def analyze(mediaconnect, cloudwatch, *, bedrock=None, model=MODEL):
@@ -492,3 +494,41 @@ def test_access_denied_is_still_a_typed_failure_not_a_retry():
         analyze(RefusingThumbnails("AccessDeniedException"), FakeCloudWatch(HEALTHY_TRANSPORT))
 
     assert failure.value.kind is FailureKind.PERMISSION_DENIED
+
+
+# --- T78 and T80: no frames, a disconnected source ----------------------------------------
+
+
+def test_with_no_frames_neither_score_reads_as_a_perfect_picture():
+    """T78: nothing was measured, so there is no score, and confidence stays untrusted."""
+    result = analyze(
+        FakeMediaConnect(monitoring={"ThumbnailState": "DISABLED"}),
+        FakeCloudWatch(HEALTHY_TRANSPORT),
+    )
+
+    assert result.assessment.sampled_frames == 0
+    assert result.assessment.score is None and result.assessment.deterministic_score is None
+    assert result.assessment.confidence < TRUSTED and result.finding.confidence < TRUSTED
+    assert "no frames" in result.assessment.basis
+    assert not any("score None" in line for line in result.finding.evidence)
+
+
+def test_a_source_with_no_sender_connected_is_named_before_the_thumbnails():
+    """T80: SourceConnected at 0 explains the missing picture; enabling thumbnails wouldn't."""
+    mediaconnect = RefusingThumbnails("BadRequestException")
+    transport = HEALTHY_TRANSPORT | {"SourceConnected": 0.0}
+
+    result = analyze(mediaconnect, FakeCloudWatch(transport))
+
+    assert result.finding.next_action.startswith("No sender was connected to the source")
+    assert "SourceConnected" in result.finding.next_action
+    assert ".." not in result.note
+
+
+def test_a_connected_source_without_thumbnails_still_says_to_enable_them():
+    result = analyze(
+        FakeMediaConnect(monitoring={"ThumbnailState": "DISABLED"}),
+        FakeCloudWatch(HEALTHY_TRANSPORT),
+    )
+
+    assert result.finding.next_action.startswith("Enable thumbnails (or start the flow)")

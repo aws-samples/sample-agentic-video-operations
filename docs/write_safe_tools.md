@@ -100,6 +100,7 @@ def stop_channel(approved_action, media_live, check, policy) -> ActionResult:
         signing_key=check.signing_key,
         now=check.now,
     )
+    require_signed_parameters(approved_action, {})  # stop takes no inputs beyond the channel
     before = describe_channel(media_live, approved_action.resource_id).state
     media_live.stop_channel(ChannelId=approved_action.resource_id)               # effect
     after = wait_for_condition(
@@ -118,6 +119,7 @@ def stop_channel(approved_action, media_live, check, policy) -> ActionResult:
 ```
 
 - `require_action_approval(approved_action, *, action, signing_key, now, resource_id=None)` rejects a missing approval, an action or resource that doesn't match, a bad signature (`ApprovalRequired`) or an expired approval (`ApprovalExpired`). It is a pure decision: time is passed in as `now`.
+- **A write must check its signed parameters.** `require_action_approval` never reads `parameters`, because only the write knows its own inputs. A signature proves the operator approved *some* inputs, not the ones this call carries. So every write also calls `require_signed_parameters(approved_action, expected)` with exactly the inputs it will act on, and acts on those, not on loose arguments. A write that takes no inputs beyond its resource passes `{}`. Values compare as the approval hook records them: as `str`, with `None` left out. A difference names the inputs that differ, never their values, and is refused as `ApprovalRequired`.
 - `verify_<resource>_state` polls with a bounded deadline (default 120 s) and returns the observed state. A write result without verification is a contract violation.
 - start, stop and input switch are idempotent in MediaLive and MediaConnect. They need no idempotency key. Document this in the adapter docstring.
 - start and stop read the state first: a channel or flow already in the target state is a verified no-op. MediaLive also waits without another write when the channel is already `STARTING` toward a start or `STOPPING` toward a stop. An input switch whose target is already active on every pipeline, or whose same named immediate action is pending for that target, is likewise a verified no-op. Tests pin that no write call is made.
@@ -157,6 +159,7 @@ principal-account condition.
 |---|---|
 | `approved_action.py` | define `ApprovedAction` and `sign_approved_action()` |
 | `require_action_approval.py` | reject actions that are unapproved, mismatched or expired |
+| `require_signed_parameters.py` | reject a write whose inputs differ from the signed `parameters` |
 | `tool_failure.py` | define `FailureKind` and `ToolFailure` |
 | `classify_aws_error.py` | map botocore errors to `FailureKind` |
 | `call_aws_operation.py` | call one AWS operation, or every page with `collect_pages`, and classify SDK errors (`BotoCoreError` and `ClientError`) |
@@ -175,7 +178,10 @@ Keep each module focused on the action in this table. The package imports pydant
   - the wrong resource,
   - the wrong action,
   - an expired approval,
-  - a bad signature.
+  - a bad signature,
+  - inputs that differ from the signed parameters: one changed, one extra.
+
+  `test_every_write_checks_its_signed_parameters.py` in agentic-iops-streaming runs the last case against every registered pack write.
 
   Plus a positive test asserting before, after and `verified`.
 - **Entrypoint:** with `ALLOW_WRITES=false`, the write tool is not registered.

@@ -12,6 +12,7 @@ from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import ApprovedAction
 from media_ops_contracts.domain_pack import WriteTool
 from media_ops_contracts.read_utc_now import read_utc_now
+from media_ops_contracts.require_signed_parameters import require_signed_parameters
 from media_ops_contracts.resolve_approval_signing_key import resolve_approval_signing_key
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from medialive_mcp.adapters.media_live import create_schedule_action as schedule_create
@@ -30,13 +31,13 @@ def require_matching_approval(
     approved_action: ApprovedAction, channel_id: str, proposed: dict[str, object]
 ) -> None:
     """The approval must name this channel and exactly these proposed inputs."""
-    expected = {name: str(value) for name, value in proposed.items() if value is not None}
-    if approved_action.resource_id != channel_id or approved_action.parameters != expected:
+    if approved_action.resource_id != channel_id:
         raise ToolFailure(
             FailureKind.APPROVAL_REQUIRED,
-            "The approval does not match this channel and these inputs.",
+            "The approval does not match this channel.",
             "Propose the action again and ask the operator to approve it.",
         )
+    require_signed_parameters(approved_action, proposed)
 
 
 def create_write_tools(

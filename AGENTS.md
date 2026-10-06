@@ -36,7 +36,7 @@ operational safety win over both.
 
 Run `just` with no arguments to list all recipes. Deployments create billable
 AWS resources; use `just destroy <key>` when finished.
-`just eval` replays the agentic-iops-streaming scenarios offline and is part of the gate.
+`just eval` replays the agentic-iops-streaming scenarios offline and is part of the gate. `just test` skips the tests that start real processes; `just test-slow` runs them, and CI runs both. Every suite runs offline: the root `conftest.py` fails any test that connects off the machine.
 For changed deploy material, also run `cdk synth` or `cfn-lint`, as applicable.
 
 ## Change Rules

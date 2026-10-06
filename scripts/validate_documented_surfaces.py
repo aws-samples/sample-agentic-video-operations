@@ -1,8 +1,10 @@
 """Validate documented environment settings and MCP tool names."""
 
 import ast
+import os
 import re
 import shlex
+from collections.abc import Iterator
 from pathlib import Path
 
 ENV_TABLE_ROW = re.compile(r"^\|\s*`([A-Z][A-Z0-9_]*)`\s*\|", re.MULTILINE)
@@ -13,6 +15,7 @@ ENV_READ = re.compile(
     r"os\.(?:getenv|environ\.get)\(\s*['\"]([A-Z][A-Z0-9_]*)['\"]"
     r"|os\.environ\[\s*['\"]([A-Z][A-Z0-9_]*)['\"]\s*\]"
 )
+SKIPPED_DIRECTORIES = frozenset({"cdk.out", "node_modules"})
 FENCE = re.compile(r"^```([a-z0-9_-]*)\s*$")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 TOOL_NAME = re.compile(r"`([a-z][a-z0-9_]+)`")
@@ -41,8 +44,8 @@ TOOL_ACTION = re.compile(
 def read_setting_names(root: Path) -> frozenset[str]:
     """Return BaseSettings fields plus root environment-template keys."""
     names = set()
-    for path in root.glob("samples/**/settings/runtime_settings.py"):
-        if "cdk.out" in path.parts:
+    for path in walk_files(root / "samples"):
+        if path.name != "runtime_settings.py" or path.parent.name != "settings":
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in tree.body:
@@ -60,19 +63,33 @@ def read_setting_names(root: Path) -> frozenset[str]:
             for line in env_example.read_text().splitlines()
             if (match := re.match(r"^#?\s*([A-Z][A-Z0-9_]*)=", line))
         )
-    for path in (*root.glob("scripts/**/*.py"), *root.glob("samples/**/*.py")):
-        if any(part in {"cdk.out", "node_modules"} for part in path.parts):
+    for path in (*walk_files(root / "scripts"), *walk_files(root / "samples")):
+        if path.suffix != ".py":
             continue
         for match in ENV_READ.finditer(path.read_text()):
             names.add(match.group(1) or match.group(2))
     return frozenset(names)
 
 
+def walk_files(top: Path) -> Iterator[Path]:
+    """Every file under `top`, never descending into build output or installed packages.
+
+    A recursive glob would list node_modules and cdk.out (tens of thousands of files) only
+    for the callers to drop them; pruning them here gives the same files in a fraction of
+    the time.
+    """
+    for directory, subdirectories, files in os.walk(top):
+        subdirectories[:] = [name for name in subdirectories if name not in SKIPPED_DIRECTORIES]
+        for name in files:
+            yield Path(directory, name)
+
+
 def read_tool_names(root: Path) -> frozenset[str]:
     """Return tool names from factories, decorators, and dynamic action names."""
     names = set()
-    for path in root.glob("samples/**/src/**/*.py"):
-        if any(part in {"cdk.out", "node_modules", "tests"} for part in path.parts):
+    for path in walk_files(root / "samples"):
+        relative = path.relative_to(root / "samples").parts
+        if path.suffix != ".py" or "src" not in relative[:-1] or "tests" in relative:
             continue
         source = path.read_text()
         tree = ast.parse(source, filename=str(path))
@@ -90,9 +107,7 @@ def read_infrastructure_names(root: Path) -> tuple[frozenset[str], frozenset[str
     """Return declared CloudFormation output and parameter logical names."""
     outputs: set[str] = set()
     parameters: set[str] = set()
-    for path in root.glob("samples/**/*"):
-        if not path.is_file() or any(part in {"cdk.out", "node_modules"} for part in path.parts):
-            continue
+    for path in walk_files(root / "samples"):
         if path.suffix == ".ts":
             for match in CDK_DECLARATION.finditer(path.read_text()):
                 target = outputs if match.group("kind") == "Output" else parameters

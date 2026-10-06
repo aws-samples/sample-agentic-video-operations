@@ -33,6 +33,7 @@ jobs:
       - run: just lint
       - run: just typecheck
       - run: just test
+      - run: just test-slow
       - run: just smoke
       - run: just eval
       - run: just docs-check

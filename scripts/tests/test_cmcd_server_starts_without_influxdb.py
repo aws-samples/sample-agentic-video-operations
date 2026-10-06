@@ -4,7 +4,10 @@ import os
 import subprocess
 import sys
 
+import pytest
 
+
+@pytest.mark.slow  # starts the real server process
 def test_the_live_server_process_starts_without_a_traceback():
     environment = {
         name: value

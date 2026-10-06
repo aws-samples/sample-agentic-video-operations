@@ -56,6 +56,18 @@ class FakeDynamoDB:
         return {}
 
 
+class OfflineMemoryClient:
+    """The memory hook's AgentCore client, offline. A real one resolves AWS credentials when
+    it is built, down to the EC2 metadata endpoint, which off AWS costs about a second per
+    request and makes the test reach the network."""
+
+    def __init__(self) -> None:
+        self.saved: list[dict] = []
+
+    def save_conversation(self, **kwargs) -> None:
+        self.saved.append(kwargs)
+
+
 @pytest.fixture
 def results(runtime, monkeypatch):  # noqa: F811
     utils = sys.modules["src.utils.utils"]
@@ -67,6 +79,9 @@ def results(runtime, monkeypatch):  # noqa: F811
     monkeypatch.setattr(runtime.app, "Agent", SubagentCallingOrchestrator)
     monkeypatch.setattr(runtime.app, "BedrockModel", lambda **_: object())
     monkeypatch.setattr(runtime.app, "get_agentcore_memory_messages", lambda *_: [])
+    monkeypatch.setattr(
+        sys.modules["src.utils.MemoryHookProvider"], "MemoryClient", OfflineMemoryClient
+    )
     identity = sys.modules["src.utils.identify_caller"]
 
     def ask_as(subject, sql, *, session, jwt=True):
@@ -234,7 +249,8 @@ def test_queries_that_ran_are_the_last_record_even_when_the_request_fails(
     results, monkeypatch, orchestrator
 ):
     monkeypatch.setattr(results.app, "Agent", orchestrator)
-    monkeypatch.setattr(results.context, "REQUEST_TIMEOUT_SECONDS", 3)
+    # Long enough for the scripted subagent's query (about 0.1 s), short of the 5 s stall.
+    monkeypatch.setattr(results.context, "REQUEST_TIMEOUT_SECONDS", 1)
 
     chunks = results.ask_as("alice", ALICE_SQL, session="alice-runtime-session-00000000000000")
 

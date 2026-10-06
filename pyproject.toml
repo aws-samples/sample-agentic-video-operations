@@ -108,7 +108,7 @@ testpaths = [
   "samples/agentic-iops-streaming/tests/eval",
 ]
 pythonpath = ["scripts"]
-addopts = "--strict-markers --tb=short -m 'not eval'"
+addopts = "--strict-markers --tb=short -m 'not eval and not slow'"
 # Third-party deprecations raised at import time by bedrock-agentcore and strands; not ours to fix.
 filterwarnings = [
   "ignore:Support for class-based `config` is deprecated:DeprecationWarning",
@@ -118,4 +118,5 @@ filterwarnings = [
 ]
 markers = [
   "eval: fixture-replay scenario evaluations (run with `just eval`)",
+  "slow: starts real processes, so it takes a second or more (run with `just test-slow`; CI runs it)",
 ]

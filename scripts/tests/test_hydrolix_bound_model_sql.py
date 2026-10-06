@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from mcp.client import stdio
 from strands import tool
 from strands.models import Model
 
@@ -44,8 +45,8 @@ def say(text: str) -> dict[str, Any]:
 class ScriptedModel(Model):
     """Each model call replays the next turn of `call(...)` and `say(...)` blocks."""
 
-    def __init__(self, *turns: list[dict[str, Any]], delay: float = 0) -> None:
-        self.turns, self.delay = list(turns), delay
+    def __init__(self, *turns: list[dict[str, Any]], hang: threading.Event | None = None) -> None:
+        self.turns, self.hang = list(turns), hang
         self.tool_names: list[str] = []
         self.messages: list[Any] = []
 
@@ -61,7 +62,8 @@ class ScriptedModel(Model):
     async def stream(
         self, messages: Any, tool_specs: Any = None, *args: Any, **kwargs: Any
     ) -> AsyncIterator[Any]:
-        await asyncio.sleep(self.delay)
+        if self.hang is not None:  # a model call that outlives the deadline, until released
+            await asyncio.to_thread(self.hang.wait, 30)
         self.tool_names = sorted(spec["name"] for spec in tool_specs or [])
         self.messages = list(messages)
         blocks = self.turns.pop(0) if self.turns else [say("No more scripted turns.")]
@@ -419,12 +421,28 @@ def test_the_tool_call_budget_is_per_request_and_shared_by_the_subagents(runtime
     assert len(runtime.mcp.calls) == budget + 1
 
 
-def test_a_subagent_that_runs_too_long_is_stopped(runtime, monkeypatch):
+@pytest.fixture
+def blocked_worker(runtime, monkeypatch):
+    """For a worker the test leaves blocked past the deadline: the event it waits on.
+
+    The runner gives a stopped worker JOIN_AFTER_STOP_SECONDS to return, and doesn't wait
+    for one blocked elsewhere; here it is always blocked, so that wait is shortened. At
+    teardown the event is set and the worker joined, so it never runs into a later test.
+    """
+    monkeypatch.setattr(runtime.runner, "JOIN_AFTER_STOP_SECONDS", 0.05)
+    release = threading.Event()
+    yield release
+    release.set()
+    for worker in subagent_threads():
+        worker.join(5)
+
+
+def test_a_subagent_that_runs_too_long_is_stopped(runtime, monkeypatch, blocked_worker):
     monkeypatch.setattr(runtime.context, "REQUEST_TIMEOUT_SECONDS", 0.2)
     start_request(runtime)
 
     started = time.monotonic()
-    answer = runtime.ask("hydrolix_agent", ScriptedModel([say("late")], delay=5))
+    answer = runtime.ask("hydrolix_agent", ScriptedModel([say("late")], hang=blocked_worker))
 
     assert time.monotonic() - started < 3
     assert "stopped" in answer
@@ -432,19 +450,21 @@ def test_a_subagent_that_runs_too_long_is_stopped(runtime, monkeypatch):
 
 @pytest.mark.parametrize("hang", ["secret and MCP start", "MCP tool listing"])
 def test_a_subagent_whose_setup_hangs_is_stopped_on_the_request_deadline(
-    runtime, monkeypatch, hang
+    runtime, monkeypatch, hang, blocked_worker
 ):
     monkeypatch.setattr(runtime.context, "REQUEST_TIMEOUT_SECONDS", 0.3)
     if hang == "secret and MCP start":
 
         def slow_client(*_):
-            time.sleep(3)
+            blocked_worker.wait(30)
             return runtime.mcp
 
         monkeypatch.setattr(runtime.runner, "create_hydrolix_mcp_client", slow_client)
     else:
         listing = runtime.mcp.list_tools_sync
-        monkeypatch.setattr(runtime.mcp, "list_tools_sync", lambda: time.sleep(3) or listing())
+        monkeypatch.setattr(
+            runtime.mcp, "list_tools_sync", lambda: blocked_worker.wait(30) or listing()
+        )
     start_request(runtime)
 
     started = time.monotonic()
@@ -644,7 +664,14 @@ def hung_mcp(runtime, monkeypatch, tmp_path):
     )
     monkeypatch.setattr(runtime.runner, "_get_hydrolix_mcp_env", lambda: {})
     monkeypatch.setattr(runtime.runner, "create_hydrolix_mcp_client", runtime.real_create_client)
-    monkeypatch.setattr(runtime.context, "REQUEST_TIMEOUT_SECONDS", 2)
+    # The server is real and hangs at tools/list, so any deadline ends the run; a shorter one
+    # only shortens the test. A deadline that lands while it is still starting is covered
+    # too: the worker then stops it once started (test_a_run_abandoned_while_starting...).
+    monkeypatch.setattr(runtime.context, "REQUEST_TIMEOUT_SECONDS", 0.5)
+    # mcp's stdio_client waits this long for the server to exit on stdin EOF before SIGTERM.
+    # This server ignores EOF, so the wait always runs out: the SIGTERM path is still the one
+    # under test, just reached after 0.2 s instead of 2 s.
+    monkeypatch.setattr(stdio, "PROCESS_TERMINATION_TIMEOUT", 0.2)
     yield pids
     # Let abandoned workers finish their cleanup, then insist nothing this test started lives
     # on: a server still running here is a leak (killed first, so no run leaves orphans).
@@ -664,6 +691,7 @@ def subagent_threads() -> list[threading.Thread]:
     return [t for t in threading.enumerate() if t.name in SUBAGENTS]
 
 
+@pytest.mark.slow  # a real MCP server process
 def test_a_hung_mcp_server_is_killed_and_its_worker_ends_at_the_deadline(runtime, hung_mcp):
     start_request(runtime)
 
@@ -675,6 +703,7 @@ def test_a_hung_mcp_server_is_killed_and_its_worker_ends_at_the_deadline(runtime
     assert subagent_threads() == []
 
 
+@pytest.mark.slow  # a real MCP server process
 def test_timed_out_requests_leave_no_processes_or_threads_behind(runtime, hung_mcp):
     threads_before = threading.active_count()
 
@@ -757,6 +786,7 @@ def test_a_started_run_abandoned_at_the_deadline_is_stopped_once(runtime):
     assert client.stops == 1
 
 
+@pytest.mark.slow  # a real MCP server process
 def test_a_failing_client_stop_still_returns_stopped_and_kills_the_child(
     runtime, hung_mcp, monkeypatch, capsys
 ):
@@ -775,6 +805,7 @@ def test_a_failing_client_stop_still_returns_stopped_and_kills_the_child(
     assert "RuntimeError" in logged and "RAW-CLEANUP-DETAIL" not in logged + answer
 
 
+@pytest.mark.slow  # a real MCP server process
 def test_a_stop_that_fails_after_cleaning_up_still_answers_stopped(runtime, hung_mcp, monkeypatch):
     """Strands can raise from stop() after its thread joined and the child was reaped: the
     fallback then finds no process of ours, signals nothing, and the answer is unchanged."""

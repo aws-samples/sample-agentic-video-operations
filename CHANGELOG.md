@@ -12,6 +12,12 @@ the top.
 Work merged after the latest release candidate. It moves into a candidate
 section when the next candidate is cut.
 
+## [media-ops-samples-2026-10-06] — release candidate, update 5 (web install fix, truthful no-frames results)
+
+Branch: `release-candidate/media-ops-samples-2026-10-06`. Fixes the Hydrolix web install on
+Node 22, reports no score when no frame was sampled, faster tests with an offline guard, and the
+signed-parameters rule for every write.
+
 ### Added
 - **Workflow discovery contract (F3):** `docs/extend_agentic_iops_streaming.md` §8 defines the
   coordinator's four workflow tools (discover, save, list, get), their records, the
@@ -19,6 +25,51 @@ section when the next candidate is cut.
   IAM. `save_workflow` is a §4 write and returns an `ActionResult`. The tools are built
   against it. `ReplayFixtureClient` replays a recorded AWS error,
   `{"error": {"Code": ..., "Message": ...}}`, as the `ClientError` AWS would raise.
+
+### Changed
+- **`just test` runs in about a quarter of the time (T75):** 66 s to 18 s on the same loaded
+  laptop. The time was not in the code under test:
+  - the Hydrolix deadline tests waited out real deadlines and grace periods around workers
+    they had left blocked; the blocked fakes now wait on an event the test releases;
+  - the hung-MCP-server tests use a 0.5 s deadline and a 0.2 s stdio grace period, still
+    killing a real server that ignores EOF;
+  - the video-quality frames are drawn once per process, not once per test module;
+  - the doc-claims gate and the Docker context listing no longer walk `node_modules`,
+    `.venv` and `.git` (same results, now pinned);
+  - the eight tests that start real processes are marked `slow`: `just test-slow` runs
+    them, and CI runs both.
+
+### Fixed
+- **Hydrolix web installs on Node 22:** `package-lock.json` is regenerated with Node 22 (npm 10.9), the version CI runs. npm 11 had dropped an optional peer that npm 10's `npm ci` requires, so the install failed there.
+- **Every test suite runs under the offline guard (T81):** the guard T75 added covered only
+  `scripts/tests`, so the samples' and packages' tests could reach the network unnoticed. It
+  is now the root `conftest.py` (allowed by the layout check, kept out of the image's build
+  context), and covers the unit, slow and eval runs. Run under it, all 1037 tests pass: the
+  Hydrolix memory client was the only leak.
+- **A picture with no frames no longer scores 100 (T78):** with no thumbnail sampled, both
+  visual-quality tools returned `score: 100.0` and `deterministic_score: 100.0` beside an
+  `UNVERIFIED` status, so anything reading the score saw a perfect picture. Both scores are
+  now `null` and confidence is 0.
+- **`analyze_channel_visual_quality` stops early on a conclusive answer (T79):** thumbnails
+  disabled in the channel's configuration, or a channel that is not running, now gives no
+  frames before the first read, where it waited out the whole window (34 s on RC4). Enabled
+  thumbnails that haven't arrived yet are still polled, as in MediaConnect.
+- **A disconnected MediaConnect source is named first (T80):** with no frames and
+  `SourceConnected` at 0, the next action says no sender was connected, not "Enable
+  thumbnails". A service reason quoted in the note no longer doubles its full stop.
+- **Two Hydrolix tests reached the network (T75):** the memory hook built a real AgentCore
+  `MemoryClient`, so boto3 looked for credentials at the EC2 metadata endpoint: 4 s per run
+  off AWS, and an answer on AWS. The fixtures stub it, and a guard in `scripts/tests` now
+  fails any test that connects off the machine.
+
+### Security
+- **A write must check its signed parameters (T73):** `require_action_approval` never reads
+  an approval's `parameters`, so a write that checked only the approval could act on inputs
+  nobody signed. No current write did: both packs already compared them. The rule is now
+  stated in `docs/write_safe_tools.md` §3, and `require_signed_parameters` in
+  `media_ops_contracts` is the one check both packs call. A contract test sends every
+  registered pack write an approval with a changed or an extra signed input, and expects a
+  refusal, so a new write that skips the check fails CI.
 
 ## [media-ops-samples-2026-10-06] — release candidate, update 4 (live-deploy fixes and hardening)
 

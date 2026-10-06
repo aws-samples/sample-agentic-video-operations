@@ -22,3 +22,4 @@ docs/images
 samples/hydrolix
 samples/agentic-iops-streaming/cdk
 samples/*/tests
+conftest.py

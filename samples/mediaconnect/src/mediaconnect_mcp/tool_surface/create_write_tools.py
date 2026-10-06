@@ -7,6 +7,7 @@ from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import ApprovedAction
 from media_ops_contracts.domain_pack import WriteTool
 from media_ops_contracts.read_utc_now import read_utc_now
+from media_ops_contracts.require_signed_parameters import require_signed_parameters
 from media_ops_contracts.resolve_approval_signing_key import resolve_approval_signing_key
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from mediaconnect_mcp.adapters.media_connect import start_flow as start_adapter
@@ -17,16 +18,14 @@ from mediaconnect_mcp.settings.runtime_settings import RuntimeSettings
 
 
 def require_matching_approval(approved_action: ApprovedAction, action: str, flow_arn: str) -> None:
-    if (
-        approved_action.action != action
-        or approved_action.resource_id != flow_arn
-        or approved_action.parameters
-    ):
+    """The approval must name this flow action, and sign no inputs: start and stop take none."""
+    if approved_action.action != action or approved_action.resource_id != flow_arn:
         raise ToolFailure(
             FailureKind.APPROVAL_REQUIRED,
-            "The approval does not match this flow action and its inputs.",
+            "The approval does not match this flow action.",
             "Propose the action again and ask the operator to approve it.",
         )
+    require_signed_parameters(approved_action, {})
 
 
 def create_write_tools(

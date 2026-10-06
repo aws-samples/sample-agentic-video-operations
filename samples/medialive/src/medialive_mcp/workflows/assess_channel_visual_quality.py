@@ -5,6 +5,11 @@ and the active input into findings.
 The channel is never HEALTHY unless every pipeline is: a pipeline without thumbnails, or
 without a trusted vision verdict, is UNVERIFIED and keeps the channel from reading healthy.
 Telemetry that cannot be read counts as unknown, never as agreement.
+
+Sampling stops before the first read only on a conclusive answer from the channel itself:
+thumbnails disabled in its configuration, or the channel not running. Thumbnails that are
+enabled on a running channel but haven't arrived yet are transient, so the whole window is
+polled, as MediaConnect does.
 """
 
 from collections.abc import Callable
@@ -28,7 +33,7 @@ from media_ops_video_quality.fuse_with_telemetry import (
 )
 from media_ops_video_quality.score_with_vision import score_with_vision
 from medialive_mcp.adapters.media_live.describe_channel import describe_channel
-from medialive_mcp.adapters.media_live.media_live_records import ChannelDetails
+from medialive_mcp.adapters.media_live.media_live_records import ChannelDetails, ChannelState
 from medialive_mcp.adapters.media_live.sample_channel_frames import sample_channel_frames
 from medialive_mcp.bootstrap.create_medialive_clients import MediaLiveClients
 from medialive_mcp.domain.metric_series import MetricSeries
@@ -80,15 +85,20 @@ def assess_channel_visual_quality(
             f"Channel {channel_id} has no pipeline {pipeline_id}.",
             f"Use one of: {', '.join(pipelines)}.",
         )
-    sampled = sample_channel_frames(
-        clients.medialive, channel_id, pipelines,
-        frames=frames, window_seconds=window_seconds, sleep=sleep,
+    conclusive = no_thumbnail_reason(details)
+    sampled = (
+        {pipeline: [] for pipeline in pipelines}
+        if conclusive
+        else sample_channel_frames(
+            clients.medialive, channel_id, pipelines,
+            frames=frames, window_seconds=window_seconds, sleep=sleep,
+        )
     )  # fmt: skip
     # Every pipeline is scored, in the same order, before any filtering: the channel status
     # is the worst pipeline's whatever was asked, and one pipeline's assessment never
     # depends on whether another was requested.
     results = [
-        assess_pipeline(clients, pipeline, sampled[pipeline], frames, vision_model_id)
+        assess_pipeline(clients, pipeline, sampled[pipeline], frames, vision_model_id, conclusive)
         for pipeline in pipelines
     ]
     telemetry, note = read_telemetry(clients, channel_id, details)
@@ -114,12 +124,22 @@ def assess_channel_visual_quality(
     )
 
 
+def no_thumbnail_reason(details: ChannelDetails) -> str | None:
+    """Why no thumbnail can arrive, when the channel says so; None when one still might."""
+    if details.thumbnails is False:
+        return "thumbnails are disabled in the channel's configuration (ThumbnailConfiguration)"
+    if details.state is not ChannelState.RUNNING:
+        return f"the channel is {details.state}"
+    return None
+
+
 def assess_pipeline(
     clients: MediaLiveClients,
     pipeline: str,
     window: list[SampledFrame],
     frames: int,
     vision_model_id: str | None,
+    conclusive: str | None,
 ) -> PipelineVisualQuality:
     vision: VisionScores | None = None
     status: VisionStatus = "not_requested"  # the operator chose no model: not a failure
@@ -128,11 +148,12 @@ def assess_pipeline(
             clients.bedrock, vision_model_id, [f.jpeg for f in window]
         )
     assessment = assess_window(window, requested_frames=frames, vision=vision, vision_status=status)
-    note = (
-        None
-        if window
-        else "no thumbnails: enable them in the channel settings, or start the channel"
-    )
+    note = None
+    if not window:
+        reason = conclusive or f"none arrived in the {frames}-frame window"
+        note = (
+            f"no thumbnails: {reason}. Enable them in the channel settings, or start the channel."
+        )
     return PipelineVisualQuality(pipeline_id=pipeline, assessment=assessment, note=note)
 
 

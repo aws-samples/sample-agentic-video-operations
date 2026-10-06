@@ -73,6 +73,25 @@ def test_the_matcher_follows_dockerignore_rules():
     assert not context.is_excluded("a/cdk.out/x", [(False, context.compile_pattern("cdk.out"))])
 
 
+@pytest.mark.parametrize(
+    ("ignore", "listed"),
+    [
+        # A `!` after the directory's rule can re-include inside it: the tree is walked.
+        ("build\n!build/keep.txt\n", {"Dockerfile", ".dockerignore", "build/keep.txt"}),
+        # A rule after the last `!` excludes the whole tree: pruned, and nothing comes back.
+        ("!**/keep.txt\nbuild\n", {"Dockerfile", ".dockerignore"}),
+    ],
+    ids=["negation-after-the-directory", "directory-after-the-negation"],
+)
+def test_a_pruned_tree_is_one_no_later_rule_could_re_include(tmp_path, ignore, listed):
+    (tmp_path / "build" / "deep").mkdir(parents=True)
+    for name in ("build/keep.txt", "build/deep/keep.txt", "build/other.txt", "Dockerfile"):
+        (tmp_path / name).write_text("x")
+    (tmp_path / ".dockerignore").write_text(ignore)
+
+    assert set(context.list_context(tmp_path / "Dockerfile", tmp_path)) == listed
+
+
 def test_every_planted_path_is_forbidden():
     """The planted paths are the forbidden list: a planted path the matcher allows proves
     nothing about the ignore files (T65: session files hold operators' conversations)."""

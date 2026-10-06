@@ -47,6 +47,11 @@ test sample="":
       *)         just _unknown "{{ sample }}" ;;
     esac
 
+# The tests that start real processes (MCP servers, a hung server the deadline must kill)
+[group('develop')]
+test-slow:
+    uv run pytest -m slow
+
 # Lint and format check
 [group('develop')]
 lint:
