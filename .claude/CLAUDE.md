@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Required Development Standard
+
+Before adding or refactoring application code, read and follow
+[`DEVELOPMENT_GUIDELINES.md`](DEVELOPMENT_GUIDELINES.md).
+
+The development guidelines are normative for new work in
+`media-services-langchain`. They define action-oriented naming, small file and
+unit budgets, one-way dependencies, layer shims, operational safety controls,
+the target project layout, testing expectations, mandatory README and
+supporting-document standards, and the incremental refactor sequence.
+
+When guidance conflicts, use this priority:
+
+1. Explicit user requirements.
+2. Security and operational-safety rules.
+3. `DEVELOPMENT_GUIDELINES.md`.
+4. Existing repository conventions.
+
 ## Project Overview
 
 A collection of AI agent samples for intelligent media operations — monitoring, diagnosing, and managing live streaming pipelines using MCP servers and Amazon Bedrock AgentCore. Each sample uses specialized agents (Strands Agents SDK or LangChain/LangGraph) to interact with AWS media services (MediaLive, MediaConnect), CDN analytics (Hydrolix, CMCD/InfluxDB), and observability data.

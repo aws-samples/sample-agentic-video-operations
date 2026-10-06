@@ -1,0 +1,44 @@
+# Root of the uv workspace. One lock, one virtual environment, one set of tool settings.
+# Each sample joins `members` (and leaves the ruff/pytest exclusions) when it is converted
+# to .claude/contracts/sample-contract.md.
+[project]
+name = "sample-agentic-video-operations"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["media-ops-contracts"]
+
+[dependency-groups]
+dev = ["pytest>=8.3,<9", "ruff>=0.12,<0.13"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["media_ops_contracts"]
+
+[tool.uv.sources]
+media-ops-contracts = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Unconverted samples; remove each entry in the step that converts the sample.
+extend-exclude = [
+  "cmcd-mcp-server",
+  "mediaconnect-mcp-server",
+  "medialive-mcp-server",
+  "media-services-langchain",
+  "hydrolix-cdn-insights",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+# Add each converted sample's tests/ directory here.
+testpaths = ["media_ops_contracts/tests"]
+addopts = "--strict-markers --tb=short -m 'not eval and not integration'"
+markers = [
+  "eval: fixture-replay scenario evaluations (run with `just eval`)",
+  "integration: needs a deployed stack and AWS credentials",
+]
