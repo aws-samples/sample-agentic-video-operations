@@ -1,0 +1,27 @@
+{
+  "read": [
+    {"actions": ["mediaconnect:ListFlows"], "resources": ["*"]},
+    {
+      "actions": [
+        "mediaconnect:DescribeFlow",
+        "mediaconnect:DescribeFlowSourceMetadata",
+        "mediaconnect:DescribeFlowSourceThumbnail"
+      ],
+      "resources": ["arn:aws:mediaconnect:{region}:{account}:flow:*"]
+    },
+    {"actions": ["cloudwatch:GetMetricData"], "resources": ["*"]},
+    {
+      "actions": ["bedrock:InvokeModel"],
+      "resources": [
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:{region}:{account}:inference-profile/*"
+      ]
+    }
+  ],
+  "write": [
+    {
+      "actions": ["mediaconnect:StartFlow", "mediaconnect:StopFlow"],
+      "resources": ["arn:aws:mediaconnect:{region}:{account}:flow:*"]
+    }
+  ]
+}

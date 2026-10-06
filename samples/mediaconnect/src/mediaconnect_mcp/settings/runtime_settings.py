@@ -34,3 +34,7 @@ class RuntimeSettings(BaseSettings):
         if missing:
             raise ValueError(f"Missing required setting(s): {', '.join(missing)}")
         return self
+
+
+def load_runtime_settings() -> RuntimeSettings:
+    return RuntimeSettings()
