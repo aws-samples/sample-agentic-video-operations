@@ -19,10 +19,11 @@ def media_findings(
     probe = context.media_probe()
     if probe is None:
         return []
-    probes: list[SegmentProbe] = []
+    findings = []
     for parsed in graph.media_playlists():
         if parsed.media is None or not parsed.media.segments:
             continue
+        probes: list[SegmentProbe] = []
         targets = [parsed.media.segments[0], parsed.media.segments[-1]]
         for segment in targets[:MAX_MEDIA_PROBES_PER_PLAYLIST]:
             url = resolve_uri(segment.uri, parsed.url)
@@ -32,7 +33,9 @@ def media_findings(
                 continue  # this scenario or stream records no media for this URL
             evidence.record_tool_run("ffprobe", url, summarize_probe(result))
             probes.append(result)
-    return detect_media_defects(probes)
+        discontinuity_present = any(s.discontinuity for s in parsed.media.segments)
+        findings.extend(detect_media_defects(probes, discontinuity_present=discontinuity_present))
+    return findings
 
 
 def summarize_probe(result: SegmentProbe) -> str:

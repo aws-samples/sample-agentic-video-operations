@@ -5,6 +5,8 @@ from hls_doctor.adapters.http.classify_http_error import (
     require_usable_entry_url,
 )
 from hls_doctor.adapters.http.redact_url import redact_url
+from hls_doctor.domain.align.compare_renditions import compare_renditions
+from hls_doctor.domain.align.match_rendition_positions import read_position
 from hls_doctor.domain.correlate.correlate_findings import correlate_findings
 from hls_doctor.domain.correlate.finding_model import Finding
 from hls_doctor.domain.evidence.correlate_http_patterns import derive_unreachable_findings
@@ -19,7 +21,9 @@ from hls_doctor.domain.report.summarize_presentation import (
     build_inventory,
     summarize_presentation,
 )
+from hls_doctor.domain.scte35.collect_ad_breaks import collect_ad_breaks, validate_ad_breaks
 from hls_doctor.domain.validate.validate_encryption import validate_encryption
+from hls_doctor.domain.validate.validate_interstitials import validate_interstitials
 from hls_doctor.domain.validate.validate_media_playlist import validate_media_playlist
 from hls_doctor.domain.validate.validate_multivariant import validate_multivariant
 from hls_doctor.domain.validate.validate_renditions import validate_renditions
@@ -30,6 +34,7 @@ from hls_doctor.domain.versioning.compute_required_version import (
     required_multivariant_version,
 )
 from hls_doctor.workflows.build_probe_context import ProbeContext
+from hls_doctor.workflows.inspect_interstitial import inspect_interstitials
 from hls_doctor.workflows.probe_media_samples import media_findings
 from hls_doctor.workflows.probe_segment_samples import (
     SamplePlan,
@@ -59,6 +64,9 @@ def inspect_stream(
             version_findings(graph),
             delivery_findings(evidence, graph, plan),
             media_findings(graph, context, evidence),
+            ad_signaling_findings(graph),
+            interstitial_findings(graph, context, evidence),
+            alignment_findings(graph),
             run_validator_crosscheck(entry_url, context.validator),
             *watch_findings(graph, context, evidence, watch_seconds),
         ]
@@ -70,6 +78,37 @@ def inspect_stream(
         findings=findings,
         evidence=evidence,
     )
+
+
+def ad_signaling_findings(graph: PresentationGraph) -> list[Finding]:
+    findings: list[Finding] = []
+    for parsed in graph.playlists.values():
+        if parsed.media is None:
+            continue
+        breaks = collect_ad_breaks(parsed.lines, parsed.media)
+        findings.extend(validate_ad_breaks(parsed.url, breaks))
+        findings.extend(validate_interstitials(parsed.url, parsed.media))
+    return findings
+
+
+def interstitial_findings(
+    graph: PresentationGraph, context: ProbeContext, evidence: EvidenceStore
+) -> list[Finding]:
+    return inspect_interstitials(graph, context, evidence)
+
+
+def alignment_findings(graph: PresentationGraph) -> list[Finding]:
+    positions = [
+        read_position(parsed.url, node_role(graph, parsed.url), parsed.media)
+        for parsed in graph.media_playlists()
+        if parsed.media is not None
+    ]
+    return compare_renditions(positions)
+
+
+def node_role(graph: PresentationGraph, url: str) -> str:
+    node = graph.nodes.get(url)
+    return str(node.role) if node is not None and node.role else "video"
 
 
 def watch_findings(

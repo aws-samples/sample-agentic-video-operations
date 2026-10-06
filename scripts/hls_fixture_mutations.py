@@ -200,6 +200,184 @@ def pts_regression(files: ScenarioFiles) -> ScenarioFiles:
     return mutated
 
 
+SPLICE_INSERT_60S_B64 = "/DAvAAAAAAAA///wFAVIAACPf+/+c2nALv4AUsz1AAAAAAAKAAhDVUVJAAABNWLbowo="
+INTERSTITIAL_TAG = (
+    '#EXT-X-DATERANGE:ID="mid-1",CLASS="com.apple.hls.interstitial",'
+    'START-DATE="2026-10-06T14:01:00.000Z",DURATION=15.0,'
+    'X-ASSET-LIST="https://demo.example/live/ads/list.json"'
+)
+COMPATIBLE_ASSET_BODY = (
+    "#EXTM3U\n#EXT-X-VERSION:7\n"
+    '#EXT-X-STREAM-INF:BANDWIDTH=2000000,CODECS="avc1.640020,mp4a.40.2",'
+    "RESOLUTION=1280x720\nspot/v720.m3u8\n"
+)
+INCOMPATIBLE_ASSET_BODY = (
+    "#EXTM3U\n#EXT-X-VERSION:7\n"
+    '#EXT-X-STREAM-INF:BANDWIDTH=2000000,CODECS="mp4v.20.9,mp4a.40.2",'
+    "RESOLUTION=1280x720\nspot/v720.m3u8\n"
+)
+
+
+def _shift_program_date_times(body: str, seconds: float) -> str:
+    import re
+    from datetime import datetime, timedelta
+
+    def shift(match: "re.Match[str]") -> str:
+        stamp = datetime.fromisoformat(match.group(1).replace("Z", "+00:00"))
+        shifted = stamp + timedelta(seconds=seconds)
+        return (
+            "#EXT-X-PROGRAM-DATE-TIME:"
+            + shifted.strftime("%Y-%m-%dT%H:%M:%S.")
+            + (f"{shifted.microsecond // 1000:03d}Z")
+        )
+
+    return re.sub(r"#EXT-X-PROGRAM-DATE-TIME:([0-9T:.\-]+Z)", shift, body)
+
+
+def audio_drift(files: ScenarioFiles) -> ScenarioFiles:
+    """The audio rendition's program clock trails video by 2.1 seconds."""
+    mutated = copy.deepcopy(files)
+    url = next(url for url in _playlists_with_sequence(mutated) if "/audio/" in url)
+    for entry in _exchanges(mutated)[url]["sequence"]:
+        entry["body"] = _shift_program_date_times(entry["body"], -2.1)
+    return mutated
+
+
+def missing_discontinuity(files: ScenarioFiles) -> ScenarioFiles:
+    """The probed 1080p segments change codec with no discontinuity declared."""
+    mutated = copy.deepcopy(files)
+    base = "https://demo.example/live/v1080"
+    h264 = [
+        {"index": 0, "codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}
+    ]
+    hevc = [
+        {"index": 0, "codec_type": "video", "codec_name": "hevc", "width": 1920, "height": 1080}
+    ]
+    packets = [{"codec_type": "video", "pts_time": f"{i * 0.0333:.4f}"} for i in range(6)]
+    mutated[FFPROBE] = {
+        f"{base}/seg18416.m4s": {
+            "streams": h264,
+            "packets": packets,
+            "format": {"format_name": "mov,mp4,m4a"},
+        },
+        f"{base}/seg18421.m4s": {
+            "streams": hevc,
+            "packets": packets,
+            "format": {"format_name": "mov,mp4,m4a"},
+        },
+    }
+    return mutated
+
+
+def cueout_without_cuein(files: ScenarioFiles) -> ScenarioFiles:
+    """An ad break opens with CUE-OUT and never returns to the program."""
+    mutated = copy.deepcopy(files)
+    url = next(url for url in _playlists_with_sequence(mutated) if "/v1080/" in url)
+    first = _exchanges(mutated)[url]["sequence"][0]
+    first["body"] = first["body"].replace(
+        "#EXTINF:6.00000,\nseg18419.m4s",
+        "#EXT-X-CUE-OUT:DURATION=30.0\n#EXTINF:6.00000,\nseg18419.m4s",
+    )
+    return mutated
+
+
+def scte35_duration_mismatch(files: ScenarioFiles) -> ScenarioFiles:
+    """The DATERANGE duration disagrees with its decoded SCTE-35 payload."""
+    import base64 as b64
+
+    mutated = copy.deepcopy(files)
+    payload_hex = "0x" + b64.b64decode(SPLICE_INSERT_60S_B64).hex().upper()
+    daterange = (
+        '#EXT-X-DATERANGE:ID="break-1",START-DATE="2026-10-06T14:00:30.000Z",'
+        'END-DATE="2026-10-06T14:01:00.000Z",DURATION=30.0,'
+        f"SCTE35-OUT={payload_hex}"
+    )
+    for prefix in ("v1080", "v720", "audio"):
+        url = next(u for u in _playlists_with_sequence(mutated) if f"/{prefix}/" in u)
+        for entry in _exchanges(mutated)[url]["sequence"]:
+            entry["body"] = entry["body"].replace(
+                '#EXT-X-MAP:URI="init.mp4"', '#EXT-X-MAP:URI="init.mp4"\n' + daterange
+            )
+    return mutated
+
+
+def _inject_interstitial(files: ScenarioFiles, prefixes: tuple[str, ...]) -> ScenarioFiles:
+    mutated = copy.deepcopy(files)
+    for prefix in prefixes:
+        url = next(u for u in _playlists_with_sequence(mutated) if f"/{prefix}/" in u)
+        for entry in _exchanges(mutated)[url]["sequence"]:
+            entry["body"] = entry["body"].replace(
+                '#EXT-X-MAP:URI="init.mp4"',
+                '#EXT-X-MAP:URI="init.mp4"\n' + INTERSTITIAL_TAG,
+            )
+    return mutated
+
+
+def interstitial_asset_404(files: ScenarioFiles) -> ScenarioFiles:
+    """The interstitial's X-ASSET-LIST URL returns 404."""
+    mutated = _inject_interstitial(files, ("v1080", "v720", "audio"))
+    _exchanges(mutated)["https://demo.example/live/ads/list.json"] = {
+        "status": 404,
+        "headers": {"content-type": "text/html", "server": "demo-cdn"},
+        "body": NOT_FOUND_BODY,
+    }
+    return mutated
+
+
+def _asset_list_entries(asset_body: str) -> dict[str, Any]:
+    return {
+        "https://demo.example/live/ads/list.json": {
+            "status": 200,
+            "headers": {"content-type": "application/json", "server": "demo-cdn"},
+            "body": json.dumps(
+                {"ASSETS": [{"URI": "https://demo.example/live/ads/spot.m3u8", "DURATION": 15.0}]}
+            ),
+        },
+        "https://demo.example/live/ads/spot.m3u8": {
+            "status": 200,
+            "headers": {"content-type": "application/vnd.apple.mpegurl", "server": "demo-cdn"},
+            "body": asset_body,
+        },
+    }
+
+
+def interstitial_bad_asset(files: ScenarioFiles) -> ScenarioFiles:
+    """The interstitial asset declares a codec the primary clients cannot play."""
+    mutated = _inject_interstitial(files, ("v1080", "v720", "audio"))
+    _exchanges(mutated).update(_asset_list_entries(INCOMPATIBLE_ASSET_BODY))
+    return mutated
+
+
+def interstitial_rendition_mismatch(files: ScenarioFiles) -> ScenarioFiles:
+    """The interstitial event is signaled in video but missing from audio."""
+    mutated = _inject_interstitial(files, ("v1080", "v720"))
+    _exchanges(mutated).update(_asset_list_entries(COMPATIBLE_ASSET_BODY))
+    return mutated
+
+
+def variant_lag(files: ScenarioFiles) -> ScenarioFiles:
+    """The 720p variant publishes two segments behind its peers."""
+    mutated = copy.deepcopy(files)
+    url = next(u for u in _playlists_with_sequence(mutated) if "/v720/" in u)
+    for entry in _exchanges(mutated)[url]["sequence"]:
+        body = entry["body"]
+        for msn in range(18410, 18428):
+            body = body.replace(f"seg{msn}.m4s", f"seg{msn - 2}.m4s")
+        body = body.replace("#EXT-X-MEDIA-SEQUENCE:184", "#EXT-X-MEDIA-SEQUENCE:LAG184")
+        import re as _re
+
+        body = _re.sub(
+            r"#EXT-X-MEDIA-SEQUENCE:LAG(\d+)",
+            lambda m: f"#EXT-X-MEDIA-SEQUENCE:{int(m.group(1)) - 2}",
+            body,
+        )
+        entry["body"] = body
+    for msn in (18414, 18415):
+        source = dict(_exchanges(mutated)["https://demo.example/live/v720/seg18416.m4s"])
+        _exchanges(mutated)[f"https://demo.example/live/v720/seg{msn}.m4s"] = source
+    return mutated
+
+
 MUTATIONS: dict[str, tuple[str, Mutation]] = {
     "hls_missing_variant": ("hls_clean_vod", missing_variant),
     "hls_wrong_version": ("hls_clean_vod", wrong_version),
@@ -212,6 +390,14 @@ MUTATIONS: dict[str, tuple[str, Mutation]] = {
     "hls_frozen_playlist": ("hls_clean_live", frozen_playlist),
     "hls_stale_cdn_manifest": ("hls_clean_live", stale_cdn_manifest),
     "hls_signaled_gap": ("hls_clean_live", signaled_gap),
+    "hls_audio_drift": ("hls_clean_live", audio_drift),
+    "hls_missing_discontinuity": ("hls_clean_live", missing_discontinuity),
+    "hls_cueout_without_cuein": ("hls_clean_live", cueout_without_cuein),
+    "hls_scte35_duration_mismatch": ("hls_clean_live", scte35_duration_mismatch),
+    "hls_interstitial_asset_404": ("hls_clean_live", interstitial_asset_404),
+    "hls_interstitial_bad_asset": ("hls_clean_live", interstitial_bad_asset),
+    "hls_interstitial_rendition_mismatch": ("hls_clean_live", interstitial_rendition_mismatch),
+    "hls_variant_lag": ("hls_clean_live", variant_lag),
 }
 
 

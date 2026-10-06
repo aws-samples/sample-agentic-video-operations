@@ -33,6 +33,26 @@ EXPECTATIONS = {
         LIVE_ENTRY, 10, "degraded", "Stale live playlist served from cache",
     ),
     "hls_signaled_gap": (LIVE_ENTRY, 0, "healthy", None),
+    "hls_audio_drift": (LIVE_ENTRY, 0, "at-risk", "Audio rendition drifts from video"),
+    "hls_missing_discontinuity": (
+        LIVE_ENTRY, 0, "degraded", "Codec change without a signaled discontinuity",
+    ),
+    "hls_cueout_without_cuein": (
+        LIVE_ENTRY, 0, "at-risk", "Ad break opened without a matching CUE-IN",
+    ),
+    "hls_scte35_duration_mismatch": (
+        LIVE_ENTRY, 0, "at-risk", "Ad break duration disagrees with its SCTE-35 payload",
+    ),
+    "hls_interstitial_asset_404": (
+        LIVE_ENTRY, 0, "degraded", "Interstitial asset list is unreachable",
+    ),
+    "hls_interstitial_bad_asset": (
+        LIVE_ENTRY, 0, "degraded", "Interstitial asset uses an incompatible video codec",
+    ),
+    "hls_interstitial_rendition_mismatch": (
+        LIVE_ENTRY, 0, "degraded", "Date-range events are missing from a rendition",
+    ),
+    "hls_variant_lag": (LIVE_ENTRY, 0, "at-risk", "One variant lags its peers at the live edge"),
 }  # fmt: skip
 
 

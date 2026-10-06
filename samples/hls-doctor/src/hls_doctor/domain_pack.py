@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from hls_doctor.settings.runtime_settings import load_hls_doctor_settings
+from hls_doctor.tool_surface.create_analysis_tools import create_analysis_tools
 from hls_doctor.tool_surface.create_inspection_tools import create_inspection_tools
 from hls_doctor.tool_surface.create_probe_tools import create_probe_tools
 from media_ops_contracts.domain_pack import ReadTool, WriteTool
@@ -32,4 +33,10 @@ class HlsPack:
 
 def create_domain_pack(*, clock: Callable[[], datetime] = read_utc_now) -> HlsPack:
     settings = load_hls_doctor_settings()
-    return HlsPack(reads=[*create_inspection_tools(settings), *create_probe_tools(settings)])
+    return HlsPack(
+        reads=[
+            *create_inspection_tools(settings),
+            *create_probe_tools(settings),
+            *create_analysis_tools(settings),
+        ]
+    )

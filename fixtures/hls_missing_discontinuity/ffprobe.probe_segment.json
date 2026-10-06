@@ -1,0 +1,82 @@
+{
+ "https://demo.example/live/v1080/seg18416.m4s": {
+  "streams": [
+   {
+    "index": 0,
+    "codec_type": "video",
+    "codec_name": "h264",
+    "width": 1920,
+    "height": 1080
+   }
+  ],
+  "packets": [
+   {
+    "codec_type": "video",
+    "pts_time": "0.0000"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0333"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0666"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0999"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1332"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1665"
+   }
+  ],
+  "format": {
+   "format_name": "mov,mp4,m4a"
+  }
+ },
+ "https://demo.example/live/v1080/seg18421.m4s": {
+  "streams": [
+   {
+    "index": 0,
+    "codec_type": "video",
+    "codec_name": "hevc",
+    "width": 1920,
+    "height": 1080
+   }
+  ],
+  "packets": [
+   {
+    "codec_type": "video",
+    "pts_time": "0.0000"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0333"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0666"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0999"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1332"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1665"
+   }
+  ],
+  "format": {
+   "format_name": "mov,mp4,m4a"
+  }
+ }
+}

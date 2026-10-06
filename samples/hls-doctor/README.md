@@ -155,6 +155,12 @@ verification.
 | `parse_playlist` | read | Parse one playlist into structure counts and unknown-tag lines |
 | `map_presentation` | read | Resolve the full presentation graph and feature inventory |
 | `probe_http` | read | One GET with status, timing and headers, recorded as evidence |
+| `watch_playlist` | read | Reload live playlists over a bounded window; live defects and races |
+| `probe_segment` | read | ffprobe one segment: streams, format, packet timestamps |
+| `run_apple_validator` | read | Apple mediastreamvalidator conformance crosscheck |
+| `decode_scte35` | read | Decode a base64 or hex SCTE-35 payload into splice structures |
+| `compare_rendition_alignment` | read | Sequence, program-clock and event alignment across renditions |
+| `inspect_interstitial` | read | Validate and probe interstitial events, asset lists and assets |
 
 ## Demo Scenarios
 
@@ -170,6 +176,14 @@ the incident:
 | `hls_stale_cdn_manifest` | Live: the CDN serves one stale generation with growing Age |
 | `hls_signaled_gap` | Live: a missing segment correctly declared with EXT-X-GAP |
 | `hls_pts_regression` | VOD: ffprobe shows PTS going backwards mid-segment |
+| `hls_audio_drift` | Live: the audio program clock trails video by 2.1 s |
+| `hls_missing_discontinuity` | Live: probed segments change codec with no discontinuity |
+| `hls_cueout_without_cuein` | Live: an ad break opens and never returns to the program |
+| `hls_scte35_duration_mismatch` | Live: the DATERANGE disagrees with its decoded SCTE-35 payload |
+| `hls_interstitial_asset_404` | Live: the interstitial X-ASSET-LIST returns 404 |
+| `hls_interstitial_bad_asset` | Live: the interstitial asset declares an undecodable codec |
+| `hls_interstitial_rendition_mismatch` | Live: the interstitial is missing from the audio rendition |
+| `hls_variant_lag` | Live: one variant publishes two segments behind its peers |
 | `hls_clean_vod` | Healthy encrypted VOD; zero errors |
 | `hls_missing_variant` | One ABR variant playlist returns 404 |
 | `hls_wrong_version` | EXT-X-VERSION:3 declared while v7 syntax is in use |
@@ -192,8 +206,6 @@ Stop the CLI or MCP process with `Ctrl+C`. Nothing else was created.
   live-edge behavior over time is outside one run's evidence.
 - Delivery probing covers playlists, keys, initialization sections and
   representative segments; segment media content is not decoded.
-- Ad signaling tags (SCTE-35 cues) are inventoried but their payloads are not
-  decoded.
 - The report reflects what the probes observed from this network location;
   CDN behavior can differ per edge.
 

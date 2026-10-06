@@ -23,6 +23,20 @@ with sanitized recordings when those are available.
 | `hls_broken_map` | `hls_clean_vod` with the 1080p initialization section returning 404 (mutation `hls_broken_map`) | hls-doctor |
 | `hls_expired_key` | `hls_clean_vod` with the AES-128 key URL returning 403 and an expiry-shaped body (mutation `hls_expired_key`) | hls-doctor |
 | `hls_subtitle_playlist_404` | `hls_clean_vod` with the subtitle rendition playlist returning 404 (mutation `hls_subtitle_playlist_404`) | hls-doctor |
+| `hls_pts_regression` | `hls_clean_vod` plus recorded ffprobe output whose PTS regresses mid-segment (mutation `hls_pts_regression`) | hls-doctor |
+| `hls_clean_live` | A healthy live presentation: 2 ABR variants and audio advancing one segment per reload | hls-doctor |
+| `hls_segment_race` | `hls_clean_live` where a newly advertised segment 404s twice before appearing, on two renditions (mutation `hls_segment_race`) | hls-doctor |
+| `hls_frozen_playlist` | `hls_clean_live` with the 1080p playlist repeating one generation past two target durations (mutation `hls_frozen_playlist`) | hls-doctor |
+| `hls_stale_cdn_manifest` | `hls_frozen_playlist` served with a growing Age and a constant ETag (mutation `hls_stale_cdn_manifest`) | hls-doctor |
+| `hls_signaled_gap` | `hls_clean_live` with a missing segment correctly declared via EXT-X-GAP (mutation `hls_signaled_gap`) | hls-doctor |
+| `hls_audio_drift` | `hls_clean_live` with the audio program clock shifted 2.1 s behind video (mutation `hls_audio_drift`) | hls-doctor |
+| `hls_missing_discontinuity` | `hls_clean_live` plus ffprobe output changing codec with no discontinuity declared (mutation `hls_missing_discontinuity`) | hls-doctor |
+| `hls_cueout_without_cuein` | `hls_clean_live` with an EXT-X-CUE-OUT that never closes (mutation `hls_cueout_without_cuein`) | hls-doctor |
+| `hls_scte35_duration_mismatch` | `hls_clean_live` with a DATERANGE whose SCTE35-OUT payload decodes to a different duration (mutation `hls_scte35_duration_mismatch`) | hls-doctor |
+| `hls_interstitial_asset_404` | `hls_clean_live` with an interstitial whose X-ASSET-LIST returns 404 (mutation `hls_interstitial_asset_404`) | hls-doctor |
+| `hls_interstitial_bad_asset` | `hls_clean_live` with an interstitial asset declaring an incompatible codec (mutation `hls_interstitial_bad_asset`) | hls-doctor |
+| `hls_interstitial_rendition_mismatch` | `hls_clean_live` with the interstitial signaled only in the video renditions (mutation `hls_interstitial_rendition_mismatch`) | hls-doctor |
+| `hls_variant_lag` | `hls_clean_live` with the 720p variant two segments behind its peers (mutation `hls_variant_lag`) | hls-doctor |
 
 The `hls_*` scenarios replay HTTP exchanges (`http.exchanges.json`) instead of AWS
 responses: each URL maps to a recorded response or an ordered `sequence`. The clean
