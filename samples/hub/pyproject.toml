@@ -8,6 +8,7 @@ dependencies = [
   "media-ops-contracts",
   "medialive-mcp-server",
   "mediaconnect-mcp-server",
+  "hls-doctor",
   "pydantic>=2.9,<3",
   "pydantic-settings>=2.5,<3",
   "strands-agents>=1.0,<2",
@@ -26,6 +27,7 @@ demo-hub = "media_ops_hub.demo.run_demo:main"
 media-ops-contracts = { workspace = true }
 medialive-mcp-server = { workspace = true }
 mediaconnect-mcp-server = { workspace = true }
+hls-doctor = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]

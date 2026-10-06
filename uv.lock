@@ -1185,6 +1185,7 @@ version = "0.1.0"
 source = { editable = "samples/hub" }
 dependencies = [
     { name = "bedrock-agentcore" },
+    { name = "hls-doctor" },
     { name = "media-ops-contracts" },
     { name = "mediaconnect-mcp-server" },
     { name = "medialive-mcp-server" },
@@ -1203,6 +1204,7 @@ runtime = [
 requires-dist = [
     { name = "aws-opentelemetry-distro", marker = "extra == 'runtime'", specifier = ">=0.10.1,<1" },
     { name = "bedrock-agentcore", specifier = ">=1.0,<2" },
+    { name = "hls-doctor", editable = "samples/hls-doctor" },
     { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
     { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
     { name = "medialive-mcp-server", editable = "samples/medialive" },

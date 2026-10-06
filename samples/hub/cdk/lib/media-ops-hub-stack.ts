@@ -316,10 +316,14 @@ export function readWriteTag(value?: string): WriteTag | undefined {
   return { key, value: tagValue };
 }
 
+// Pack domains whose sample folder is not named after the domain.
+const PACK_FOLDERS: Record<string, string> = { hls: 'hls-doctor' };
+
 export function readPackPermissions(domain: string): PackPermissions {
-  const file = path.join(SAMPLES_DIR, domain, 'iam_permissions.json');
-  if (!/^[a-z0-9-]+$/.test(domain) || !fs.existsSync(file)) {
-    throw new Error(`Unknown media domain "${domain}": samples/${domain}/iam_permissions.json not found.`);
+  const folder = PACK_FOLDERS[domain] ?? domain;
+  const file = path.join(SAMPLES_DIR, folder, 'iam_permissions.json');
+  if (!/^[a-z0-9-]+$/.test(folder) || !fs.existsSync(file)) {
+    throw new Error(`Unknown media domain "${domain}": samples/${folder}/iam_permissions.json not found.`);
   }
   return JSON.parse(fs.readFileSync(file, 'utf8')) as PackPermissions;
 }

@@ -14,6 +14,7 @@ from scenario_models import ActionVerification, EvalResult, EvalScenario
 from scripted_eval_model import ScriptedEvalModel
 from strands.agent.agent_result import AgentResult
 
+from hls_doctor.domain_pack import create_domain_pack as create_hls_pack
 from media_ops_contracts.domain_pack import DomainPack, ReadTool, WriteTool
 from media_ops_contracts.stream_event import StreamEvent
 from media_ops_hub.bootstrap.create_hub import create_hub
@@ -33,6 +34,7 @@ class PackFactory(Protocol):
 FACTORIES: dict[str, PackFactory] = {
     "medialive": create_medialive_pack,
     "mediaconnect": create_mediaconnect_pack,
+    "hls": create_hls_pack,
 }
 
 

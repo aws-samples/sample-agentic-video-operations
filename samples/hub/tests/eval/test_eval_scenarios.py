@@ -12,7 +12,7 @@ SCENARIOS = ROOT / "samples/hub/tests/scenarios"
 
 def test_all_hub_scenarios(tmp_path, request):
     scenarios = load_eval_scenarios(SCENARIOS)
-    assert len(scenarios) == 7
+    assert len(scenarios) == 8
     results = [run_scenario(scenario, tmp_path) for scenario in scenarios]
     output = ROOT / ".cache" / "eval-results.json"
     output.parent.mkdir(exist_ok=True)

@@ -138,13 +138,16 @@ instead: a healthy encrypted VOD presentation with zero errors.
 
 ### Deploy to AWS
 
-This sample runs locally and creates no AWS infrastructure. It has no
-deployment of its own.
+This sample runs locally and creates no AWS infrastructure of its own. It is
+also a read-only domain pack of the [hub](../hub/README.md): deploy the hub
+with `MEDIA_DOMAINS=medialive,mediaconnect,hls` and the hub agent gains the
+HLS diagnostic tools with an empty IAM permission set.
 
 ### Verify the Deployment
 
-There is no deployed runtime to verify. The known-good request above is the
-verification.
+For the local sample the known-good request above is the verification. For a
+hub deployment that includes the `hls` domain, follow the hub README's
+verification and ask its agent the known-good request.
 
 ## Available Tools
 

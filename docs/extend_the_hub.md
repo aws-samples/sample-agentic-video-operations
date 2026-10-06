@@ -95,7 +95,7 @@ class DomainPack(Protocol):
   [project.entry-points."media_ops.domain_packs"]
   medialive = "medialive_mcp.domain_pack:create_domain_pack"
   ```
-- **Which packs ship:** medialive and mediaconnect. CMCD remains a standalone MCP sample.
+- **Which packs ship:** medialive, mediaconnect and hls (read-only HLS stream diagnostics from samples/hls-doctor). CMCD remains a standalone MCP sample.
 - **Selection:** `MEDIA_DOMAINS=medialive,mediaconnect` chooses the packs. An unknown name fails at startup and lists the installed packs.
 - **What a pack wraps:** plain typed functions over **the same adapters the sample's MCP server registers**. The pack builds its own clients and settings, including `DEMO` replay. The hub wraps the functions with `strands.tool`. A pack never imports Strands, the hub or another pack.
 - **Cross-domain reasoning** (signal path from source to flow to channel) lives in hub skills, not in a pack.

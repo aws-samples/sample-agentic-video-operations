@@ -28,6 +28,11 @@ function actionsOf(statements: any[]): Set<string> {
 const defaultTemplate = synth();
 
 describe('runtime environment', () => {
+  test('the hls pack synthesizes with its empty IAM permission set', () => {
+    const template = synth({ mediaDomains: 'medialive,mediaconnect,hls' });
+    expect(runtimeEnvironment(template).MEDIA_DOMAINS).toBe('medialive,mediaconnect,hls');
+  });
+
   test('sets the selected domains, writes off by default, memory and the signing-key secret', () => {
     const env = runtimeEnvironment(defaultTemplate);
     expect(env.MEDIA_DOMAINS).toBe('medialive,mediaconnect');
