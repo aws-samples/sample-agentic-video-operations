@@ -30,6 +30,7 @@ jobs:
           just-version: "1.58.0"
       - run: uv sync --frozen
       - run: just lint
+      - run: just typecheck
       - run: just test
       - run: just smoke
       # `just eval` joins in step 4a, when the first eval scenarios exist.
@@ -67,4 +68,38 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.app }}/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - run: npm test --if-present
       - run: npx cdk synth --quiet
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # full history so leaks in past commits are caught too
+      - name: Install gitleaks (pinned, checksum-verified)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      - run: ./gitleaks git --redact --exit-code 1
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Converted samples only; add each remaining Dockerfile when its sample converts.
+        dockerfile:
+          - samples/medialive/Dockerfile
+          - samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands/Dockerfile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          failure-threshold: warning # DL3066-style infos stay visible without blocking

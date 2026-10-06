@@ -54,6 +54,11 @@ lint:
     uv run ruff check .
     uv run ruff format --check .
 
+# Static type check (ratchet list in pyproject.toml [tool.mypy])
+[group('develop')]
+typecheck:
+    uv run mypy
+
 # Replay fixture scenarios and score them
 [group('develop')]
 eval:

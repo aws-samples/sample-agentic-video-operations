@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 dependencies = ["media-ops-contracts", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server", "media-ops-hub"]
 
 [dependency-groups]
-dev = ["pytest>=8.3,<9", "ruff>=0.12,<0.13"]
+dev = ["pytest>=8.3,<9", "ruff>=0.12,<0.13", "mypy>=1.14,<2"]
 
 [tool.uv]
 package = false
@@ -57,6 +57,41 @@ extend-exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# Non-strict baseline over the converted packages; ratchet per package as they harden.
+# Same conversion contract as ruff: a sample joins `files` when it is converted.
+[tool.mypy]
+files = [
+  "packages/media_ops_contracts/src",
+  "samples/cmcd/src",
+  "samples/mediaconnect/src",
+  "samples/medialive/src",
+  "samples/hub/src",
+]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# Ratchet list: modules with pre-existing errors at mypy adoption. Fix a module,
+# remove its entry; never add to this list.
+[[tool.mypy.overrides]]
+module = [
+  "media_ops_contracts.domain_pack",
+  "cmcd_mcp.adapters.influxdb.query_influxdb",
+  "cmcd_mcp.adapters.influxdb.replay_influxdb_query",
+  "media_ops_hub.bootstrap.wrap_pack_tools",
+  "media_ops_hub.workflows.record_stream_events",
+  "media_ops_hub.workflows.run_hub_turn",
+  "medialive_mcp.code_interpreter.executor",
+  "medialive_mcp.code_interpreter.session_pool",
+  "medialive_mcp.domain.metric_series",
+  "medialive_mcp.strands_agent.create_composite_tools",
+  "medialive_mcp.tool_surface.create_read_tools",
+  "medialive_mcp.tool_surface.create_write_tools",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 # Add each converted sample's tests/ directory here.

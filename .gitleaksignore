@@ -1,0 +1,5 @@
+# Known historical leak, acknowledged — NOT a pass to leave it unfixed.
+# An InfluxDB token was committed in mcp/.env (commit c2c1a3c9, later deleted).
+# Required remediation: rotate the token, rewrite history (e.g. git filter-repo),
+# then delete this entry so the scan guards the full history again.
+c2c1a3c92a9eda3fb9c4b8431da0fbb576e30123:mcp/.env:generic-api-key:2
