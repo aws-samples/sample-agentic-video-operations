@@ -8,8 +8,25 @@ explain likely causes with evidence instead of raw errors.
 
 ## Purpose
 
-Given an `.m3u8` URL, HLS Doctor recursively inspects every playlist beneath
-it, validates HLS semantics (required tags, group references, rendition
+HLS Doctor is an **agent toolset for HLS diagnosis**, not another validator.
+Apple's `mediastreamvalidator` remains the conformance oracle - when it is
+installed, HLS Doctor runs it and folds its report in as an independent
+crosscheck. The value this sample adds sits on top of and around it:
+
+- **Diagnosis over time**: a watch window catches what no single validation
+  pass can - segments advertised before they exist, frozen playlists, stale
+  CDN generations, renditions drifting apart.
+- **Correlation across layers**: HTTP delivery evidence, playlist semantics,
+  ffprobe timestamps, decoded SCTE-35 payloads and cross-rendition alignment
+  are joined into one ranked diagnosis instead of four separate reports.
+- **An agent surface**: every capability is a typed read-only tool. Plug the
+  MCP server into Claude Code (or Amazon Q CLI, Kiro, any MCP client) and ask
+  it to diagnose a stream; the same tools load into the media-ops hub agent,
+  which deploys as a container on Amazon Bedrock AgentCore, so coordinator
+  workflows and UIs drive the identical tooling.
+
+Given an `.m3u8` URL, it recursively inspects every playlist beneath it,
+validates HLS semantics (required tags, group references, rendition
 declarations, encryption signaling, EXT-X-VERSION compatibility), probes the
 delivery of playlists, segments, initialization sections and keys, and emits
 findings that separate observed facts from interpretation:
@@ -86,8 +103,17 @@ flowchart LR
 
    The raw command is `uv run --package hls-doctor serve-hls-doctor`.
 
-Register the server in an MCP client with `samples/hls-doctor/mcp.json`,
-replacing the placeholder path with your clone:
+Plug it into Claude Code with one command (run from the repository root):
+
+   ```bash
+   claude mcp add hls-doctor -e DEMO=0 -- uv run --directory "$PWD" --package hls-doctor serve-hls-doctor
+   ```
+
+   Then ask: *"Use hls-doctor to diagnose https://your-stream/master.m3u8 -
+   watch it for 30 seconds and explain the findings."*
+
+For other MCP clients, register `samples/hls-doctor/mcp.json`, replacing the
+placeholder path with your clone:
 
 ```json
 {
