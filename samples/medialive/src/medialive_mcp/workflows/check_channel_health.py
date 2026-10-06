@@ -26,6 +26,7 @@ from medialive_mcp.domain.metric_catalog import (
     TABLE_METRICS,
 )
 from medialive_mcp.domain.metric_series import MetricSeries
+from medialive_mcp.domain.require_hours_back import require_hours_back
 
 
 class MetricRow(BaseModel):
@@ -39,7 +40,7 @@ class MetricRow(BaseModel):
 
 def recent_window(hours_back: int, now: datetime | None = None) -> tuple[datetime, datetime]:
     end = now or datetime.now(UTC)
-    return end - timedelta(hours=hours_back), end
+    return end - timedelta(hours=require_hours_back(hours_back)), end
 
 
 def summarize_channel_metrics(

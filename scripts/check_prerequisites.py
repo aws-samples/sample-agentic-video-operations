@@ -13,8 +13,11 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 MINIMUM_NODE_MAJOR = 20
+# The probe bounds itself at 180 s (smoke_aws_servers.TIMEOUT_SECONDS); allow it to report.
+AWS_PROBE_TIMEOUT_SECONDS = 190
 MINIMUM_PYTHON = (3, 12)
 SESSION_MANAGER_INSTALL = (
     "Install the Session Manager plugin: "
@@ -37,9 +40,9 @@ class CheckResult:
     fix: str = ""
 
 
-def run_command(*command: str) -> subprocess.CompletedProcess[str]:
+def run_command(*command: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
+        return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(command, 124, "", "timed out")
 
@@ -200,6 +203,25 @@ def blocked_cdk_bootstrap() -> CheckResult:
     )
 
 
+def check_aws_read_paths() -> CheckResult:
+    probe = Path(__file__).with_name("smoke_aws_servers.py")
+    result = run_command(sys.executable, str(probe), timeout=AWS_PROBE_TIMEOUT_SECONDS)
+    failures = [line for line in result.stdout.splitlines() if line.startswith("FAIL")]
+    detail = (
+        "CMCD, MediaConnect, and MediaLive read paths passed"
+        if result.returncode == 0
+        else "; ".join(" ".join(line.split()) for line in failures)
+        or f"read-only sample probe failed ({result.stderr.strip()[-200:] or 'no output'})"
+    )
+    return CheckResult(
+        CheckGroup.AWS,
+        "sample read paths",
+        result.returncode == 0,
+        detail,
+        "Set the sample connection values in the root .env, then run just smoke aws",
+    )
+
+
 def collect_offline_results() -> list[CheckResult]:
     return [
         check_tool(
@@ -280,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parse_arguments(argv or [])
     strict_aws = arguments.group == CheckGroup.AWS
     results = collect_results()
+    if strict_aws and all(result.passed for result in results):
+        results.append(check_aws_read_paths())
     print_results(results, strict_aws=strict_aws)
 
     offline_failures = [

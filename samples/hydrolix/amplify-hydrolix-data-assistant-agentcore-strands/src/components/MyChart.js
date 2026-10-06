@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from "react";
+import { logFailure } from "../utils/logMetadata";
 import Chart from "react-apexcharts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Alert from "@mui/material/Alert";
-import { useTheme } from "@mui/material/styles";
 import Divider from "@mui/material/Divider";
 import MarkdownRenderer from "./MarkdownRenderer.js";
 
 const MyChart = ({ caption, options, series, type }) => {
-  const theme = useTheme();
   const [isVisible, setIsVisible] = useState(false);
   const [chartSeries, setChartSeries] = useState([]);
   const [chartOptions, setChartOptions] = useState({});
@@ -108,8 +107,8 @@ class ErrorBoundary extends React.Component {
     return { hasError: true };
   }
 
-  componentDidCatch(error, errorInfo) {
-    console.error("Chart error:", error, errorInfo);
+  componentDidCatch(error) {
+    logFailure("render chart", error);
   }
 
   render() {

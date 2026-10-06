@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import field_validator, model_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from media_ops_contracts.resolve_demo_scenario import resolve_demo_scenario
@@ -26,16 +26,14 @@ class RuntimeSettings(BaseSettings):
     def default_empty_scenario(cls, value: str | None) -> str:
         return resolve_demo_scenario(value, DEFAULT_DEMO_SCENARIO)
 
-    @model_validator(mode="after")
-    def require_live_connection(self) -> "RuntimeSettings":
+    @property
+    def missing_live_settings(self) -> list[str]:
+        """The InfluxDB settings a live (non-demo) query needs but does not have."""
         if self.demo:
-            return self
+            return []
         required = {
             "INFLUXDB_URL": self.influxdb_url,
             "INFLUXDB_TOKEN": self.influxdb_token,
             "INFLUXDB_ORG": self.influxdb_org,
         }
-        missing = [name for name, value in required.items() if not value]
-        if missing:
-            raise ValueError(f"Missing required setting(s): {', '.join(missing)}")
-        return self
+        return [name for name, value in required.items() if not value]

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { logFailure } from "../utils/logMetadata";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { alpha } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -8,7 +9,6 @@ import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
-import Button from "@mui/material/Button";
 
 import "@fontsource/roboto/300.css";
 import "@fontsource/roboto/400.css";
@@ -25,19 +25,16 @@ import { signOut, fetchUserAttributes, getCurrentUser } from "aws-amplify/auth";
 
 function LayoutApp() {
   const [userName, setUserName] = React.useState("Guest User");
-  const [email, setEmail] = useState("");
+  const [, setEmail] = useState("");
   const [open, setOpen] = React.useState(false);
 
   const effectRan = useRef(false);
   useEffect(() => {
     if (!effectRan.current) {
-      console.log("effect applied - only on the FIRST mount");
 
       const fetchUserData = async () => {
-        console.log("Layout");
         try {
           const currentUser = await getCurrentUser();
-          console.log(currentUser);
           setUserName(
             currentUser.signInDetails.loginId
               .split("@")[0]
@@ -53,17 +50,13 @@ function LayoutApp() {
           if ("name" in userAttributes) {
             setUserName(userAttributes.name);
           }
-          console.log(userAttributes);
         } catch (error) {
-          console.error("Error fetching user data:", error);
+          logFailure("load user details", error);
         }
       };
 
       Promise.all([fetchUserData()])
-        .catch(console.error)
-        .finally(() => {
-          console.log("complete loading");
-        });
+        .catch((error) => logFailure("load layout", error));
     }
 
     return () => (effectRan.current = true);
@@ -92,7 +85,7 @@ function LayoutApp() {
     try {
       await signOut();
     } catch (error) {
-      console.error("Error signing out:", error);
+      logFailure("sign out", error);
     }
   };
 
@@ -164,10 +157,9 @@ function LayoutApp() {
           variant="body2"
           sx={{ pb: 1, pl: 2, pr: 2, fontSize: "0.775rem" }}
         >
-          &copy;{new Date().getFullYear()}, Amazon Web Services, Inc. or its
-          affiliates. All rights reserved.
+          AWS sample — MIT-0 licensed.
         </Typography>
-        <img src="/images/Powered-By_logo-horiz_RGB.png" />
+        <img src="/images/Powered-By_logo-horiz_RGB.png" alt="Powered by AWS" />
       </Box>
 
       <Box sx={{ position: "fixed", bottom: "8px", right: "12px" }}>

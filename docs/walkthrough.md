@@ -131,7 +131,7 @@ infrastructure keeps billing while idle.
   and `"env"` must include `"DEMO": "1"` for a credential-free run.
 - **A tool answers with an AWS credentials error** — `DEMO` is not set in that
   process: the server is talking to real AWS. Stop it and set `DEMO=1`.
-- **Stage 2 fails at startup with `AGENT_MODEL_ID is not set`** — create the
-  root `.env` (`cp .env.example .env`); the defaults fill it in.
+- **The first Stage 2 request fails with `AGENT_MODEL_ID is not set`** — create
+  the root `.env` (`cp .env.example .env`); the defaults fill it in.
 - **Stage 2 model errors** — your account needs access to the models in the
   root `.env` (`just doctor aws` checks); see the README "Models" section.

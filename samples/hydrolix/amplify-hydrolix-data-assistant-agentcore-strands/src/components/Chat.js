@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef, useEffect } from "react";
+import { logFailure } from "../utils/logMetadata";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import SendIcon from "@mui/icons-material/Send";
@@ -29,7 +30,7 @@ import { getAnswer } from "../utils/AgentCoreCall.js";
 import MarkdownRenderer from "./MarkdownRenderer.js";
 
 const Chat = () => {
-  const [totalAnswers, setTotalAnswers] = React.useState(0);
+  const [, setTotalAnswers] = React.useState(0);
   const [enabled, setEnabled] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [controlAnswers, setControlAnswers] = React.useState([]);
@@ -66,13 +67,8 @@ const Chat = () => {
   const effectRan = React.useRef(false);
   useEffect(() => {
     if (!effectRan.current) {
-      console.log("effect applied - only on the FIRST mount");
-      const fetchData = async () => {
-        console.log("Chat");
-      };
-      fetchData()
-        // catch any error
-        .catch(console.error);
+      const fetchData = async () => {};
+      fetchData().catch((error) => logFailure("load chat", error));
     }
     return () => (effectRan.current = true);
   }, []);
@@ -83,8 +79,6 @@ const Chat = () => {
       if (answer.queryResults && answer.chart === "loading") {
         try {
           const chartData = await generateChart(answer);
-          console.log("--------- Answer after chart generation ------");
-          console.log(chartData);
 
           setAnswers((prevState) => {
             const newState = [...prevState];
@@ -99,7 +93,7 @@ const Chat = () => {
 
           setTotalAnswers((prevState) => prevState + 1);
         } catch (error) {
-          console.error("Chart generation failed:", error);
+          logFailure("chart generation", error);
           setAnswers((prevState) => {
             const newState = [...prevState];
             if (newState[answerIndex]) {

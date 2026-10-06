@@ -1,4 +1,4 @@
-"""No image's build context holds a secret or local state (release gate)."""
+"""No image's build context holds a secret, local state or a tool cache (release gate)."""
 
 import subprocess
 from pathlib import Path
@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PLANTED = (
     ".env", ".env.local", "deep/dir/.env", "deep/.env.production", ".claude/plans/handoff.md",
     ".git/HEAD", "app/cdk.out/template.json",
+    ".cache/ruff/x", ".mypy_cache/3.13/x.json", ".ruff_cache/x", ".pytest_cache/v/x",
+    "eval-results.json", "deep/__pycache__/m.pyc", ".venv/bin/python",
 )  # fmt: skip
 BUILD_IDS = [build["dockerfile"] for build in DOCKER_BUILDS]
 

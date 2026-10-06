@@ -1,10 +1,8 @@
 import { Box, Typography, Stack, CircularProgress } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import BuildIcon from '@mui/icons-material/Build';
-//import { SUB_AGENTS } from "../env";
 
 const ToolBox = ({ item, isLoading = false }) => {
-  //const isClickable = SUB_AGENTS.includes(item.name);
   const theme = useTheme();
 
   // Use the primary color from theme instead of hardcoded colors
@@ -13,7 +11,6 @@ const ToolBox = ({ item, isLoading = false }) => {
 
   return (
     <Box
-      //onClick={isClickable ? onClick : undefined}
       sx={{
         p: 1.5,
         borderRadius: 3,
@@ -22,7 +19,6 @@ const ToolBox = ({ item, isLoading = false }) => {
         border: `1px solid ${alpha(agentColor, 0.3)}`,
         borderLeft: `4px solid ${agentColor}`,
         mb: 1.5,
-        //cursor: isClickable ? "pointer" : "default",
         position: "relative",
         transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
         ...(isLoading && {

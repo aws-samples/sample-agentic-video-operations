@@ -6,7 +6,7 @@ import manage_hub_stack as hub
 import pytest
 
 ENV = {"AWS_REGION": "us-west-2", "AGENT_MODEL_ID": "us.anthropic.claude-sonnet-4-6"}
-DENIED = "An error occurred (AccessDeniedException) when calling X: arn:aws:sts::111140411111:role/NotFound"  # noqa: E501
+DENIED = "An error occurred (AccessDeniedException) when calling X: arn:aws:sts::111122223333:role/NotFound"  # noqa: E501
 NO_STACK = "An error occurred (ValidationError) when calling DescribeStacks: Stack with id MediaOpsHubStack does not exist"  # noqa: E501
 
 
@@ -32,13 +32,15 @@ class FakeRunner:
 def test_deploy_passes_domains_writes_and_models_from_the_env_to_cdk():
     runner = FakeRunner()
     env = ENV | {"MEDIA_DOMAINS": "medialive,mediaconnect", "ALLOW_WRITES": "true",
-                 "THUMBNAIL_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0"}  # fmt: skip
+                 "THUMBNAIL_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                 "HUB_WRITE_TAG": "MediaOpsManaged=true"}  # fmt: skip
 
     assert hub.main(["deploy", "--yes"], runner, environ=env) == 0
 
     [deploy] = runner.ran(" deploy MediaOpsHubStack")
     assert "mediaDomains=medialive,mediaconnect" in deploy
     assert "allowWrites=true" in deploy
+    assert "writeTag=MediaOpsManaged=true" in deploy
     assert "BedrockModelId=us.anthropic.claude-sonnet-4-6" in deploy
     assert "ThumbnailModelId=us.anthropic.claude-haiku-4-5-20251001-v1:0" in deploy
     assert deploy[deploy.index("--require-approval") + 1] == "never"
@@ -52,7 +54,44 @@ def test_deploy_defaults_to_both_packs_without_writes_and_asks_for_iam_broadenin
     [deploy] = runner.ran(" deploy MediaOpsHubStack")
     assert "mediaDomains=medialive,mediaconnect" in deploy
     assert "allowWrites=false" in deploy
+    assert not any(argument.startswith("writeTag=") for argument in deploy)
     assert deploy[deploy.index("--require-approval") + 1] == "broadening"
+
+
+def test_invalid_write_tag_stops_before_any_aws_call(capsys):
+    runner = FakeRunner()
+
+    assert (
+        hub.main(
+            ["deploy", "--yes"],
+            runner,
+            environ=ENV | {"ALLOW_WRITES": "true", "HUB_WRITE_TAG": "bad key=value"},
+        )
+        == 1
+    )
+
+    assert runner.calls == []
+    assert "HUB_WRITE_TAG must be Key=Value" in capsys.readouterr().out
+
+
+def test_deploy_confirmation_names_account_wide_or_tagged_write_scope(capsys):
+    runner = FakeRunner()
+    hub.main(
+        ["deploy"],
+        runner,
+        ask=lambda _: "n",
+        environ=ENV | {"ALLOW_WRITES": "true"},
+    )
+    assert "all selected-pack resources in this account and region" in capsys.readouterr().out
+
+    runner = FakeRunner()
+    hub.main(
+        ["deploy"],
+        runner,
+        ask=lambda _: "n",
+        environ=ENV | {"ALLOW_WRITES": "true", "HUB_WRITE_TAG": "MediaOpsManaged=true"},
+    )
+    assert "resources tagged MediaOpsManaged=true" in capsys.readouterr().out
 
 
 def test_deploy_without_a_model_stops_before_any_aws_call(capsys):
@@ -175,3 +214,38 @@ def test_deploy_attaches_the_invoke_policy_to_the_named_role_only_when_set():
     hub.main(["deploy", "--yes"], runner, environ=ENV)
     [deploy] = runner.ran(" deploy MediaOpsHubStack")
     assert not any(argument.startswith("invokerRoleName=") for argument in deploy)
+
+
+JWT_ENV = {
+    "HUB_JWT_DISCOVERY_URL": "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_EXAMPLE/.well-known/openid-configuration",
+    "HUB_JWT_CLIENT_IDS": "example-client-id",
+}  # fmt: skip
+
+
+def test_deploy_passes_jwt_auth_to_cdk_and_names_it_in_the_confirmation(capsys):
+    runner = FakeRunner()
+
+    assert hub.main(["deploy"], runner, ask=lambda _: "y", environ=ENV | JWT_ENV) == 0
+
+    [deploy] = runner.ran(" deploy MediaOpsHubStack")
+    assert f"jwtDiscoveryUrl={JWT_ENV['HUB_JWT_DISCOVERY_URL']}" in deploy
+    assert "jwtClientIds=example-client-id" in deploy
+    assert "actor = token sub" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"HUB_JWT_DISCOVERY_URL": JWT_ENV["HUB_JWT_DISCOVERY_URL"]},
+        {"HUB_JWT_CLIENT_IDS": "example-client-id"},
+        JWT_ENV | {"HUB_INVOKER_ROLE_NAME": "media-ops-operator"},
+    ],
+    ids=["url-only", "clients-only", "jwt-and-iam-invoker"],
+)
+def test_incomplete_or_conflicting_auth_settings_stop_before_any_aws_call(extra, capsys):
+    runner = FakeRunner()
+
+    assert hub.main(["deploy", "--yes"], runner, environ=ENV | extra) == 1
+
+    assert runner.calls == []
+    assert "HUB_JWT" in capsys.readouterr().out

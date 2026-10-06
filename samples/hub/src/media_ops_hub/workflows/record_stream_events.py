@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookProvider, HookRegistry
 
 from media_ops_contracts.action_result import ActionResult
+from media_ops_contracts.estimate_model_cost import estimate_model_cost_usd
 from media_ops_contracts.stream_event import (
     ActionCompleted,
     ApprovalRequested,
@@ -21,6 +22,7 @@ from media_ops_contracts.stream_event import (
     StreamEvent,
     TaskStarted,
     ToolCalled,
+    UsageReported,
     VerificationCompleted,
 )
 from media_ops_contracts.tool_failure import ToolFailure
@@ -48,6 +50,7 @@ class StreamEventRecorder(HookProvider):
         self.record_skill = record_skill
         self.events: list[StreamEvent] = []
         self._started_packs: set[str] = set()
+        self._deferred_terminal: ApprovalRequested | None = None
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self.record_tool_call)
@@ -104,7 +107,7 @@ class StreamEventRecorder(HookProvider):
         )
 
     def request_approval(self, pending: PendingApproval) -> None:
-        self.add(
+        self.defer_terminal(
             ApprovalRequested(
                 session_id=self.session_id,
                 approval_id=pending.approval_id,
@@ -114,18 +117,56 @@ class StreamEventRecorder(HookProvider):
             )
         )
 
+    @property
+    def has_deferred_terminal(self) -> bool:
+        return self._deferred_terminal is not None
+
+    def defer_terminal(self, event: ApprovalRequested) -> None:
+        if self._deferred_terminal is not None:
+            raise RuntimeError("Only one terminal event may be deferred per turn.")
+        self._deferred_terminal = event
+
+    def flush_terminal(self) -> None:
+        event, self._deferred_terminal = self._deferred_terminal, None
+        if event is not None:
+            self.add(event)
+
     def fail(self, failure: ToolFailure) -> None:
-        self.add(
-            ErrorEvent(
-                session_id=self.session_id,
-                kind=failure.kind,
-                message=failure.message,
-                next_action=failure.next_action,
-            )
+        self.add(self.failure_event(failure))
+
+    def failure_event(self, failure: ToolFailure) -> ErrorEvent:
+        return ErrorEvent(
+            session_id=self.session_id,
+            kind=failure.kind,
+            message=failure.message,
+            next_action=failure.next_action,
         )
 
     def answer(self, text: str) -> None:
         self.add(FinalAnswer(session_id=self.session_id, text=text))
+
+    def usage(
+        self,
+        model_id: str,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        total_tokens: int,
+        cache_read_input_tokens: int,
+        cache_write_input_tokens: int,
+    ) -> None:
+        self.add(
+            UsageReported(
+                session_id=self.session_id,
+                model_id=model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                cache_read_input_tokens=cache_read_input_tokens,
+                cache_write_input_tokens=cache_write_input_tokens,
+                estimated_usd=estimate_model_cost_usd(model_id, input_tokens, output_tokens),
+            )
+        )
 
     def add(self, event: StreamEvent, *, skill_name: str | None = None) -> None:
         self.events.append(event)
@@ -144,5 +185,11 @@ class StreamEventRecorder(HookProvider):
             "tool.name": tool,
             "skill.name": skill_name,
             "approval.id": getattr(event, "approval_id", None),
+            "model.id": getattr(event, "model_id", None),
+            "tokens.input": getattr(event, "input_tokens", None),
+            "tokens.output": getattr(event, "output_tokens", None),
+            "tokens.cache_read_input": getattr(event, "cache_read_input_tokens", None),
+            "tokens.cache_write_input": getattr(event, "cache_write_input_tokens", None),
+            "cost.estimated_usd": getattr(event, "estimated_usd", None),
         }
         return {key: value for key, value in fields.items() if value is not None}

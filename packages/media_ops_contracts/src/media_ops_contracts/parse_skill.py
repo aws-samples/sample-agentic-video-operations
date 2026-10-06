@@ -5,7 +5,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-SKILL_FILE = "SKILL.md"
 _FRONT_MATTER = re.compile(r"\A---\n(?P<header>.*?)\n---\n(?P<body>.*)\Z", re.DOTALL)
 _LINE = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*?)\s*$")
 

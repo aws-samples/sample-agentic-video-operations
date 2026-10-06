@@ -1,0 +1,117 @@
+{
+ "MetricDataResults": [
+  {
+   "Id": "mqcs_freeze_frame_detected_p0",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    100.0,
+    35.0,
+    30.0
+   ]
+  },
+  {
+   "Id": "mqcs_freeze_frame_detected_p1",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    100.0,
+    100.0,
+    100.0
+   ]
+  },
+  {
+   "Id": "mqcs_black_frame_detected_p0",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    100.0,
+    100.0,
+    100.0
+   ]
+  },
+  {
+   "Id": "mqcs_black_frame_detected_p1",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    100.0,
+    100.0,
+    100.0
+   ]
+  },
+  {
+   "Id": "fill_msec_p0",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "Id": "fill_msec_p1",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "Id": "input_loss_seconds_p0",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "Id": "input_loss_seconds_p1",
+   "StatusCode": "Complete",
+   "Timestamps": [
+    "2026-10-06T14:22:00Z",
+    "2026-10-06T14:27:00Z",
+    "2026-10-06T14:32:00Z"
+   ],
+   "Values": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  }
+ ],
+ "Messages": []
+}

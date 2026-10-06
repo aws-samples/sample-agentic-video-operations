@@ -1,0 +1,34 @@
+{
+ "sequence": [
+  {
+   "output": {
+    "message": {
+     "role": "assistant",
+     "content": [
+      {
+       "toolUse": {
+        "toolUseId": "rubric",
+        "name": "report_picture_quality",
+        "input": {
+         "compression_artifacts": 2,
+         "banding": 2,
+         "interlacing_ghosting": 2,
+         "slate_or_bars": 2,
+         "overall": 2,
+         "confidence": 0.8,
+         "evidence": "All frames are identical: the picture is frozen."
+        }
+       }
+      }
+     ]
+    }
+   },
+   "stopReason": "tool_use",
+   "usage": {
+    "inputTokens": 1600,
+    "outputTokens": 60,
+    "totalTokens": 1660
+   }
+  }
+ ]
+}

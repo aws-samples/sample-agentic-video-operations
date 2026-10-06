@@ -13,3 +13,11 @@ def test_player_pins_hls_js_with_integrity_and_suppresses_favicon_request():
     ) in template
     assert 'crossorigin="anonymous"' in template
     assert '<link rel="icon" href="data:,">' in template
+
+
+def test_player_status_messages_are_text_not_html():
+    player = TEMPLATE.read_text().split('index_html = f"""', 1)[1].split('"""', 1)[0]
+
+    assert "innerHTML" not in player and "outerHTML" not in player
+    assert "line.textContent = message;" in player
+    assert "statusDiv.replaceChildren(line);" in player

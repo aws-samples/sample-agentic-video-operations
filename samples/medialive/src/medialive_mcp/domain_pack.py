@@ -4,10 +4,13 @@ The pack wraps the same typed functions the MCP server registers, and builds its
 settings and clients (DEMO replay included). It never imports Strands or the hub.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from media_ops_contracts.domain_pack import ReadTool, WriteTool
+from media_ops_contracts.read_utc_now import read_utc_now
 from medialive_mcp.bootstrap.create_medialive_clients import create_medialive_clients
 from medialive_mcp.settings.runtime_settings import load_runtime_settings
 from medialive_mcp.tool_surface.create_read_tools import create_read_tools
@@ -34,9 +37,10 @@ class MediaLivePack:
         return self.writes
 
 
-def create_domain_pack() -> MediaLivePack:
+def create_domain_pack(*, clock: Callable[[], datetime] = read_utc_now) -> MediaLivePack:
     settings = load_runtime_settings()
     clients = create_medialive_clients(settings)
     return MediaLivePack(
-        reads=create_read_tools(settings, clients), writes=create_write_tools(settings, clients)
+        reads=create_read_tools(settings, clients),
+        writes=create_write_tools(settings, clients, clock=clock),
     )

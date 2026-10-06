@@ -1,20 +1,44 @@
 [
   {
-    "_time": "2026-10-05T12:00:00Z",
+    "table": 0,
+    "_time": "2026-10-05T12:00:03Z",
     "_field": "cmcd_br",
     "_value": 4200,
     "cmcd_sid": "demo-session-west"
   },
   {
+    "table": 0,
+    "_time": "2026-10-05T12:00:04Z",
+    "_field": "cmcd_br",
+    "_value": 4300,
+    "cmcd_sid": "demo-session-west"
+  },
+  {
+    "table": 1,
     "_time": "2026-10-05T12:00:02Z",
     "_field": "cmcd_bl",
     "_value": 80,
     "cmcd_sid": "demo-session-west"
   },
   {
-    "_time": "2026-10-05T12:00:04Z",
+    "table": 1,
+    "_time": "2026-10-05T12:00:05Z",
     "_field": "cmcd_bl",
     "_value": 0,
+    "cmcd_sid": "demo-session-west"
+  },
+  {
+    "table": 2,
+    "_time": "2026-10-05T12:00:00Z",
+    "_field": "cmcd_br",
+    "_value": 4100,
+    "cmcd_sid": "demo-session-west"
+  },
+  {
+    "table": 3,
+    "_time": "2026-10-05T12:00:01Z",
+    "_field": "cmcd_bl",
+    "_value": 120,
     "cmcd_sid": "demo-session-west"
   }
 ]

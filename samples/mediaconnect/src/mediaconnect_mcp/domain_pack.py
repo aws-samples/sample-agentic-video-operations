@@ -1,9 +1,12 @@
 """The MediaConnect domain pack for the media operations hub."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from media_ops_contracts.domain_pack import ReadTool, WriteTool
+from media_ops_contracts.read_utc_now import read_utc_now
 from mediaconnect_mcp.bootstrap.create_mediaconnect_clients import (
     create_mediaconnect_clients,
 )
@@ -29,10 +32,10 @@ class MediaConnectPack:
         return self.writes
 
 
-def create_domain_pack() -> MediaConnectPack:
+def create_domain_pack(*, clock: Callable[[], datetime] = read_utc_now) -> MediaConnectPack:
     settings = load_runtime_settings()
     clients = create_mediaconnect_clients(settings)
     return MediaConnectPack(
         reads=create_read_tools(settings, clients),
-        writes=create_write_tools(settings, clients),
+        writes=create_write_tools(settings, clients, clock=clock),
     )

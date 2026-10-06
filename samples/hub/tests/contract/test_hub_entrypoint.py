@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from hub_test_setup import build_hub
+from hub_test_setup import COSTED_MODEL_ID, build_hub
 from pydantic import ValidationError
 from scripted_model import ScriptedModel, call, say
 
@@ -23,11 +23,16 @@ def invoke(payload, *, session="session-a", headers=None):
 
 
 def test_a_prompt_streams_the_final_answer_for_the_header_actor(tmp_path, monkeypatch):
-    hub = build_hub(tmp_path, ScriptedModel([say("All channels are healthy.")]))
+    hub = build_hub(
+        tmp_path,
+        ScriptedModel([say("All channels are healthy.")]),
+        model_id=COSTED_MODEL_ID,
+    )
     monkeypatch.setattr(entrypoint, "get_hub", lambda: hub.hub)
 
-    [answer] = invoke({"prompt": "Status?"}, headers={ACTOR: "operator-a"})
+    [usage, answer] = invoke({"prompt": "Status?"}, headers={ACTOR: "operator-a"})
 
+    assert usage.type == "usage_reported"
     assert answer.type == "final_answer"
     assert answer.session_id == "session-a"
 
@@ -65,7 +70,8 @@ def test_a_headerless_deployed_decision_cannot_resume_a_pending_write(tmp_path, 
     model = ScriptedModel([call("stop_channel", "use-1", channel_id="ch-1")], [say("Stopped.")])
     hub = build_hub(tmp_path, model)
     monkeypatch.setattr(entrypoint, "get_hub", lambda: hub.hub)
-    [*_, approval] = invoke({"prompt": "Stop ch-1."}, headers={ACTOR: "operator-a"})
+    events = invoke({"prompt": "Stop ch-1."}, headers={ACTOR: "operator-a"})
+    [approval] = [event for event in events if event.type == "approval_requested"]
     decision = {"decision": {"approval_id": approval.approval_id, "approve": True}}
 
     [error] = invoke(decision)

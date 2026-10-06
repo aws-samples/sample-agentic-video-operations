@@ -117,6 +117,10 @@ Before an AWS-backed run or deployment, make those checks strict:
 just doctor aws
 ```
 
+The strict check also starts the three converted MCP servers with writes
+disabled, lists the configured live resources, and runs one health read per
+sample. Run that probe directly with `just smoke aws`.
+
 ### Models
 
 Choose models once in the root `.env`. All local runs and deployments use the
@@ -243,6 +247,7 @@ Use the root commands:
 ```bash
 just doctor
 just doctor aws
+just smoke aws
 just test <key>
 just lint
 just eval

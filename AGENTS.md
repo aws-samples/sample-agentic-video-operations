@@ -46,4 +46,4 @@ For changed deploy material, also run `cdk synth` or `cfn-lint`, as applicable.
 - Never commit `.env`, credentials, account IDs, ARNs, or real resource IDs.
 - Keep write tools disabled unless `ALLOW_WRITES=true`.
 - Every operational write requires approval and post-action verification.
-- Tests and demos must run offline unless explicitly labeled as integration.
+- Tests and demos run offline. Live AWS probes use the explicit `just smoke aws` command.

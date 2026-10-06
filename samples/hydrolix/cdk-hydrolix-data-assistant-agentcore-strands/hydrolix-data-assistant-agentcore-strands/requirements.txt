@@ -7,6 +7,8 @@ bedrock-agentcore-starter-toolkit
 botocore
 gunicorn
 pydantic-settings
+# zoneinfo's data, so user_timezone checks don't depend on the image's OS packages.
+tzdata
 # Runtime dependencies of mcp_hydrolix v0.3.7, the MCP_COMMIT pin in
 # scripts/manage_hydrolix_stack.py, copied from its pyproject.toml.
 # Change them together with the pin.
@@ -18,7 +20,10 @@ clickhouse-connect>=0.15,<0.16
 truststore>=0.10
 uvicorn[standard]>=0.34,<1.0
 pyjwt>=2.14.0,<3
-sqlglot>=26.0,<27.0
+# Exact: the runtime's SQL check (src/utils/check_hydrolix_query.py) depends on this
+# version's parse trees, so it defines a security boundary. It is inside upstream's
+# >=26.0,<27.0. Change it only with test_hydrolix_bound_model_sql passing.
+sqlglot==26.33.0
 prometheus-client>=0.21,<1.0
 # CVE floors from upstream constraint-dependencies (mcp_hydrolix v0.3.7) for
 # transitive packages; pip doesn't read uv constraints. oauthlib is dev-only there.

@@ -1,14 +1,15 @@
 # Root of the uv workspace. One lock, one virtual environment, one set of tool settings.
-# Each sample joins `members` (and leaves the ruff/pytest exclusions) when it is converted
-# to docs/build_a_sample.md.
+# Python samples that share the lock are listed explicitly below.
 [project]
 name = "sample-agentic-video-operations"
 version = "0.1.0"
+license = "MIT-0"
 requires-python = ">=3.12"
-dependencies = ["media-ops-contracts", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server", "media-ops-hub"]
+dependencies = ["media-ops-contracts", "media-ops-video-quality", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server", "media-ops-hub"]
 
 [dependency-groups]
-dev = ["mypy>=1.14,<2", "pytest>=8.3,<9", "pyyaml>=6,<7", "ruff>=0.12,<0.13"]
+# sqlglot: the Hydrolix runtime's SQL check, pinned exactly as in its requirements.txt.
+dev = ["mypy>=1.14,<2", "pytest>=8.3,<9", "pyyaml>=6,<7", "ruff>=0.12,<0.13", "sqlglot==26.33.0"]
 
 [tool.uv]
 package = false
@@ -16,6 +17,7 @@ package = false
 [tool.uv.workspace]
 members = [
   "packages/media_ops_contracts",
+  "packages/media_ops_video_quality",
   "samples/cmcd",
   "samples/mediaconnect",
   "samples/medialive",
@@ -24,24 +26,24 @@ members = [
 
 [tool.uv.sources]
 media-ops-contracts = { workspace = true }
+media-ops-video-quality = { workspace = true }
 cmcd-mcp-server = { workspace = true }
 mediaconnect-mcp-server = { workspace = true }
 medialive-mcp-server = { workspace = true }
 media-ops-hub = { workspace = true }
 
 [tool.ruff]
+# Tool caches live under one ignored .cache/ directory, not in the repository root.
+cache-dir = ".cache/ruff"
 line-length = 100
 target-version = "py312"
 src = [
   "packages/media_ops_contracts/src",
+  "packages/media_ops_video_quality/src",
   "samples/cmcd/src",
   "samples/mediaconnect/src",
   "samples/medialive/src",
   "samples/hub/src",
-]
-# Unconverted samples; remove each entry in the step that converts the sample.
-extend-exclude = [
-  "samples/hydrolix",
 ]
 
 [tool.ruff.lint]
@@ -54,16 +56,21 @@ select = ["E", "F", "I", "B", "UP", "SIM", "S"]
 # InfluxDB tunnel URL from validated settings; nothing user-supplied.
 "scripts/*.py" = ["S310", "S603", "S607"]
 
-# Non-strict baseline over the converted packages; ratchet per package as they harden.
-# Same conversion contract as ruff: a sample joins `files` when it is converted.
+# Non-strict baseline over the workspace packages; ratchet per package as they harden.
 [tool.mypy]
+cache_dir = ".cache/mypy"
 files = [
   "packages/media_ops_contracts/src",
+  "packages/media_ops_video_quality/src",
   "samples/cmcd/src",
   "samples/mediaconnect/src",
   "samples/medialive/src",
   "samples/hub/src",
+  "samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands",
 ]
+# The hydrolix deploy copies the upstream mcp_hydrolix package into src/mcp (gitignored,
+# not this repository's code); it is checked upstream, not here.
+exclude = ['^samples/hydrolix/.*/src/mcp/']
 python_version = "3.12"
 ignore_missing_imports = true
 check_untyped_defs = true
@@ -87,9 +94,11 @@ module = [
 ignore_errors = true
 
 [tool.pytest.ini_options]
-# Add each converted sample's tests/ directory here.
+cache_dir = ".cache/pytest"
+# Test paths for workspace packages and sample-specific suites.
 testpaths = [
   "packages/media_ops_contracts/tests",
+  "packages/media_ops_video_quality/tests",
   "scripts/tests",
   "samples/cmcd/tests",
   "samples/mediaconnect/tests",
@@ -99,7 +108,7 @@ testpaths = [
   "samples/hub/tests/eval",
 ]
 pythonpath = ["scripts"]
-addopts = "--strict-markers --tb=short -m 'not eval and not integration'"
+addopts = "--strict-markers --tb=short -m 'not eval'"
 # Third-party deprecations raised at import time by bedrock-agentcore and strands; not ours to fix.
 filterwarnings = [
   "ignore:Support for class-based `config` is deprecated:DeprecationWarning",
@@ -109,5 +118,4 @@ filterwarnings = [
 ]
 markers = [
   "eval: fixture-replay scenario evaluations (run with `just eval`)",
-  "integration: needs a deployed stack and AWS credentials",
 ]

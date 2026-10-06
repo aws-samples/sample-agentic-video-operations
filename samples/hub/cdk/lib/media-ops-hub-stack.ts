@@ -4,9 +4,13 @@
  * - One runtime runs the Strands hub with the domain packs named by `-c mediaDomains=...`.
  * - IAM is declared by each pack in samples/<key>/iam_permissions.json: every `read`
  *   statement is granted, `write` statements only with `-c allowWrites=true`.
+ *   `-c writeTag=Key=Value` can limit those writes to tagged channels and flows.
  * - One Secrets Manager secret holds APPROVAL_SIGNING_KEY. Every container reads the same
  *   secret, so an approval paused in one container verifies in another.
  * - HUB_LOCAL_MODE is never set here: a request without an actor is refused.
+ * - Inbound auth is IAM by default (the actor header names the actor). With
+ *   `-c jwtDiscoveryUrl=... -c jwtClientIds=...` the runtime accepts only bearer tokens from
+ *   that identity provider, and the actor is the token's `sub` (extend_the_hub.md §1).
  */
 
 import * as fs from 'fs';
@@ -23,6 +27,9 @@ const REPOSITORY_ROOT = path.join(SAMPLES_DIR, '..');
 const DEFAULT_MEDIA_DOMAINS = 'medialive,mediaconnect';
 // The hub refuses a request without it, so AgentCore must forward it to the container.
 export const ACTOR_HEADER = 'X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id';
+// With JWT auth, AgentCore verifies this header's token and forwards it; the hub reads `sub`.
+export const AUTHORIZATION_HEADER = 'Authorization';
+const DISCOVERY_SUFFIX = '/.well-known/openid-configuration';
 // One hub per account and region. scripts/manage_hub_stack.py RUNTIME_NAME must match: its
 // destroy deletes only log groups of this exact runtime name.
 export const RUNTIME_NAME = 'MediaOpsHubRuntime';
@@ -37,6 +44,11 @@ interface PackPermissions {
   write: PackStatement[];
 }
 
+export interface WriteTag {
+  key: string;
+  value: string;
+}
+
 export class MediaOpsHubStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -45,6 +57,15 @@ export class MediaOpsHubStack extends cdk.Stack {
       this.node.tryGetContext('mediaDomains') ?? DEFAULT_MEDIA_DOMAINS,
     );
     const allowWrites = `${this.node.tryGetContext('allowWrites') ?? 'false'}` === 'true';
+    const writeTag = readWriteTag(this.node.tryGetContext('writeTag'));
+    const jwt = readJwtSettings(
+      this.node.tryGetContext('jwtDiscoveryUrl'),
+      this.node.tryGetContext('jwtClientIds'),
+    );
+    const invokerRoleName = this.node.tryGetContext('invokerRoleName');
+    if (jwt && invokerRoleName) {
+      throw new Error('invokerRoleName grants IAM invoke, which a JWT-authorized runtime refuses. Pass one of them.');
+    }
 
     const bedrockModelId = new cdk.CfnParameter(this, 'BedrockModelId', {
       type: 'String',
@@ -63,7 +84,8 @@ export class MediaOpsHubStack extends cdk.Stack {
       platform: ecr_assets.Platform.LINUX_ARM64,
       exclude: [
         '**/.git', '**/.venv', '**/node_modules', '**/cdk.out', '**/__pycache__',
-        '**/.pytest_cache', '.claude', '.kiro', 'docs/images', 'samples/hydrolix',
+        '**/.pytest_cache', '**/.cache', '**/.mypy_cache', '**/.ruff_cache',
+        '**/eval-results.json', '.claude', '.kiro', 'docs/images', 'samples/hydrolix',
         'samples/hub/cdk', 'samples/*/tests',
       ],
     });
@@ -92,7 +114,7 @@ export class MediaOpsHubStack extends cdk.Stack {
     image.repository.grantPull(role);
     signingKey.grantRead(role);
     for (const domain of mediaDomains) {
-      for (const statement of this.packStatements(domain, allowWrites)) {
+      for (const statement of this.packStatements(domain, allowWrites, writeTag)) {
         role.addToPolicy(statement);
       }
     }
@@ -111,18 +133,25 @@ export class MediaOpsHubStack extends cdk.Stack {
       networkConfiguration: { networkMode: 'PUBLIC' },
       roleArn: role.roleArn,
       description: 'The media ops hub: one Strands agent over the selected domain packs',
-      requestHeaderConfiguration: { requestHeaderAllowlist: [ACTOR_HEADER] },
+      // JWT mode forwards only the verified token, so a caller cannot supply an actor header.
+      requestHeaderConfiguration: { requestHeaderAllowlist: [jwt ? AUTHORIZATION_HEADER : ACTOR_HEADER] },
+      authorizerConfiguration: jwt
+        ? { customJwtAuthorizer: { discoveryUrl: jwt.discoveryUrl, allowedClients: jwt.clientIds } }
+        : undefined,
       environmentVariables: {
         AWS_REGION: this.region,
         AGENT_MODEL_ID: bedrockModelId.valueAsString,
         THUMBNAIL_MODEL_ID: thumbnailModelId.valueAsString,
         MEDIA_DOMAINS: mediaDomains.join(','),
+        // Visual quality sampling inside one hub turn (the MCP default is 10 frames in 30 s).
+        VISUAL_QUALITY_FRAMES: '8',
+        VISUAL_QUALITY_WINDOW_SECONDS: '20',
         ALLOW_WRITES: allowWrites ? 'true' : 'false',
         MEMORY_ID: memory.attrMemoryId,
         APPROVAL_SIGNING_KEY_SECRET_ARN: signingKey.secretArn,
+        ...(jwt ? { HUB_JWT_ISSUER: jwt.issuer, HUB_JWT_ALLOWED_CLIENTS: jwt.clientIds.join(',') } : {}),
       },
     });
-    runtime.addDependency(memory);
     for (const statement of this.runtimeStatements(memory.attrMemoryArn)) {
       role.addToPolicy(statement);
     }
@@ -132,26 +161,27 @@ export class MediaOpsHubStack extends cdk.Stack {
       name: `MediaOpsHubEndpoint_${suffix}`,
       description: 'Endpoint for invoking the media ops hub',
     });
-    endpoint.addDependency(runtime);
 
-    // Who may invoke: only principals with this policy (or broader IAM). The actor header is
-    // caller-supplied, so actor isolation holds only among these principals (extend_the_hub.md §1).
-    const invokePolicy = new iam.ManagedPolicy(this, 'InvokeHubPolicy', {
-      description: 'Invoke the media ops hub runtime and its endpoint, nothing else',
-      statements: [
-        new iam.PolicyStatement({
-          sid: 'InvokeHub',
-          actions: ['bedrock-agentcore:InvokeAgentRuntime'],
-          resources: [runtime.attrAgentRuntimeArn, `${runtime.attrAgentRuntimeArn}/runtime-endpoint/*`],
-        }),
-      ],
-    });
-    const invokerRoleName = this.node.tryGetContext('invokerRoleName');
-    if (invokerRoleName) {
-      invokePolicy.attachToRole(iam.Role.fromRoleName(this, 'InvokerRole', `${invokerRoleName}`));
+    if (!jwt) {
+      // Who may invoke: only principals with this policy (or broader IAM). The actor header is
+      // caller-supplied, so actor isolation holds only among these principals (extend_the_hub.md §1).
+      const invokePolicy = new iam.ManagedPolicy(this, 'InvokeHubPolicy', {
+        description: 'Invoke the media ops hub runtime and its endpoint, nothing else',
+        statements: [
+          new iam.PolicyStatement({
+            sid: 'InvokeHub',
+            actions: ['bedrock-agentcore:InvokeAgentRuntime'],
+            resources: [runtime.attrAgentRuntimeArn, `${runtime.attrAgentRuntimeArn}/runtime-endpoint/*`],
+          }),
+        ],
+      });
+      if (invokerRoleName) {
+        invokePolicy.attachToRole(iam.Role.fromRoleName(this, 'InvokerRole', `${invokerRoleName}`));
+      }
+      new cdk.CfnOutput(this, 'InvokePolicyArn', { value: invokePolicy.managedPolicyArn });
     }
 
-    new cdk.CfnOutput(this, 'InvokePolicyArn', { value: invokePolicy.managedPolicyArn });
+    new cdk.CfnOutput(this, 'InboundAuth', { value: jwt ? 'jwt' : 'iam' });
     new cdk.CfnOutput(this, 'AgentRuntimeArn', { value: runtime.attrAgentRuntimeArn });
     new cdk.CfnOutput(this, 'AgentRuntimeId', { value: runtime.attrAgentRuntimeId });
     new cdk.CfnOutput(this, 'AgentEndpointName', { value: endpoint.name });
@@ -208,7 +238,11 @@ export class MediaOpsHubStack extends cdk.Stack {
   }
 
   /** The pack's declared IAM: read always, write only when writes are allowed. */
-  private packStatements(domain: string, allowWrites: boolean): iam.PolicyStatement[] {
+  private packStatements(
+    domain: string,
+    allowWrites: boolean,
+    writeTag?: WriteTag,
+  ): iam.PolicyStatement[] {
     const permissions = readPackPermissions(domain);
     const groups: [string, PackStatement[]][] = [['Read', permissions.read]];
     if (allowWrites) {
@@ -223,10 +257,36 @@ export class MediaOpsHubStack extends cdk.Stack {
             resources: statement.resources.map((resource) =>
               resource.split('{region}').join(this.region).split('{account}').join(this.account),
             ),
+            conditions: kind === 'Write' && writeTag
+              ? { StringEquals: { [`aws:ResourceTag/${writeTag.key}`]: writeTag.value } }
+              : undefined,
           }),
       ),
     );
   }
+}
+
+export interface JwtSettings {
+  discoveryUrl: string;
+  issuer: string;
+  clientIds: string[];
+}
+
+/** Both or neither: a discovery URL without client ids would admit any client of the provider. */
+export function readJwtSettings(discoveryUrl?: string, clientIds?: string): JwtSettings | undefined {
+  const url = `${discoveryUrl ?? ''}`.trim();
+  const clients = `${clientIds ?? ''}`.split(',').map((c) => c.trim()).filter(Boolean);
+  if (!url && clients.length === 0) {
+    return undefined;
+  }
+  if (!/^https:\/\/\S+\/\.well-known\/openid-configuration$/.test(url) || clients.length === 0) {
+    throw new Error(
+      'JWT auth needs both -c jwtDiscoveryUrl=https://<issuer>/.well-known/openid-configuration '
+      + 'and -c jwtClientIds=<client id>[,<client id>].',
+    );
+  }
+  // OpenID Connect discovery: the issuer is the discovery URL without the well-known suffix.
+  return { discoveryUrl: url, issuer: url.slice(0, -DISCOVERY_SUFFIX.length), clientIds: clients };
 }
 
 export function parseMediaDomains(value: string): string[] {
@@ -235,6 +295,25 @@ export function parseMediaDomains(value: string): string[] {
     throw new Error('mediaDomains is empty. Pass -c mediaDomains=medialive (comma-separated).');
   }
   return domains;
+}
+
+export function readWriteTag(value?: string): WriteTag | undefined {
+  const raw = `${value ?? ''}`.trim();
+  if (!raw) {
+    return undefined;
+  }
+  const separator = raw.indexOf('=');
+  const key = separator < 0 ? '' : raw.slice(0, separator).trim();
+  const tagValue = separator < 0 ? '' : raw.slice(separator + 1).trim();
+  const validKey = /^[A-Za-z0-9_.:/+@-]{1,128}$/.test(key);
+  const validValue = tagValue.length <= 256 && !/[\u0000-\u001f\u007f]/.test(tagValue);
+  if (!validKey || !tagValue || !validValue) {
+    throw new Error(
+      'writeTag must be Key=Value with an ASCII tag key (1-128 characters) '
+      + 'and a non-empty value of at most 256 characters.',
+    );
+  }
+  return { key, value: tagValue };
 }
 
 export function readPackPermissions(domain: string): PackPermissions {

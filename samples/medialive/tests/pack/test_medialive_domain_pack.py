@@ -67,6 +67,23 @@ def test_its_read_tools_answer_from_fixtures(pack):
     assert any(issue.metric == "InputLossSeconds" for issue in report.issues)
 
 
+@pytest.mark.parametrize("hours_back", [0, 169])
+@pytest.mark.parametrize(
+    "tool_name",
+    ["read_channel_metrics", "read_channel_logs", "check_channel_issues", "read_metrics_table"],
+)
+def test_history_read_tools_reject_windows_outside_one_hour_to_seven_days(
+    pack, tool_name, hours_back
+):
+    tools = {tool.__name__: tool for tool in pack.read_tools()}
+
+    with pytest.raises(ToolFailure) as failure:
+        tools[tool_name](channel_id=CHANNEL, hours_back=hours_back)
+
+    assert failure.value.kind is FailureKind.INVALID_REQUEST
+    assert failure.value.message == "hours_back must be between 1 and 168."
+
+
 def test_every_write_tool_names_the_channel_and_takes_an_approval(pack):
     writes = pack.write_tools()
     assert len(writes) == 8
@@ -136,7 +153,11 @@ def test_an_approval_for_other_inputs_never_reaches_aws(tmp_path):
 
 def test_its_skills_parse_and_are_listed_by_name_and_description(pack):
     catalogue = SkillCatalogue.from_paths(pack.skill_paths)
-    assert catalogue.names() == ["diagnose-input-loss", "read-channel-health"]
+    assert catalogue.names() == [
+        "assess-picture-quality",
+        "diagnose-input-loss",
+        "read-channel-health",
+    ]
     assert all(line.startswith("- ") for line in catalogue.prompt_lines())
 
 

@@ -1,10 +1,12 @@
 """Create approval-bound MediaConnect writes for the domain pack."""
 
-from datetime import UTC, datetime
+from collections.abc import Callable
+from datetime import datetime
 
 from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import ApprovedAction
 from media_ops_contracts.domain_pack import WriteTool
+from media_ops_contracts.read_utc_now import read_utc_now
 from media_ops_contracts.resolve_approval_signing_key import resolve_approval_signing_key
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from mediaconnect_mcp.adapters.media_connect import start_flow as start_adapter
@@ -27,7 +29,12 @@ def require_matching_approval(approved_action: ApprovedAction, action: str, flow
         )
 
 
-def create_write_tools(settings: RuntimeSettings, clients: MediaConnectClients) -> list[WriteTool]:
+def create_write_tools(
+    settings: RuntimeSettings,
+    clients: MediaConnectClients,
+    *,
+    clock: Callable[[], datetime] = read_utc_now,
+) -> list[WriteTool]:
     signing_key = resolve_approval_signing_key(settings.approval_signing_key.get_secret_value())
 
     def start_flow(flow_arn: str, approved_action: ApprovedAction) -> ActionResult:
@@ -37,7 +44,7 @@ def create_write_tools(settings: RuntimeSettings, clients: MediaConnectClients) 
             approved_action,
             clients.mediaconnect,
             signing_key,
-            datetime.now(UTC),
+            clock(),
         )
         return translate_action_result(result, approved_action.approval_id)
 
@@ -48,7 +55,7 @@ def create_write_tools(settings: RuntimeSettings, clients: MediaConnectClients) 
             approved_action,
             clients.mediaconnect,
             signing_key,
-            datetime.now(UTC),
+            clock(),
         )
         return translate_action_result(result, approved_action.approval_id)
 

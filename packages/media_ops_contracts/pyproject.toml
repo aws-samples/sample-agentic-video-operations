@@ -2,6 +2,7 @@
 name = "media-ops-contracts"
 version = "0.1.0"
 description = "Shared, framework-free contract types for the video-ops samples (approvals, failures, stream events, AWS clients, fixtures)."
+license = "MIT-0"
 requires-python = ">=3.12"
 dependencies = ["pydantic>=2.9,<3", "boto3>=1.35,<2"]
 

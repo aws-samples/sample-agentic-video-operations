@@ -14,10 +14,12 @@ from media_ops_contracts.domain_pack import DomainPackError
 from media_ops_contracts.parse_skill import SkillError
 from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER, ErrorEvent, StreamEvent
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
+from media_ops_hub.bootstrap.apply_hub_tool_defaults import apply_hub_tool_defaults
 from media_ops_hub.bootstrap.create_hub import Hub, create_hub
 from media_ops_hub.bootstrap.export_approval_signing_key import export_approval_signing_key
 from media_ops_hub.domain.hub_request import HubRequest
-from media_ops_hub.settings.runtime_settings import load_hub_settings
+from media_ops_hub.domain.read_token_actor import read_token_actor
+from media_ops_hub.settings.runtime_settings import HubSettings, load_hub_settings
 from media_ops_hub.workflows.run_hub_turn import stream_hub_turn
 
 ACTOR_HEADER = "x-amzn-bedrock-agentcore-runtime-custom-actor-id"
@@ -31,6 +33,7 @@ app = BedrockAgentCoreApp()
 @cache
 def get_hub() -> Hub:
     export_approval_signing_key(os.environ)
+    apply_hub_tool_defaults(os.environ)
     return create_hub(load_hub_settings())
 
 
@@ -46,13 +49,9 @@ def invoke(payload: dict[str, Any], context: Any) -> Iterator[dict[str, Any]]:
 def respond(payload: dict[str, Any], context: Any, session_id: str) -> Iterator[StreamEvent]:
     try:
         hub = get_hub()
-        caller = identify_caller(context, local_mode=hub.settings.hub_local_mode)
+        caller = identify_caller(context, hub.settings)
         if caller is None:
-            yield failure_event(
-                session_id,
-                "The request names no actor or session.",
-                f"Send the {ACTOR_HEADER} header and a runtime session id.",
-            )
+            yield refusal_event(session_id, jwt_mode=bool(hub.settings.hub_jwt_issuer))
             return
         session_id, actor_id = caller
         try:
@@ -73,14 +72,37 @@ def respond(payload: dict[str, Any], context: Any, session_id: str) -> Iterator[
         )
 
 
-def identify_caller(context: Any, *, local_mode: bool) -> tuple[str, str] | None:
-    """(session id, actor id). Only local mode may fill in a missing one."""
+def identify_caller(context: Any, settings: HubSettings) -> tuple[str, str] | None:
+    """(session id, actor id). With JWT authorization the actor is the token's `sub` and the
+    actor header is ignored; otherwise it is the header. Only local mode fills in a gap."""
     headers = {key.lower(): value for key, value in (context.request_headers or {}).items()}
-    actor_id = headers.get(ACTOR_HEADER) or (LOCAL_ACTOR if local_mode else None)
-    session_id = context.session_id or (LOCAL_SESSION if local_mode else None)
+    local = settings.hub_local_mode
+    if settings.hub_jwt_issuer:
+        actor_id = read_token_actor(
+            headers.get("authorization"),
+            issuer=settings.hub_jwt_issuer,
+            allowed_clients=settings.jwt_allowed_clients,
+        )
+    else:
+        actor_id = headers.get(ACTOR_HEADER) or (LOCAL_ACTOR if local else None)
+    session_id = context.session_id or (LOCAL_SESSION if local else None)
     if actor_id is None or session_id is None:
         return None
     return session_id, actor_id
+
+
+def refusal_event(session_id: str, *, jwt_mode: bool) -> ErrorEvent:
+    if jwt_mode:
+        return failure_event(
+            session_id,
+            "The request has no valid bearer token or no session.",
+            "Send a current access token from the hub's identity provider and a session id.",
+        )
+    return failure_event(
+        session_id,
+        "The request names no actor or session.",
+        f"Send the {ACTOR_HEADER} header and a runtime session id.",
+    )
 
 
 def failure_event(

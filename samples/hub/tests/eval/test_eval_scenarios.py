@@ -12,9 +12,10 @@ SCENARIOS = ROOT / "samples/hub/tests/scenarios"
 
 def test_all_hub_scenarios(tmp_path, request):
     scenarios = load_eval_scenarios(SCENARIOS)
-    assert len(scenarios) == 5
+    assert len(scenarios) == 7
     results = [run_scenario(scenario, tmp_path) for scenario in scenarios]
-    output = ROOT / "eval-results.json"
+    output = ROOT / ".cache" / "eval-results.json"
+    output.parent.mkdir(exist_ok=True)
     output.write_text(json.dumps([result.model_dump() for result in results], indent=2) + "\n")
 
     terminal = request.config.pluginmanager.get_plugin("terminalreporter")

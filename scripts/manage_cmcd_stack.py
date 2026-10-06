@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -35,12 +36,13 @@ from destroy_cmcd_stack import (
 )
 
 TEMPLATE = "samples/cmcd/cloudfront-cmcd-kinesis.yaml"
-DEPLOY_ACTION = (
-    "deploy (billable: CloudFront, Kinesis, InfluxDB db.influx.medium, NAT gateway, EC2)"
-)
+DEPLOY_ACTION = "deploy (billable: CloudFront, Kinesis, InfluxDB, VPC endpoints, EC2)"
+DEFAULT_INFLUXDB_INSTANCE_TYPE = "db.influx.medium"
+DEFAULT_BASTION_INSTANCE_TYPE = "t3.nano"
 TUNNEL_URL = "https://localhost:8086"
 
 Runner = Callable[[Sequence[str], bool], subprocess.CompletedProcess[str]]
+Clock = Callable[[], float]
 BUCKET_ALREADY_EXISTS = re.compile(r"An error occurred \(BucketAlreadyExists\)")
 
 
@@ -166,14 +168,36 @@ def prepare_artifact_bucket(runner: Runner, bucket: str, account: str) -> int:
     return 0
 
 
+def format_elapsed(seconds: float) -> str:
+    elapsed = max(0, int(seconds))
+    return f"{elapsed // 60}m {elapsed % 60:02d}s"
+
+
 def deploy_stack(
-    runner: Runner, *, assume_yes: bool, environ: Mapping[str, str], ask: Callable[[str], str]
+    runner: Runner,
+    *,
+    assume_yes: bool,
+    environ: Mapping[str, str],
+    ask: Callable[[str], str],
+    influxdb_instance_type: str = DEFAULT_INFLUXDB_INSTANCE_TYPE,
+    bastion_instance_type: str = DEFAULT_BASTION_INSTANCE_TYPE,
+    clock: Clock = time.monotonic,
 ) -> int:
     account = read_account_id(runner)
     if account is None:
         print(NO_CREDENTIALS_FIX)
         return 1
-    prompt = ConfirmationPrompt(DEPLOY_ACTION, STACK, REGION, account)
+    prompt = ConfirmationPrompt(
+        DEPLOY_ACTION,
+        STACK,
+        REGION,
+        account,
+        {
+            "InfluxDB class": influxdb_instance_type,
+            "bastion class": bastion_instance_type,
+            "private AWS path": "2-AZ Secrets Manager endpoint; no NAT gateway",
+        },
+    )
     if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask):
         return 1
     origin = environ.get("CMCD_ORIGIN_DOMAIN") or "example.com"
@@ -185,6 +209,7 @@ def deploy_stack(
     status = verify_artifact_bucket_owner(runner, artifacts, account)
     if status != 0:
         return status
+    started_at = clock()
     result = runner(
         [
             "cloudformation", "deploy", "--region", REGION, "--stack-name", STACK,
@@ -192,11 +217,15 @@ def deploy_stack(
             "--s3-bucket", artifacts, "--s3-prefix", STACK,
             "--parameter-overrides", f"OriginDomainName={origin}", f"S3BucketName={bucket}",
             f"DeploymentArtifactsBucketName={artifacts}",
+            f"InfluxDBInstanceType={influxdb_instance_type}",
+            f"BastionInstanceType={bastion_instance_type}",
         ],
         False,
     )  # fmt: skip
+    print(f"CloudFormation deploy elapsed: {format_elapsed(clock() - started_at)}")
     if result.returncode != 0:
         return result.returncode
+    print("smoke write/read: passed")
     return show_next_steps(runner)
 
 
@@ -225,7 +254,10 @@ Connect the MCP server to InfluxDB (private subnet, reached through the bastion)
      uv run python scripts/manage_cmcd_stack.py create-read-token
 
 The token command does not print the password or token. VERIFY_SSL=false is used only through
-the tunnel because the certificate names the private InfluxDB host, not localhost.""")
+the tunnel because the certificate names the private InfluxDB host, not localhost.
+
+When finished, remove every billable resource:
+  just destroy cmcd""")
     return 0
 
 
@@ -236,6 +268,7 @@ def main(
     token_creator: TokenCreator = create_influxdb_read_token,
     env_path: Path = Path(".env"),
     env_example_path: Path = Path(".env.example"),
+    clock: Clock = time.monotonic,
 ) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -243,9 +276,27 @@ def main(
         choices=["deploy", "destroy", "show-next-steps", "create-read-token"],
     )
     parser.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    parser.add_argument(
+        "--influxdb-instance-type",
+        default=DEFAULT_INFLUXDB_INSTANCE_TYPE,
+        help="Timestream for InfluxDB class (default: db.influx.medium, the smallest supported)",
+    )
+    parser.add_argument(
+        "--bastion-instance-type",
+        default=DEFAULT_BASTION_INSTANCE_TYPE,
+        help="EC2 class for the SSM port-forwarding bastion (default: t3.nano)",
+    )
     arguments = parser.parse_args(argv)
     if arguments.command == "deploy":
-        return deploy_stack(runner, assume_yes=arguments.yes, environ=os.environ, ask=ask)
+        return deploy_stack(
+            runner,
+            assume_yes=arguments.yes,
+            environ=os.environ,
+            ask=ask,
+            influxdb_instance_type=arguments.influxdb_instance_type,
+            bastion_instance_type=arguments.bastion_instance_type,
+            clock=clock,
+        )
     if arguments.command == "destroy":
         return destroy_cmcd_stack(runner, assume_yes=arguments.yes, ask=ask)
     if arguments.command == "create-read-token":

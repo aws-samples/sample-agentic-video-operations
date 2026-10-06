@@ -1,6 +1,8 @@
 from check_model_ids import MODEL_ID_PATTERN, find_unknown_model_ids
 from model_ids import ALLOWED_MODEL_IDS
 
+from media_ops_contracts.estimate_model_cost import PRICED_MODEL_IDS
+
 # Built from parts so the repository scan in this same suite does not flag it.
 UNKNOWN_ID = "us.amazon." + "nova-pro-v1:0"
 
@@ -29,3 +31,7 @@ def test_allowlist_ids_match_their_own_pattern() -> None:
 
 def test_repository_has_no_unknown_model_ids() -> None:
     assert find_unknown_model_ids() == []
+
+
+def test_the_cost_table_uses_only_exact_canonical_model_ids() -> None:
+    assert PRICED_MODEL_IDS <= ALLOWED_MODEL_IDS

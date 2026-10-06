@@ -6,10 +6,6 @@ from botocore.exceptions import ClientError
 
 from media_ops_contracts.replay_fixture_client import ReplayFixtureClient
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
-from mediaconnect_mcp.adapters.bedrock.describe_thumbnail import (
-    ThumbnailDescription,
-    describe_thumbnail,
-)
 from mediaconnect_mcp.adapters.cloudwatch.read_flow_metrics import (
     FlowMetrics,
     MetricCategory,
@@ -184,25 +180,3 @@ def test_read_flow_metrics_returns_typed_fixture_series(tmp_path):
     assert isinstance(result, FlowMetrics)
     assert result.series[0].name == "SourceARQRecovered"
     assert result.series[0].points[0].value == 17
-
-
-def test_describe_thumbnail_returns_typed_model_evidence(tmp_path):
-    client = record_fixture(
-        tmp_path,
-        "bedrock-runtime",
-        "converse",
-        {
-            "output": {
-                "message": {"content": [{"text": "The live frame shows normal program video."}]}
-            }
-        },
-    )
-
-    result = describe_thumbnail(client, "ZmFrZS1qcGVn", "demo-thumbnail-model")
-
-    assert isinstance(result, ThumbnailDescription)
-    assert result.text == "The live frame shows normal program video."
-    assert result.model_id == "demo-thumbnail-model"
-    operation, request = client.calls[0]
-    assert operation == "converse"
-    assert request["messages"][0]["content"][1]["image"]["source"]["bytes"] == b"fake-jpeg"

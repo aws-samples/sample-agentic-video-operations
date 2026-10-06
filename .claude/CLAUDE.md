@@ -1,219 +1,106 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) in this repository. Start with
+[`AGENTS.md`](../AGENTS.md): it lists the samples, the reading order and the
+common commands. This file adds the rules an agent most often gets wrong.
 
-## Required Development Standard
+## Priority
 
-Before adding or refactoring application code, read and follow
-[`docs/follow_development_guidelines.md`](../docs/follow_development_guidelines.md).
-
-The development guidelines are normative for new work in
-`media-services-langchain`. They define action-oriented naming, small file and
-unit budgets, one-way dependencies, layer shims, operational safety controls,
-the target project layout, testing expectations, mandatory README and
-supporting-document standards, and the incremental refactor sequence.
-
-When guidance conflicts, use this priority:
+When guidance conflicts:
 
 1. Explicit user requirements.
 2. Security and operational-safety rules.
-3. `docs/follow_development_guidelines.md`.
-4. Existing repository conventions.
+3. [`build_a_sample.md`](../docs/build_a_sample.md),
+   [`write_safe_tools.md`](../docs/write_safe_tools.md) and
+   [`extend_the_hub.md`](../docs/extend_the_hub.md).
+4. [`follow_development_guidelines.md`](../docs/follow_development_guidelines.md).
+5. Existing repository conventions.
 
-## Project Overview
+## Layout
 
-A collection of AI agent samples for intelligent media operations — monitoring, diagnosing, and managing live streaming pipelines using MCP servers and Amazon Bedrock AgentCore. Each sample uses specialized agents (Strands Agents SDK or LangChain/LangGraph) to interact with AWS media services (MediaLive, MediaConnect), CDN analytics (Hydrolix, CMCD/InfluxDB), and observability data.
+- `samples/<key>/`: one folder per sample, named by its key (`cmcd`,
+  `mediaconnect`, `medialive`, `hub`, `hydrolix`).
+- `packages/media_ops_contracts`: typed tool failures, approved actions, stream
+  events, fixture replay and the domain-pack contract.
+- `packages/media_ops_video_quality`: frame measurements, the vision rubric and
+  telemetry fusion for the picture-quality tools.
+- `fixtures/`: recorded scenarios that run with no AWS account.
+- `docs/`: design docs; repository images live in `docs/images/`.
 
-## Repository Structure
+`scripts/check_repository_layout.py` enforces the layout. Use descriptive,
+not cryptic, names for branches, folders and files.
 
-| Directory | What It Is | Agent Framework | Entry Points |
-|-----------|-----------|-----------------|--------------|
-| `samples/medialive/` | MediaLive channel management + monitoring | Strands Agent + FastMCP | `server.py` (MCP stdio), `main.py` (AgentCore) |
-| `samples/mediaconnect/` | MediaConnect flow management + monitoring | FastMCP only | `server.py` (MCP stdio) |
-| `samples/cmcd/` | CMCD streaming QoE analytics via InfluxDB | FastMCP only | `cmcd_server.py` (MCP stdio) |
-| `samples/hydrolix/` | Multi-agent CDN analytics (orchestrator + 3 subagents) | Strands Agent + AgentCore | `app.py` (AgentCore), CDK + Amplify |
-| `samples/hub/` | Multi-agent streaming ops (Coordinator + EML + EMX) | LangChain/LangGraph + AgentCore | `coordinator/main.py`, `eml/main.py`, `emx/main.py` |
+## Architecture
 
-`mcp-eml-reference/` is gitignored — superseded by `samples/medialive/`.
-
-## Architecture Patterns
-
-### Dual Entry Point Pattern (medialive-mcp-server)
-
-- `server.py` (FastMCP): Registers individual tools, spawned by local MCP clients via stdio
-- `main.py` → `src/app.py` (Strands Agent): Uses composite tools pattern (15 tools → 6 composites for ~67% schema token reduction), deployed to AgentCore
-
-### AgentCore Runtime Pattern
-
-```python
-from bedrock_agentcore.runtime import BedrockAgentCoreApp
-app = BedrockAgentCoreApp()
-
-@app.entrypoint
-async def invoke(payload, context):
-    # actor_id from X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id header
-    # session_id from context.session_id
-    # Container is session-pinned — global agent survives across invocations
-```
-
-### Multi-Agent Orchestration (hydrolix-cdn-insights)
-
-Orchestrator routes to specialized subagents (`hydrolix_agent`, `qoe_analysis_agent`, `cache_origin_agent`). Each subagent gets its own system prompt, tools, and MCP client. Subagents are stateless — spawned per-invocation with `callback_handler=None`.
-
-### LangChain/LangGraph Multi-Agent (media-services-langchain)
-
-Three AgentCore runtimes using `langgraph.prebuilt.create_react_agent`:
-- **Coordinator** (`coordinator/main.py`): ReAct agent with `invoke_eml`, `invoke_emx`, `write_todos` tools. Routes to specialists via `AgentCoreRuntimeClient`.
-- **EML** (`eml/main.py`): ReAct agent wrapping `samples/medialive/src/tools/` as LangChain `@tool` decorators.
-- **EMX** (`emx/main.py`): ReAct agent wrapping `samples/mediaconnect/tools/` as LangChain `@tool` decorators.
-
-Key patterns:
-- `shared/state.py`: `CoordinatorState(MessagesState)` with custom `merge_todos` reducer
-- `shared/runtime_client.py`: boto3 `invoke_agent_runtime` wrapper for inter-agent calls
-- `shared/memory.py`: `AgentCoreMemorySaver` factory with namespace isolation via `actor_id`
-- Module-level singletons: graph/client/checkpointer created once (containers are session-pinned)
-- `.env` file holds runtime ARNs and config; `.env.example` is the template
-
-### Composite Tool Pattern
-
-Group related operations into one tool with an `action` parameter and internal dispatch table:
-```python
-@tool
-def channel_management(action: str, channel_id: str = None) -> str:
-    dispatch = {"list": ..., "describe": ..., "start": ..., "stop": ..., "thumbnail": ...}
-```
-Also maintain `TOOL_DISPATCH_MAP` for backward-compatible code_mode command names.
-
-### Memory Integration
-
-Two approaches in use:
-1. **AgentCoreMemorySessionManager** (global singleton agent): Simpler, but accumulates stale tool results across requests. Used in `samples/medialive/main.py`.
-2. **MemoryHookProvider** (per-request agent): Avoids stale state by creating fresh agent per invocation. Recommended for production. Used in `samples/hydrolix/`.
-
-Memory creation uses `semanticMemoryStrategy` with configurable `eventExpiryDuration` (7-30 days).
-
-### Code Interpreter
-
-Available as `code_mode` tool — sends data + Python script to sandboxed runtime. Skip sandbox for responses < 4KB (use local exec). Session pooling (`max_size=2`, `ttl_seconds=300`) eliminates cold starts.
+- **MCP servers** (`cmcd`, `mediaconnect`, `medialive`): FastMCP over stdio,
+  started with `just run <key>`. Write tools are hidden unless
+  `ALLOW_WRITES=true`. Each write asks the operator, through MCP form
+  elicitation, to type the exact resource id, and is refused when the client
+  can't ask. This assumes a trusted client that shows the question to a person.
+- **Media ops hub** (`samples/hub`): one Strands agent on Amazon Bedrock
+  AgentCore, created per request, over domain packs selected by
+  `MEDIA_DOMAINS`. The MediaLive and MediaConnect packs share their tools with
+  the MCP servers. A write is an interrupt, then a signed `ApprovedAction`, then
+  a verified result. Agent instructions live in
+  `samples/hub/src/media_ops_hub/prompts/hub_instructions.md`, and packaged
+  skills are `SKILL.md` files loaded on demand.
+- **Hydrolix** (`samples/hydrolix`): an orchestrator and three subagents on
+  AgentCore, with a CDK backend and an Amplify web app. Memory belongs to the
+  verified Cognito user. Model SQL is limited in code to
+  one SELECT on `HYDROLIX_TABLE`.
 
 ## Commands
 
-### Local MCP Server Development
+Use the root `justfile`; run `just` to list recipes. The gate before any
+landing is:
 
 ```bash
-cd samples/medialive   # or samples/mediaconnect, samples/cmcd
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-python3 server.py          # starts MCP server via stdio
+just lint && just typecheck && just test && just eval && just docs-check
 ```
 
-### AgentCore Deployment
-
-```bash
-cd samples/medialive
-export AWS_REGION=us-west-2
-export AGENT_MODEL_ID=us.anthropic.claude-sonnet-4-6
-uv run agentcore launch --auto-update-on-conflict
-```
-
-### CDK Deployment (hydrolix-cdn-insights)
-
-```bash
-cd samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands
-npm install
-cdk deploy --parameters BedrockModelId="global.anthropic.claude-haiku-4-5-20251001-v1:0" --parameters HydrolixTable="your_database.your_table"
-```
-
-### CDK Deployment (media-services-langchain)
-
-```bash
-cd samples/hub/cdk
-npm install
-npx cdk deploy --parameters BedrockModelId="us.anthropic.claude-sonnet-4-6"
-# After deploy, update .env with stack outputs (runtime ARNs, memory ID)
-```
-
-### Integration Tests (media-services-langchain)
-
-```bash
-cd samples/hub
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r tests/requirements.txt
-# Requires .env with valid runtime ARNs + AWS credentials
-python -m pytest tests/test_integration.py -v --timeout=300
-```
-
-### Running Tests
-
-```bash
-# Integration tests (require running agent + AWS credentials)
-cd samples/medialive/tests && python3 -m pytest -v
-
-# Unit tests (mocked, no network)
-cd <agent>/tests/unit && python3 -m pytest -v --tb=short
-```
-
-### Local Agent Testing
-
-```bash
-cd samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands
-python3 app.py  # starts on port 8080
-
-# In another terminal:
-export SESSION_ID=$(uuidgen)
-curl -X POST http://localhost:8080/invocations -H "Content-Type: application/json" \
-  -d '{"prompt": "Hello!", "session_id": "'$SESSION_ID'", "last_k_turns": 20}'
-```
-
-## Key Configuration
-
-### Environment Variables
-
-| Variable | Default | Used By |
-|----------|---------|---------|
-| `AGENT_MODEL_ID` | `us.anthropic.claude-sonnet-4-6` | All agents (Strands + LangChain) |
-| `THUMBNAIL_MODEL_ID` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Vision analysis |
-| `BEDROCK_AGENTCORE_MEMORY_ID` | _(none)_ | Memory-enabled agents |
-| `AWS_REGION` | `us-west-2` | All AWS calls |
-| `MEDIALIVE_DEFAULT_CHANNEL_ID` | _(none)_ | MediaLive tools |
-| `EML_RUNTIME_ARN` | _(none)_ | LangChain coordinator → EML |
-| `EMX_RUNTIME_ARN` | _(none)_ | LangChain coordinator → EMX |
-
-For `samples/hub/`, all configuration is in `.env` (copied from `.env.example`). The `.env` file is gitignored.
-
-### .bedrock_agentcore.yaml
-
-Runtime configuration for AgentCore deploy. Key settings: `platform: linux/arm64`, `container_runtime: none`, `network_mode: PUBLIC`, `server_protocol: HTTP`, `observability: enabled: true`.
+For changed deploy material, also run `cdk synth` and
+`scripts/check_synth_iam.py`, or `cfn-lint`. `just deploy <key>` creates
+billable resources; `just destroy <key>` removes them.
 
 ## Security Rules
 
-- Never create Lambda Function URLs — all Lambda behind API Gateway with auth
-- Never use `Principal: *` or `AuthType: NONE`
-- Never hardcode credentials — use env vars or Secrets Manager
-- All S3 buckets must have BlockPublicAccess and SSE enabled
-- IAM policies must scope `Resource` to specific ARNs (wildcards only when API requires it like `cloudwatch:PutMetricData`)
-- Destructive operations (start/stop/input switch/route changes) require explicit user permission; read-only operations are always safe
+- Never create Lambda Function URLs, `AuthType: NONE`, or `Principal: '*'`.
+  The one exception is a VPC endpoint policy narrower than the service default
+  (see `write_safe_tools.md`).
+- Never hardcode credentials. Use the root `.env` (from `.env.example`) or
+  Secrets Manager.
+- S3 buckets need BlockPublicAccess and SSE.
+- Scope IAM `Resource` to specific ARNs. Use `*` only where the API has no
+  resource-level permissions.
+- Start, stop, input switches, schedule changes and route changes need the
+  operator's explicit approval. Reads are always safe.
+- Treat model output, thumbnails and their on-screen text, viewer telemetry and
+  caller-supplied headers as untrusted data. Never execute model output or
+  render it as raw HTML.
 
-## Agent System Prompt Rules
+## Agent Prompt Rules
 
-- ALWAYS instruct agents to call direct tools first — never "prefer code_mode"
-- Explicitly list which tool handles which action in the system prompt
-- Keep prompts short: behavioral rules only, no capability duplication with `@tool` docstrings
-- Agent behavioral instructions live in `prompts/agent_instructions.md` (loaded at startup, edit without touching Python)
+- Tell agents which tool handles which action, and to call the direct tools.
+- Keep prompts short: behavior rules only, with no repetition of the tool
+  docstrings.
 
-## Model Selection
+## Models
 
-| Role | Model | Rationale |
-|------|-------|-----------|
-| Main agent | `us.anthropic.claude-sonnet-4-6` | Tool selection + multi-step reasoning |
-| Dispatch/vision | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Fast classification, lightweight |
+Model ids come from configuration only (`AGENT_MODEL_ID`,
+`THUMBNAIL_MODEL_ID`, `CHART_MODEL_ID`), and `scripts/check_model_ids.py`
+keeps them consistent.
 
-Use cross-region inference profiles (`us.*`) for availability. Never use Haiku as a main agent — it misroutes tool calls.
+| Role | Default |
+|------|---------|
+| Reasoning agent | `us.anthropic.claude-sonnet-4-6` |
+| Vision and chart helpers | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
-## Authorization Pattern
-
-All samples use IAM role-based auth with `bedrock-agentcore.amazonaws.com` as service principal. No OAuth or custom authorizers at the backend. Front-end (Amplify) uses Amazon Cognito for user authentication. Hydrolix credentials stored in Secrets Manager.
+Never use Haiku as the main agent: it misroutes tool calls.
 
 ## Pre-Publish Checklist
 
-Before committing to public repo: scan for AWS account IDs in ARN contexts, access keys (AKIA/ASIA), hardcoded passwords/tokens, internal hostnames, and resource-specific IDs (channel IDs, memory IDs, agent ARNs). All configurable values must come from env vars or CfnParameters.
+Before anything is committed to the public repository, scan for AWS account
+ids in ARNs, access keys (AKIA/ASIA), passwords and tokens, internal
+hostnames, and real resource ids (channel, flow, memory or runtime ids).
+Configurable values come from environment variables or CfnParameters. CI runs
+gitleaks over the full history.

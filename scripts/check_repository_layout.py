@@ -23,6 +23,7 @@ IMAGE_EXTENSIONS = frozenset(
     {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp", ".tif", ".tiff"}
 )
 DOCS_IMAGES = re.compile(r"^(docs/images/|samples/[^/]+/docs/images/)")
+SAMPLE_ENV_FILE = re.compile(r"^samples/[^/]+/\.env(?:\.example)?$")
 RETIRED_PATHS = frozenset(
     {
         "samples/medialive/.bedrock_agentcore.yaml",
@@ -56,6 +57,8 @@ def find_layout_problems(tracked_paths: Iterable[str]) -> list[str]:
             problems.add(f"tracked plan file (keep .claude/plans/ local): {path}")
         if path in RETIRED_PATHS or path.startswith(RETIRED_PATH_PREFIXES):
             problems.add(f"retired runtime path: {path}")
+        if SAMPLE_ENV_FILE.match(path):
+            problems.add(f"sample environment file (use the root .env.example): {path}")
         if is_image(path) and not is_allowed_image(path, web_apps):
             problems.add(f"image outside docs/images/ or a web app: {path}")
     return sorted(problems)

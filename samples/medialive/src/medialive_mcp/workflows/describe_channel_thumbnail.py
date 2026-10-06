@@ -3,9 +3,11 @@
 from pydantic import BaseModel
 
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
-from medialive_mcp.adapters.bedrock.analyze_thumbnail_image import analyze_thumbnail_image
+from media_ops_video_quality.decode_thumbnail import decode_thumbnail
+from media_ops_video_quality.score_with_vision import describe_frame
 from medialive_mcp.adapters.media_live.read_channel_thumbnail import read_channel_thumbnail
 from medialive_mcp.bootstrap.create_medialive_clients import MediaLiveClients
+from medialive_mcp.prompts.analyze_thumbnail_prompt import ANALYZE_THUMBNAIL_PROMPT
 
 
 class ThumbnailDescription(BaseModel):
@@ -26,7 +28,8 @@ def describe_channel_thumbnail(
             "Set THUMBNAIL_MODEL_ID in the root .env (see .env.example).",
         )
     thumbnail = read_channel_thumbnail(clients.medialive, channel_id, pipeline_id)
-    description = analyze_thumbnail_image(clients.bedrock, thumbnail.image_base64, model_id)
+    frame = decode_thumbnail(thumbnail.image_base64)
+    description = describe_frame(clients.bedrock, model_id, frame, ANALYZE_THUMBNAIL_PROMPT)
     return ThumbnailDescription(
         channel_id=channel_id,
         pipeline_id=pipeline_id,

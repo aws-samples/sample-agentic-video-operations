@@ -62,3 +62,14 @@ def test_a_missing_model_is_reported_with_its_next_action(monkeypatch, capsys):
         entrypoint.main()
 
     assert "AGENT_MODEL_ID is not set" in capsys.readouterr().err
+
+
+def test_the_hub_samples_a_shorter_visual_quality_window_unless_set():
+    from media_ops_hub.bootstrap.apply_hub_tool_defaults import apply_hub_tool_defaults
+
+    environ = {}
+    apply_hub_tool_defaults(environ)
+    assert environ == {"VISUAL_QUALITY_FRAMES": "8", "VISUAL_QUALITY_WINDOW_SECONDS": "20"}
+    explicit = {"VISUAL_QUALITY_WINDOW_SECONDS": "40"}
+    apply_hub_tool_defaults(explicit)
+    assert explicit["VISUAL_QUALITY_WINDOW_SECONDS"] == "40"

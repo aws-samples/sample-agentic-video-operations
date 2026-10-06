@@ -85,8 +85,11 @@ AWS_SERVICES = {service for service, _ in COMMAND_FLAGS}
 def test_every_cmcd_aws_cli_command_uses_only_supported_flags():
     seen: set[tuple[str, str]] = set()
     for path in CMCD_AWS_SCRIPTS:
-        for command, flags, line in _read_command_shapes(path):
+        for command, flags, line, uses_spread in _read_command_shapes(path):
             assert command in COMMAND_FLAGS, f"{path}:{line}: unreviewed AWS CLI command {command}"
+            assert not uses_spread, (
+                f"{path}:{line}: spread arguments hide AWS CLI flags from this guard"
+            )
             unsupported = flags - COMMAND_FLAGS[command]
             assert not unsupported, f"{path}:{line}: unsupported flags {sorted(unsupported)}"
             seen.add(command)
@@ -94,9 +97,18 @@ def test_every_cmcd_aws_cli_command_uses_only_supported_flags():
     assert seen == set(COMMAND_FLAGS)
 
 
+def test_command_shape_reader_reports_spread_arguments(tmp_path):
+    script = tmp_path / "aws_command.py"
+    script.write_text('runner(["s3api", "head-bucket", "--bucket", bucket, *owner], True)\n')
+
+    [shape] = _read_command_shapes(script)
+
+    assert shape == (("s3api", "head-bucket"), {"--bucket"}, 1, True)
+
+
 def _read_command_shapes(
     path: Path,
-) -> list[tuple[tuple[str, str], set[str], int]]:
+) -> list[tuple[tuple[str, str], set[str], int, bool]]:
     shapes = []
     for node in ast.walk(ast.parse(path.read_text())):
         if not isinstance(node, ast.List) or len(node.elts) < 2:
@@ -110,7 +122,8 @@ def _read_command_shapes(
             for element in node.elts[2:]
             if (value := _literal_string(element)) is not None and value.startswith("--")
         }
-        shapes.append(((service, operation), flags, node.lineno))
+        uses_spread = any(isinstance(element, ast.Starred) for element in node.elts[2:])
+        shapes.append(((service, operation), flags, node.lineno, uses_spread))
     return shapes
 
 

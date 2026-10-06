@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 from medialive_mcp.adapters.cloudwatch_logs.read_channel_logs import (
     LOG_GROUP,
     MAX_EVENTS,
+    MAX_LOG_PAGES,
     ChannelLogStatus,
     read_channel_logs,
 )
@@ -69,6 +70,25 @@ def test_read_channel_logs_paginates_before_returning_the_newest_events():
     ]
     assert services.logs.filter_log_events.call_count == 2
     assert services.logs.filter_log_events.call_args_list[1].kwargs["nextToken"] == "next"
+
+
+def test_read_channel_logs_caps_pages_and_returned_events():
+    pages = [
+        {
+            "events": [event(page * MAX_EVENTS + number) for number in range(MAX_EVENTS)],
+            "nextToken": f"next-{page}",
+        }
+        for page in range(MAX_LOG_PAGES + 1)
+    ]
+    services = clients(pages=pages)
+
+    result = read_channel_logs(services, CHANNEL, WINDOW, REGION)
+
+    assert services.logs.filter_log_events.call_count == MAX_LOG_PAGES
+    assert len(result.events) == MAX_EVENTS
+    calls = services.logs.filter_log_events.call_args_list
+    assert all(call.kwargs["limit"] == MAX_EVENTS for call in calls)
+    assert all(call.kwargs["startFromHead"] is False for call in calls)
 
 
 def test_read_channel_logs_excludes_as_run_schedule_events():

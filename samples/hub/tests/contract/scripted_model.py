@@ -20,10 +20,11 @@ def say(text: str) -> dict[str, Any]:
 class ScriptedModel(Model):
     """Each model call replays the next turn: a list of `call(...)` and `say(...)` blocks."""
 
-    def __init__(self, *turns: list[dict[str, Any]]) -> None:
+    def __init__(self, *turns: list[dict[str, Any]], usage: dict[str, int] | None = None) -> None:
         self.turns = list(turns)
         self.tool_names: list[str] = []
         self.messages: list[Any] = []
+        self.usage = usage or {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2}
 
     def update_config(self, **model_config: Any) -> None:
         pass
@@ -54,8 +55,7 @@ class ScriptedModel(Model):
             yield {"contentBlockStop": {}}
         stop = "tool_use" if any("toolUse" in block for block in blocks) else "end_turn"
         yield {"messageStop": {"stopReason": stop}}
-        usage = {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2}
-        yield {"metadata": {"usage": usage, "metrics": {"latencyMs": 1}}}
+        yield {"metadata": {"usage": self.usage, "metrics": {"latencyMs": 1}}}
 
 
 def last_tool_result(model: ScriptedModel) -> dict[str, Any]:

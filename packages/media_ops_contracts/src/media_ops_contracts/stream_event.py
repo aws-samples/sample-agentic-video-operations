@@ -4,13 +4,19 @@ Same discriminated-union pattern as sample-agentic-platform's streaming_models.p
 parse any event with `STREAM_EVENT_ADAPTER.validate_json(line)`.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, TypeAdapter
 
 from media_ops_contracts.approved_action import ActionProposal
+from media_ops_contracts.estimate_model_cost import (
+    BEDROCK_PRICING_URL,
+    COST_ESTIMATE_BASIS,
+    PRICING_CHECKED_ON,
+    RATES_CONFIRMED,
+)
 from media_ops_contracts.tool_failure import FailureKind
 
 
@@ -21,6 +27,7 @@ class StreamEventType(StrEnum):
     ACTION_COMPLETED = "action_completed"
     VERIFICATION_COMPLETED = "verification_completed"
     FINAL_ANSWER = "final_answer"
+    USAGE_REPORTED = "usage_reported"
     ERROR = "error"
 
 
@@ -72,6 +79,27 @@ class FinalAnswer(BaseStreamEvent):
     text: str
 
 
+class UsageReported(BaseStreamEvent):
+    """The turn's accumulated usage and explicitly qualified cost estimate.
+
+    Token counts come directly from the model metrics. `estimated_usd` is None
+    when the exact model ID is not in the dated, unconfirmed price table.
+    """
+
+    type: Literal[StreamEventType.USAGE_REPORTED] = StreamEventType.USAGE_REPORTED
+    model_id: str
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    total_tokens: int = Field(ge=0)
+    cache_read_input_tokens: int = Field(ge=0)
+    cache_write_input_tokens: int = Field(ge=0)
+    estimated_usd: float | None = None
+    estimate_basis: str = COST_ESTIMATE_BASIS
+    pricing_source: str = BEDROCK_PRICING_URL
+    pricing_checked_on: date = PRICING_CHECKED_ON
+    rates_confirmed: bool = RATES_CONFIRMED
+
+
 class ErrorEvent(BaseStreamEvent):
     type: Literal[StreamEventType.ERROR] = StreamEventType.ERROR
     kind: FailureKind
@@ -86,18 +114,9 @@ StreamEvent = Annotated[
     | ActionCompleted
     | VerificationCompleted
     | FinalAnswer
+    | UsageReported
     | ErrorEvent,
     Field(discriminator="type"),
 ]
 
 STREAM_EVENT_ADAPTER: TypeAdapter[StreamEvent] = TypeAdapter(StreamEvent)
-
-
-def encode_stream_event(event: StreamEvent) -> str:
-    """Serialize one StreamEvent exactly once, for SSE or AgentCore streaming.
-
-    Validating through the union rejects anything that is not one of its members,
-    such as a bare BaseStreamEvent, before it reaches a client.
-    """
-    validated = STREAM_EVENT_ADAPTER.validate_python(event)
-    return STREAM_EVENT_ADAPTER.dump_json(validated).decode()

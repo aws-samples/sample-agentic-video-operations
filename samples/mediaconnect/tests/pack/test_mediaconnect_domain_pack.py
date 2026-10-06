@@ -186,7 +186,10 @@ def test_srt_fixture_replays_an_approved_stop_and_restart():
     "approved",
     [
         approval("start_flow"),
-        approval("stop_flow", resource_id="arn:aws:mediaconnect:us-west-2:1:flow:other:id"),
+        approval(
+            "stop_flow",
+            resource_id="arn:aws:mediaconnect:us-west-2:111122223333:flow:other:id",
+        ),
         approval("stop_flow", parameters={"unexpected": "value"}),
     ],
 )

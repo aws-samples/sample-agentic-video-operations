@@ -1,0 +1,14 @@
+[project]
+name = "media-ops-video-quality"
+version = "0.1.0"
+description = "Framework-free, no-reference picture quality measurements over sampled video thumbnails."
+license = "MIT-0"
+requires-python = ">=3.12"
+dependencies = ["media-ops-contracts", "pydantic>=2.9,<3", "pillow==12.3.0"]
+
+[tool.uv.sources]
+media-ops-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"

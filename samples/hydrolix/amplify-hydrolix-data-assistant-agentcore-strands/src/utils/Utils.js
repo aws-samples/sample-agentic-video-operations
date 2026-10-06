@@ -20,26 +20,3 @@ export const removeCharFromStartAndEnd = (str, charToRemove) => {
   }
   return str;
 };
-
-export const handleFormatter = (obj) => {
-  if (typeof obj === "object" && obj !== null) {
-    for (let key in obj) {
-      if (typeof obj[key] === "string") {
-        if (
-          key === "formatter" &&
-          (obj[key] === "%" || obj[key].startsWith("$"))
-        ) {
-          handleFormatter(obj[key]);
-          // Convert the function string to an actual function
-        } else if (key === "formatter") {
-          obj[key] = new Function("return " + obj[key])();
-        } else {
-          handleFormatter(obj[key]);
-        }
-      } else if (typeof obj[key] === "object") {
-        handleFormatter(obj[key]);
-      }
-    }
-  }
-  return obj;
-};

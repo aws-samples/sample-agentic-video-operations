@@ -14,6 +14,7 @@ from media_ops_hub.workflows.run_hub_turn import stream_hub_turn
 
 OPERATOR = "operator-a"
 SESSION = "session-a"
+COSTED_MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 
 
 @dataclass
@@ -58,6 +59,9 @@ def build_hub(
     allow_writes: bool = True,
     budget: int = 12,
     local_mode: bool = False,
+    model_id: str | None = None,
+    jwt_issuer: str = "",
+    jwt_clients: str = "",
 ) -> HubUnderTest:
     clock = Clock()
     pack = ChannelTestPack(now=clock)
@@ -67,6 +71,9 @@ def build_hub(
         hub_tool_budget=budget,
         session_dir=tmp_path,
         hub_local_mode=local_mode,
+        agent_model_id=model_id,
+        hub_jwt_issuer=jwt_issuer,
+        hub_jwt_allowed_clients=jwt_clients,
     )
     return HubUnderTest(create_hub(settings, packs=[pack], model=model), pack, clock)
 

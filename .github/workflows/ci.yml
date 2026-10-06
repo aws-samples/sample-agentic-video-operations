@@ -35,6 +35,13 @@ jobs:
       - run: just smoke
       - run: just eval
       - run: just docs-check
+      - name: The gate leaves the working tree clean
+        run: |
+          dirty="$(git status --porcelain --untracked-files=all)"
+          if [ -n "$dirty" ]; then echo "Files the gate created or changed:"; echo "$dirty"; exit 1; fi
+          for cache in .mypy_cache .ruff_cache .pytest_cache eval-results.json; do
+            if [ -e "$cache" ]; then echo "$cache belongs under .cache/"; exit 1; fi
+          done
 
   cloudformation-lint:
     runs-on: ubuntu-latest
@@ -45,7 +52,7 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.8.4"
-      # Add each sample's CloudFormation template here when the sample converts.
+      # Lint each tracked CloudFormation deployment template.
       - run: uvx cfn-lint==1.57.1 --non-zero-exit-code error samples/cmcd/cloudfront-cmcd-kinesis.yaml
 
   cdk-synth:
@@ -78,6 +85,35 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/scripts/check_synth_iam.py" cdk.out/*.template.json
       - run: npx cdk synth --quiet -c allowWrites=true
 
+  hydrolix-web:
+    # The Amplify app: production build with warnings as errors (CI=true), the no-eval lint
+    # rules, and the web modules' node tests. Config files are placeholders, never secrets.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Placeholder build configuration
+        run: |
+          cp src/sample.env.js src/env.js
+          printf 'const awsExports = { aws_project_region: "us-west-2" };\nexport default awsExports;\n' > src/aws-exports.js
+          printf '{"aws_project_region": "us-west-2", "aws_user_pools_id": "us-west-2_EXAMPLE", "aws_cognito_identity_pool_id": "us-west-2:00000000-0000-0000-0000-000000000000"}\n' > src/amplifyconfiguration.json
+      - run: npm run build
+        env:
+          CI: "true"
+          CHART_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
+      - run: node --test "$GITHUB_WORKSPACE"/scripts/tests/web/*.test.mjs
+      - run: node --test test/*.test.mjs # needs node_modules: the sanitize schema
+
   docker-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -108,6 +144,7 @@ jobs:
             printf 'PLANTED=never-in-an-image\n' > "$dir/.env"
             printf 'PLANTED=never-in-an-image\n' > "$dir/.env.local"
             mkdir -p "$dir/.claude/plans" "$dir/cdk.out" && touch "$dir/.claude/plans/x" "$dir/cdk.out/x"
+            mkdir -p "$dir/.cache/ruff" "$dir/.mypy_cache" "$dir/.ruff_cache" && touch "$dir/.cache/ruff/x" "$dir/.mypy_cache/x" "$dir/.ruff_cache/x" "$dir/eval-results.json"
           done
       - name: Context listing (Docker's .dockerignore rules)
         run: python3 scripts/list_docker_context.py "${{ matrix.dockerfile }}" "${{ matrix.context }}"
@@ -127,7 +164,7 @@ jobs:
           docker build -f "$probe/Dockerfile" "${{ matrix.context }}"
       - name: Remove planted files
         run: |
-          for dir in . "${{ matrix.context }}"; do rm -rf "$dir/.env" "$dir/.env.local" "$dir/.claude" "$dir/cdk.out"; done
+          for dir in . "${{ matrix.context }}"; do rm -rf "$dir/.env" "$dir/.env.local" "$dir/.claude" "$dir/cdk.out" "$dir/.cache" "$dir/.mypy_cache" "$dir/.ruff_cache" "$dir/eval-results.json"; done
       - name: Prepare
         if: matrix.prepare != ''
         working-directory: scripts
@@ -155,7 +192,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Converted samples only; add each remaining Dockerfile when its sample converts.
+        # Container images built by this repository.
         dockerfile:
           - samples/hub/Dockerfile
           - samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands/Dockerfile

@@ -1,6 +1,21 @@
 import { fetchAuthSession } from "aws-amplify/auth";
+import { logFailure } from "./logMetadata";
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import config from "../amplifyconfiguration.json";
+
+/**
+ * The signed-in user's Cognito access token. The assistant runtime accepts only this token
+ * (inbound JWT authorization) and takes the user's identity from its `sub`.
+ * @returns {Promise<string>} The access token
+ */
+export const getAccessToken = async () => {
+  const session = await fetchAuthSession();
+  const accessToken = session.tokens?.accessToken?.toString();
+  if (!accessToken) {
+    throw new Error("Authentication token not available. Please sign in again.");
+  }
+  return accessToken;
+};
 
 /**
  * Creates AWS configuration with authenticated credentials
@@ -29,7 +44,7 @@ export const getAwsCredentials = async () => {
     
     return credentials;
   } catch (error) {
-    console.error("Failed to get AWS credentials:", error);
+    logFailure("get AWS credentials", error);
     throw new Error("Authentication failed. Please try signing in again.");
   }
 };

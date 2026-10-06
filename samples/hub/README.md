@@ -36,22 +36,31 @@ flowchart LR
 - **Reads** run freely. **Writes** (start, stop, input switch, schedule actions) exist only
   with `ALLOW_WRITES=true`. They pause for an operator decision, are signed for exactly
   the approved action, and are verified after they run.
-- **Events stream** as each happens: `task_started`, `tool_called`, `approval_requested`,
-  `action_completed`, `verification_completed`, `final_answer`, `error`.
+- **Events stream** as each happens: `task_started`, `tool_called`, `action_completed`,
+  `verification_completed`, then `usage_reported` immediately before the terminal
+  `approval_requested`, `final_answer`, or `error`.
 - The design is in [`docs/extend_the_hub.md`](../../docs/extend_the_hub.md).
 
 ### Trust model
 
-- **Who may call the hub:** only principals your IAM allows to invoke the runtime. The
-  stack outputs `InvokePolicyArn`, a policy that allows invoking this runtime and nothing
-  else. Set `HUB_INVOKER_ROLE_NAME` in the root `.env` to attach it to one role at deploy.
-- **Who the actor is:** the `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id` header.
-  It is **supplied by the caller and not verified**. The hub uses it to keep one
-  operator's pending approvals from another's, but any principal that may invoke can
-  claim any actor id. Actor isolation therefore holds only among principals you trust to
-  invoke. A request without the header is refused.
-- **Next hardening step:** AgentCore inbound JWT authorization, with the actor taken from
-  the verified token's `sub`. It is not implemented yet.
+The hub keeps one operator's pending approvals and sessions from another's by the actor
+id, in AgentCore Memory when deployed and in per-actor session files locally. Where that id
+comes from depends on the inbound authorization you deploy with. A
+runtime accepts IAM callers or bearer tokens, never both.
+
+| | IAM (default) | JWT (`HUB_JWT_DISCOVERY_URL` and `HUB_JWT_CLIENT_IDS` set) |
+|---|---|---|
+| Who may call | Principals your IAM allows to invoke. The stack outputs `InvokePolicyArn`; `HUB_INVOKER_ROLE_NAME` attaches it to one role at deploy. | Holders of a current access token issued by that provider to one of those app clients. AgentCore verifies the signature, issuer, expiry and `client_id` before the request reaches the hub. |
+| Who the actor is | The `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id` header, **supplied by the caller and not verified**. Any principal that may invoke can claim any actor id, so isolation holds only among principals you trust to invoke. | The token's `sub`. The stack forwards only the `Authorization` header, and the hub ignores any actor header. One user can't act as another. |
+| Write IAM scope | With `ALLOW_WRITES=true`, every selected-pack channel and flow in this account and region is writable by default. `HUB_WRITE_TAG=Key=Value` limits writes to resources carrying that exact tag. The HMAC approval still binds each call to its exact action, resource and parameters. | The same write scope and HMAC approval boundary as IAM auth. |
+| Refused | A request without the header. | A request without a valid token. The hub also re-checks the token's issuer, client, expiry and subject, and fails closed if they don't match its settings. |
+
+- **What JWT mode does not do:** the hub doesn't re-verify the token signature. AgentCore
+  already has, and the hub reads the claims only on a JWT-authorized runtime: the CDK sets
+  `HUB_JWT_ISSUER` there alone, and the hub refuses to start with it in local mode.
+- **Actor ids are memory actor ids.** Amazon Cognito subjects (UUIDs) work as they are.
+  With another identity provider, check that its `sub` values are valid AgentCore Memory
+  actor ids.
 
 ## Prerequisites
 
@@ -129,9 +138,17 @@ uv run python scripts/manage_hub_stack.py deploy
 
 - `MEDIA_DOMAINS` (default `medialive,mediaconnect`) selects the packs. IAM comes from
   each pack's `iam_permissions.json`. Write permissions are added only with
-  `ALLOW_WRITES=true`.
+  `ALLOW_WRITES=true`. By default that covers every selected-pack channel and flow in
+  the deployed account and region. Set `HUB_WRITE_TAG=Key=Value` before deployment to
+  require that exact resource tag on every MediaLive or MediaConnect write. For
+  `BatchUpdateSchedule`, the tag limits which channel may change; the approved proposal
+  and HMAC signature bind the exact schedule action and parameters.
+- **Inbound auth:** IAM by default. To accept bearer tokens instead, set
+  `HUB_JWT_DISCOVERY_URL` (your identity provider's OIDC discovery URL, for example an
+  Amazon Cognito user pool's) and `HUB_JWT_CLIENT_IDS` (the app client ids allowed to
+  call) before deploying. `HUB_INVOKER_ROLE_NAME` can't be combined with them.
 - Outputs: `AgentRuntimeArn`, `AgentRuntimeId`, `AgentEndpointName`, `MemoryId`,
-  `MediaDomains`, `InvokePolicyArn`.
+  `MediaDomains`, `InboundAuth` (`iam` or `jwt`), and `InvokePolicyArn` (IAM mode only).
 
 ### Verify the Deployment
 
@@ -139,9 +156,14 @@ uv run python scripts/manage_hub_stack.py deploy
 uv run python scripts/invoke_hub.py --actor <your-operator-id> "List my MediaLive channels"
 ```
 
-Expected result: `task_started`, `tool_called` (`list_channels`), then a `final_answer`
-listing your channels. A paused write prints an `approval_requested` event; answer it
-with `--session <id> --approve <approval_id>` (or `--reject`).
+Expected result: `task_started`, `tool_called` (`list_channels`), `usage_reported`, then
+a `final_answer` listing your channels. A paused write prints `usage_reported` followed by
+an `approval_requested` event; answer it with `--session <id> --approve <approval_id>`
+(or `--reject`).
+
+On a JWT-authorized hub, put a current access token in `HUB_BEARER_TOKEN` (root `.env`
+or the shell, never an argument) and leave out `--actor`. The script then calls the
+runtime over HTTPS with the token, because boto3 can't send bearer tokens.
 
 ## Teardown
 
@@ -162,8 +184,8 @@ unused.
 
 ## Known Limitations
 
-- **Actor ids are not authenticated.** See the trust model above. Inbound JWT
-  authorization is the next hardening step.
+- **With IAM auth, actor ids are not authenticated.** See the trust model above; deploy
+  with JWT auth to bind the actor to a verified identity.
 - **The demo is scripted.** `just demo` uses a scripted model over synthetic fixtures; it
   shows the plumbing, not model quality.
 - **One hub per account and region:** the runtime name is fixed.

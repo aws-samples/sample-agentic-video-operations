@@ -21,6 +21,9 @@ class RuntimeSettings(BaseSettings):
     # Empty means one random key per process (resolve_approval_signing_key); a deployment
     # injects a shared secret.
     approval_signing_key: str = Field(default="")
+    # analyze_channel_visual_quality defaults; the tool blocks for the whole window.
+    visual_quality_frames: int = Field(default=10, ge=2, le=20)
+    visual_quality_window_seconds: int = Field(default=30, ge=2, le=120)
 
     @field_validator("demo_scenario", mode="before")
     @classmethod

@@ -194,6 +194,10 @@ class FakeAsk:
         return self.answer
 
 
+def stopped_clock():
+    return 0.0
+
+
 def run(
     fake_aws,
     *argv,
@@ -201,6 +205,7 @@ def run(
     token_creator=manage_cmcd_stack.create_influxdb_read_token,
     env_path=Path(".env"),
     env_example_path=Path(".env.example"),
+    clock=stopped_clock,
 ):
     ask = FakeAsk(fake_aws, answer)
     return (
@@ -211,6 +216,7 @@ def run(
             token_creator=token_creator,
             env_path=env_path,
             env_example_path=env_example_path,
+            clock=clock,
         ),
         ask,
     )
@@ -230,11 +236,48 @@ def test_deploy_with_yes_deploys_the_template_in_us_east_1_and_prints_next_steps
     assert "S3BucketName=cmcd-content-111122223333" in deploy
     assert "DeploymentArtifactsBucketName=video-ops-cmcd-artifacts-111122223333-us-east-1" in deploy
     assert "OriginDomainName=example.com" in deploy
+    assert "InfluxDBInstanceType=db.influx.medium" in deploy
+    assert "BastionInstanceType=t3.nano" in deploy
     output = capsys.readouterr().out
+    assert "InfluxDB class: db.influx.medium" in output
+    assert "bastion class: t3.nano" in output
+    assert "private AWS path: 2-AZ Secrets Manager endpoint; no NAT gateway" in output
     assert "--target i-0demo" in output
     assert "VERIFY_SSL=false" in output
     assert 'json.load(sys.stdin)["password"]' in output
     assert "--query SecretString --output text\n" not in output
+    assert "smoke write/read: passed" in output
+    assert "CloudFormation deploy elapsed: 0m 00s" in output
+    assert "just destroy cmcd" in output
+
+
+def test_deploy_accepts_cost_bearing_instance_overrides():
+    fake_aws = FakeAws()
+
+    status, _ = run(
+        fake_aws,
+        "deploy",
+        "--yes",
+        "--influxdb-instance-type",
+        "db.influx.large",
+        "--bastion-instance-type",
+        "t3.micro",
+    )
+
+    assert status == 0
+    [deploy] = fake_aws.commands("cloudformation deploy")
+    assert "InfluxDBInstanceType=db.influx.large" in deploy
+    assert "BastionInstanceType=t3.micro" in deploy
+
+
+def test_deploy_prints_the_measured_cloudformation_duration(capsys):
+    fake_aws = FakeAws()
+    clock = iter((100.0, 940.0)).__next__
+
+    status, _ = run(fake_aws, "deploy", "--yes", clock=clock)
+
+    assert status == 0
+    assert "CloudFormation deploy elapsed: 14m 00s" in capsys.readouterr().out
 
 
 def test_deploy_creates_and_secures_the_artifact_bucket_before_cloudformation():
@@ -690,7 +733,7 @@ def test_destroy_uses_stack_resources_when_rollback_has_no_outputs():
 def test_access_denied_influxdb_lookup_is_not_mistaken_for_account_404(capsys):
     denied = (
         "An error occurred (AccessDeniedException) when calling GetDbInstance: "
-        "not authorized for arn:aws:timestream-influxdb:us-east-1:123404567890:db/influx-demo"
+        "not authorized for arn:aws:timestream-influxdb:us-east-1:111122223333:db/influx-demo"
     )
     fake_aws = FakeAws(
         failing=("get-db-instance",),
@@ -710,7 +753,7 @@ def test_access_denied_influxdb_lookup_is_not_mistaken_for_account_404(capsys):
 def test_access_denied_influxdb_wait_poll_stops_without_dependent_deletes(capsys):
     denied = (
         "An error occurred (AccessDeniedException) when calling GetDbInstance: "
-        "not authorized for arn:aws:timestream-influxdb:us-east-1:123404567890:db/influx-demo"
+        "not authorized for arn:aws:timestream-influxdb:us-east-1:111122223333:db/influx-demo"
     )
     fake_aws = FakeAws(influx_statuses=("DELETING", ("error", denied)))
 

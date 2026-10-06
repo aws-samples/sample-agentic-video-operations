@@ -415,7 +415,6 @@ samples/hub/
 ├── pyproject.toml
 ├── README.md
 ├── Dockerfile
-├── .env.example
 ├── src/media_ops_hub/
 │   ├── bootstrap/
 │   │   ├── create_hub.py

@@ -30,15 +30,16 @@ flowchart LR
     CF --> Stream[Amazon Kinesis Data Streams]
     Stream --> Processor[AWS Lambda processor]
     Processor --> Influx
-    Processor -->|reads bucket-write token| Secret[Secrets Manager]
+    Processor -->|private API call| SecretsEndpoint[Secrets Manager interface endpoint]
+    SecretsEndpoint -->|reads bucket-write token| Secret[Secrets Manager]
 
     Operator --> Manager[Confirmed deploy/destroy command]
     Manager --> Stack[CloudFormation stack]
     Stack --> Provisioner[Token provisioner and smoke check]
     Provisioner --> Influx
-    Provisioner -->|stores read and write tokens| Secret
-    Provisioner --> Endpoint[S3 gateway endpoint]
-    Endpoint -->|custom-resource response| Stack
+    Provisioner -->|private API call| SecretsEndpoint
+    Provisioner --> S3Endpoint[S3 gateway endpoint]
+    S3Endpoint -->|custom-resource response| Stack
 ```
 
 The MCP entrypoint owns stdio transport and selects either fixtures or an
@@ -55,9 +56,13 @@ copies only the read token into root `.env`. Deployment
 and teardown are separate, confirmed operations; they are not callable through
 MCP. An S3 gateway endpoint on the private route table keeps the token
 provisioner's CloudFormation response path available while the stack is being
-deleted, even if NAT egress is removed first. The provisioner must stay in the
-VPC because the InfluxDB endpoint is private; moving it outside the VPC would
-remove its only route to the database.
+deleted. A two-AZ Secrets Manager interface endpoint carries the only AWS API
+calls made by the private-subnet Lambdas, so they need no NAT gateway. Lambda
+delivers function logs through its managed logging path; the function code
+does not call the CloudWatch Logs API. The public SSM bastion reaches AWS
+through its Internet gateway. The provisioner must stay in the VPC because
+the InfluxDB endpoint is private; moving it outside the VPC would remove its
+only route to the database.
 
 ## Prerequisites
 
@@ -77,15 +82,42 @@ For the AWS-backed path, also provide:
 - AWS credentials allowed to use CloudFormation, CloudFront, WAF, S3, KMS,
   Kinesis, Lambda, Timestream for InfluxDB, EC2/VPC, Systems Manager, Secrets
   Manager, SQS, IAM, and CloudWatch Logs.
-- Service quota for a `db.influx.medium` Timestream for InfluxDB instance and
-  the other resources above.
+- Service quota for a `db.influx.medium` Timestream for InfluxDB instance,
+  the smallest supported class, and the other resources above.
 - `ffmpeg` to generate the documented test stream, or an existing HLS playlist
   named `master.m3u8` and its media segments.
 - Region `us-east-1`. The stack is pinned there because its CloudFront-scoped
   WAF web ACL must be created in `us-east-1`.
 
 The AWS deployment creates billable resources, including CloudFront, Kinesis,
-a `db.influx.medium` InfluxDB instance, a NAT gateway, and EC2.
+a `db.influx.medium` InfluxDB instance, two Secrets Manager interface-endpoint
+hours, a `t3.nano` EC2 bastion, and one public IPv4 address.
+
+### Cost reduction
+
+The change below covers only the resources whose defaults changed. Prices are
+Linux on-demand rates in `us-east-1`, verified October 6, 2026; unchanged
+services, storage, requests, data transfer, and the bastion's public IPv4
+address are excluded from both sides.
+
+| Path | Fixed hourly cost |
+|---|---:|
+| Earlier: NAT gateway + its public IPv4 + `t3.micro` bastion | $0.0604 |
+| Current: Secrets Manager endpoint in two AZs + `t3.nano` bastion | $0.0252 |
+| Reduction | **$0.0352/hour (about $25.70 per 730-hour month)** |
+
+The private API data-processing rate also falls from $0.045/GB through the NAT
+gateway to $0.01/GB through AWS PrivateLink for the first petabyte. The S3
+gateway endpoint has no hourly charge. Timestream for InfluxDB remains
+`db.influx.medium` because AWS offers no smaller class; the class is a
+CloudFormation parameter for operators who need more capacity.
+
+Pricing sources:
+
+- [Amazon VPC pricing](https://aws.amazon.com/vpc/pricing/)
+- [AWS PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/)
+- [Amazon EC2 On-Demand pricing](https://aws.amazon.com/ec2/pricing/on-demand/)
+- [Timestream for InfluxDB instance types](https://docs.aws.amazon.com/timestream/latest/developerguide/supported-instance-types.html)
 
 Check the local tools:
 
@@ -107,11 +139,17 @@ aws sts get-caller-identity
 
 ### Run Locally
 
-1. Clone the repository and enter its root:
+Clone the repository and enter its root:
+
+```bash
+git clone https://github.com/aws-samples/sample-agentic-video-operations.git
+cd sample-agentic-video-operations
+```
+
+1. Create the one root configuration:
 
    ```bash
-   git clone https://github.com/aws-samples/sample-agentic-video-operations.git
-   cd sample-agentic-video-operations
+   cp .env.example .env
    ```
 
 2. Install `just`:
@@ -136,9 +174,10 @@ aws sts get-caller-identity
    check with `Ctrl+C`; the client configuration in the next step launches the
    same command for you.
 
-4. Add one of the following entries from
-   [`mcp.json`](mcp.json) to your MCP client configuration. Replace the
-   repository path with its absolute path:
+4. Add an entry from [`mcp.json`](mcp.json) to your MCP client configuration,
+   replacing the repository path with its absolute path. For the offline demo, add only
+   `cmcd-demo`. The live `cmcd` entry starts without a deployment too, but each of its
+   tools returns `INFLUXDB_URL … not set` until Deploy to AWS step 6 has run:
 
    ```json
    {
@@ -223,23 +262,47 @@ aws sts get-caller-identity
    uv run --env-file .env python scripts/manage_cmcd_stack.py deploy
    ```
 
+   The default is the smallest InfluxDB class and a lightweight port-forward
+   host. Override either parameter only when needed:
+
+   ```bash
+   just deploy cmcd --influxdb-instance-type db.influx.large \
+     --bastion-instance-type t3.micro
+   ```
+
    > [!WARNING]
    > This command creates billable AWS resources. Read the printed account,
    > region, stack, and cost-bearing services before confirming.
 
-3. Generate a 30-second test-pattern HLS stream:
+   A successful deployment prints its measured CloudFormation elapsed time,
+   `smoke write/read: passed` after the token provisioner has written and read
+   a test point, and `just destroy cmcd` as the cleanup reminder.
+
+3. Generate a three-minute, two-rendition test-pattern HLS stream:
 
    ```bash
    CMCD_HLS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cmcd-hls.XXXXXX")"
    ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 \
-     -f lavfi -i sine=frequency=1000 -t 30 \
-     -c:v libx264 -pix_fmt yuv420p -c:a aac \
+     -f lavfi -i sine=frequency=1000:sample_rate=48000 -t 180 \
+     -filter_complex \
+       "[0:v]split=2[v720][v360];[v360]scale=640:360[v360out]" \
+     -map "[v720]" -map 1:a -map "[v360out]" -map 1:a \
+     -c:v libx264 -preset veryfast -pix_fmt yuv420p \
+     -b:v:0 2800k -maxrate:v:0 2996k -bufsize:v:0 4200k \
+     -b:v:1 900k -maxrate:v:1 963k -bufsize:v:1 1350k \
+     -c:a aac -b:a:0 128k -b:a:1 96k \
+     -g 180 -keyint_min 180 -sc_threshold 0 \
      -f hls -hls_time 6 -hls_playlist_type vod \
-     -hls_segment_filename "${CMCD_HLS_DIR}/segment-%03d.ts" \
-     "${CMCD_HLS_DIR}/master.m3u8"
+     -hls_segment_filename "${CMCD_HLS_DIR}/v%v/segment-%03d.ts" \
+     -master_pl_name master.m3u8 \
+     -var_stream_map "v:0,a:0,name:720p v:1,a:1,name:360p" \
+     "${CMCD_HLS_DIR}/v%v/index.m3u8"
    ```
 
-   Or use an existing `master.m3u8` playlist and its media segments.
+   The master playlist contains `EXT-X-STREAM-INF` bandwidth metadata, so the
+   player emits a real requested bitrate (`br`) instead of the placeholder
+   zero produced by a single media playlist. Or use an existing multivariant
+   `master.m3u8` and its media segments.
 
 4. Upload the HLS playlist and segments to the stack's content bucket:
 
@@ -249,13 +312,9 @@ aws sts get-caller-identity
      --region us-east-1 \
      --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" \
      --output text)"
-   aws s3 cp "${CMCD_HLS_DIR}/master.m3u8" \
-     "s3://${CMCD_BUCKET}/videos/master.m3u8" \
-     --region us-east-1
    aws s3 cp "${CMCD_HLS_DIR}/" \
      "s3://${CMCD_BUCKET}/videos/" \
      --recursive \
-     --exclude "master.m3u8" \
      --region us-east-1
    rm -r -- "${CMCD_HLS_DIR}"
    ```
@@ -484,7 +543,8 @@ incur cost.
 - The sample has no multi-tenant isolation, high-availability guarantee,
   backup policy, alerting, or complete retry and recovery strategy.
 - The deployment creates long-running cost-bearing resources, especially
-  Timestream for InfluxDB and the NAT gateway.
+  Timestream for InfluxDB. The endpoint and bastion defaults minimize the
+  supporting fixed hourly cost but do not make the stack free.
 - The MCP server intentionally exposes only typed analysis tools, not arbitrary
   Flux queries. Database permissions remain the primary control.
 - Fixture playback covers one representative rebuffering incident, not every

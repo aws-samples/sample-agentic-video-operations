@@ -40,6 +40,7 @@ from cmcd_mcp.adapters.influxdb.query_influxdb import query_influxdb
 from cmcd_mcp.adapters.influxdb.replay_influxdb_query import replay_influxdb_query
 from cmcd_mcp.entrypoints.report_tool_failure import report_tool_failure
 from cmcd_mcp.settings.runtime_settings import RuntimeSettings
+from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
 QueryInfluxDb = Callable[[str], list[dict[str, Any]]]
 READ_ONLY = {"readOnlyHint": True}
@@ -117,6 +118,8 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
 
 
 def _select_query(settings: RuntimeSettings, fixture_name: str) -> QueryInfluxDb:
+    if settings.missing_live_settings:
+        return partial(_refuse_without_connection, settings.missing_live_settings)
     if settings.demo:
         return replay_influxdb_query(
             settings.fixtures_dir,
@@ -132,8 +135,19 @@ def _select_query(settings: RuntimeSettings, fixture_name: str) -> QueryInfluxDb
     )
 
 
+def _refuse_without_connection(missing: list[str], _flux: str) -> list[dict[str, Any]]:
+    """The server starts without a live connection; each live query says what is missing."""
+    names = ", ".join(missing)
+    raise ToolFailure(
+        FailureKind.INVALID_REQUEST,
+        f"{names} {'is' if len(missing) == 1 else 'are'} not set.",
+        "Deploy the CMCD stack and run `just cmcd-token` (samples/cmcd/README.md, Deploy to "
+        "AWS step 6), or use the cmcd-demo server for the offline fixtures.",
+    )
+
+
 def main() -> None:
-    build_cmcd_server().run()
+    build_cmcd_server().run(show_banner=False)
 
 
 if __name__ == "__main__":

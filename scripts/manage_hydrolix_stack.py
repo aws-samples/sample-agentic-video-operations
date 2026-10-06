@@ -5,12 +5,15 @@ uv run python scripts/manage_hydrolix_stack.py destroy [--yes]
 """
 
 import argparse
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from confirm_aws_action import NO_CREDENTIALS_FIX, ConfirmationPrompt, ask_to_continue
@@ -27,6 +30,20 @@ MCP_COMMIT = "b18040434bd3c5bae3d770219279c6531415c760"  # v0.3.7
 CDK_EXECUTABLE = CDK_DIRECTORY / "node_modules" / ".bin" / "cdk"
 
 Runner = Callable[[Sequence[str], Path | None, bool], subprocess.CompletedProcess[str]]
+MISSING_STACK = re.compile(r"Stack with id .+ does not exist")
+MISSING_ERROR = re.compile(r"An error occurred \((NotFoundException|ResourceNotFoundException)\)")
+
+
+@dataclass(frozen=True)
+class StackResources:
+    status: str
+    secret_arn: str | None
+
+
+@dataclass(frozen=True)
+class AmplifyApp:
+    app_id: str
+    name: str
 
 
 def run_command(
@@ -62,6 +79,59 @@ def read_account_id(runner: Runner, region: str) -> str | None:
     return value if value and value != "None" else None
 
 
+def is_missing(result: subprocess.CompletedProcess[str]) -> bool:
+    message = f"{result.stdout}\n{result.stderr}"
+    return bool(MISSING_STACK.search(message) or MISSING_ERROR.search(message))
+
+
+def failure_detail(result: subprocess.CompletedProcess[str]) -> str:
+    return (result.stderr or result.stdout).strip() or f"command exited {result.returncode}"
+
+
+def read_stack_resources(runner: Runner, region: str) -> StackResources | None:
+    result = runner(
+        [
+            "aws", "cloudformation", "describe-stacks", "--region", region,
+            "--stack-name", STACK, "--output", "json",
+        ],
+        REPOSITORY_ROOT,
+        True,
+    )  # fmt: skip
+    if result.returncode != 0:
+        if is_missing(result):
+            return None
+        raise RuntimeError(f"Could not read stack {STACK}: {failure_detail(result)}")
+    stack = json.loads(result.stdout)["Stacks"][0]
+    outputs = {item["OutputKey"]: item["OutputValue"] for item in stack.get("Outputs", [])}
+    return StackResources(stack["StackStatus"], outputs.get("HydrolixSecretArn"))
+
+
+def read_amplify_app(runner: Runner, region: str, app_id: str) -> AmplifyApp | None:
+    if not app_id:
+        return None
+    result = runner(
+        [
+            "aws", "amplify", "get-app", "--region", region, "--app-id", app_id,
+            "--output", "json",
+        ],
+        REPOSITORY_ROOT,
+        True,
+    )  # fmt: skip
+    if result.returncode == 0:
+        try:
+            app = json.loads(result.stdout)["app"]
+            returned_id = app["appId"].strip()
+            name = app["name"].strip()
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise RuntimeError(f"Amplify returned incomplete details for app {app_id}.") from error
+        if returned_id != app_id or not name:
+            raise RuntimeError(f"Amplify returned incomplete details for app {app_id}.")
+        return AmplifyApp(app_id=returned_id, name=name)
+    if is_missing(result):
+        return None
+    raise RuntimeError(f"Could not read Amplify app {app_id}: {failure_detail(result)}")
+
+
 def read_required_settings(environ: Mapping[str, str]) -> dict[str, str] | None:
     names = ("AWS_REGION", "AGENT_MODEL_ID", "HYDROLIX_TABLE")
     values = {name: environ.get(name, "").strip() for name in names}
@@ -70,7 +140,21 @@ def read_required_settings(environ: Mapping[str, str]) -> dict[str, str] | None:
         print(f"Missing required setting(s): {', '.join(missing)}")
         print("Add them to the root .env, then re-run the command.")
         return None
+    for name in ("HYDROLIX_JWT_DISCOVERY_URL", "HYDROLIX_JWT_CLIENT_IDS"):
+        values[name] = environ.get(name, "").strip()
+    if bool(values["HYDROLIX_JWT_DISCOVERY_URL"]) != bool(values["HYDROLIX_JWT_CLIENT_IDS"]):
+        print("Set both HYDROLIX_JWT_DISCOVERY_URL and HYDROLIX_JWT_CLIENT_IDS, or neither.")
+        return None
     return values
+
+
+def describe_callers(settings: Mapping[str, str]) -> str:
+    if settings.get("HYDROLIX_JWT_DISCOVERY_URL"):
+        return (
+            f"Cognito access tokens of app clients {settings['HYDROLIX_JWT_CLIENT_IDS']}; "
+            "actor = token sub, memory per user"
+        )
+    return "IAM callers; no verified identity, so the agent runs with memory off"
 
 
 def install_pinned_mcp_server(runner: Runner) -> int:
@@ -87,10 +171,18 @@ def install_pinned_mcp_server(runner: Runner) -> int:
         if not source.is_dir():
             print("Pinned mcp-hydrolix checkout does not contain mcp_hydrolix/.")
             return 1
+        license_file = checkout / "LICENSE"
+        if not license_file.is_file():
+            print("Pinned mcp-hydrolix checkout does not contain LICENSE.")
+            return 1
         MCP_DESTINATION.parent.mkdir(parents=True, exist_ok=True)
         if MCP_DESTINATION.exists():
             shutil.rmtree(MCP_DESTINATION)
         shutil.copytree(source, MCP_DESTINATION)
+        shutil.copy2(license_file, MCP_DESTINATION / "LICENSE")
+        notice_file = checkout / "NOTICE"
+        if notice_file.is_file():
+            shutil.copy2(notice_file, MCP_DESTINATION / "NOTICE")
     return 0
 
 
@@ -122,6 +214,11 @@ def run_cdk(
                 "never" if assume_yes else "broadening",
             ]
         )
+        if settings.get("HYDROLIX_JWT_DISCOVERY_URL"):
+            arguments += [
+                "-c", f"jwtDiscoveryUrl={settings['HYDROLIX_JWT_DISCOVERY_URL']}",
+                "-c", f"jwtClientIds={settings['HYDROLIX_JWT_CLIENT_IDS']}",
+            ]  # fmt: skip
     else:
         arguments.append("--force")
     return runner(arguments, CDK_DIRECTORY, False).returncode
@@ -148,6 +245,7 @@ def deploy_stack(
         account,
         {
             "Hydrolix table": settings["HYDROLIX_TABLE"],
+            "may invoke": describe_callers(settings),
             "Amplify app": "not created by this command",
         },
     )
@@ -186,47 +284,87 @@ def destroy_stack(
     if account is None:
         print(NO_CREDENTIALS_FIX)
         return 1
-    amplify_app_id = environ.get("HYDROLIX_AMPLIFY_APP_ID", "").strip()
-    amplify_cleanup = amplify_app_id or "not managed; set HYDROLIX_AMPLIFY_APP_ID if created"
+    configured_app = environ.get("HYDROLIX_AMPLIFY_APP_ID", "").strip()
+    try:
+        stack = read_stack_resources(runner, region)
+    except RuntimeError as error:
+        print(error)
+        print("Nothing was deleted.")
+        return 1
+    try:
+        amplify_app = read_amplify_app(runner, region, configured_app)
+    except RuntimeError as error:
+        print(error)
+        print("Nothing was deleted.")
+        return 1
+    if stack is None and amplify_app is None:
+        print(f"CloudFormation stack {STACK} and the configured Amplify app are already absent.")
+        return 0
     prompt = ConfirmationPrompt(
         "destroy (deletes the backend and configured Amplify app)",
         STACK,
         region,
         account,
         {
-            "Amplify app": amplify_cleanup,
-            "Secrets Manager secret": "stack-generated Hydrolix credentials (deleted)",
+            "CloudFormation stack": f"{STACK} ({stack.status})"
+            if stack
+            else "already absent",  # fmt: skip
+            "Secrets Manager secret": (
+                stack.secret_arn or "not present in stack outputs" if stack else "already absent"
+            ),
+            "Amplify app": (
+                f"{amplify_app.name} ({amplify_app.app_id})" if amplify_app else "none found"
+            ),
         },
     )
     if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask):
         return 1
-    if amplify_app_id:
+    amplify_failed = False
+    if amplify_app:
         result = runner(
-            ["aws", "amplify", "delete-app", "--region", region, "--app-id", amplify_app_id],
+            ["aws", "amplify", "delete-app", "--region", region, "--app-id", amplify_app.app_id],
             REPOSITORY_ROOT,
             True,
         )
-        missing = "NotFoundException" in f"{result.stdout}\n{result.stderr}"
-        if result.returncode != 0 and not missing:
-            print("Could not delete the configured Amplify app; backend teardown stopped.")
-            return result.returncode
-        if missing:
-            print(f"Amplify app {amplify_app_id} is already absent; continuing teardown.")
-    status = install_cdk_dependencies(runner)
-    if status != 0:
-        return status
+        if result.returncode != 0 and not is_missing(result):
+            print(
+                f"Could not delete Amplify app {amplify_app.name} "
+                f"({amplify_app.app_id}): {failure_detail(result)}"
+            )
+            amplify_failed = True
+        elif result.returncode != 0:
+            print(
+                f"Amplify app {amplify_app.name} ({amplify_app.app_id}) "
+                "is already absent; continuing teardown."
+            )
+            amplify_app = None
+        else:
+            amplify_app = None
+    stack_failed = False
     settings = {
         "AGENT_MODEL_ID": environ.get("AGENT_MODEL_ID", "unused-for-destroy"),
         "HYDROLIX_TABLE": environ.get("HYDROLIX_TABLE", "unused-for-destroy"),
     }
-    status = run_cdk(runner, "destroy", settings, assume_yes=assume_yes)
-    if status != 0:
-        return status
-    if MCP_DESTINATION.exists():
+    if stack:
+        install_status = install_cdk_dependencies(runner)
+        stack_failed = install_status != 0
+        if not stack_failed:
+            stack_failed = run_cdk(runner, "destroy", settings, assume_yes=assume_yes) != 0
+    if not stack_failed and MCP_DESTINATION.exists():
         shutil.rmtree(MCP_DESTINATION)
-    print("Deleted the Hydrolix backend and its stack-owned Secrets Manager secret.")
+    if amplify_failed or stack_failed:
+        print("Teardown incomplete. Remaining resources:")
+        if stack_failed:
+            print(f"- CloudFormation stack: {STACK}")
+            if stack.secret_arn:
+                print(f"- Secrets Manager secret: {stack.secret_arn}")
+        if amplify_failed and amplify_app:
+            print(f"- Amplify app: {amplify_app.name} ({amplify_app.app_id})")
+        print("Fix the reported error(s), then re-run `just destroy hydrolix`.")
+        return 1
+    print("Teardown complete: the Hydrolix backend and configured Amplify app are absent.")
     print("The CDK bootstrap ECR repository may retain the backend asset image.")
-    if not amplify_app_id:
+    if not configured_app:
         print("No Amplify app was deleted because HYDROLIX_AMPLIFY_APP_ID was empty.")
     return 0
 

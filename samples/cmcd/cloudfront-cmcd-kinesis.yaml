@@ -31,6 +31,30 @@ Parameters:
     Type: String
     Description: Existing S3 bucket used to package this template for deployment
 
+  InfluxDBInstanceType:
+    Type: String
+    Description: Timestream for InfluxDB class; db.influx.medium is the smallest supported
+    Default: db.influx.medium
+    AllowedValues:
+      - db.influx.medium
+      - db.influx.large
+      - db.influx.xlarge
+      - db.influx.2xlarge
+      - db.influx.4xlarge
+      - db.influx.8xlarge
+      - db.influx.12xlarge
+      - db.influx.16xlarge
+      - db.influx.24xlarge
+
+  BastionInstanceType:
+    Type: String
+    Description: EC2 class for the SSM port-forwarding bastion
+    Default: t3.nano
+    AllowedValues:
+      - t3.nano
+      - t3.micro
+      - t3.small
+
 
 
 Resources:
@@ -282,7 +306,7 @@ Resources:
         DefaultCacheBehavior:
           TargetOriginId: s3-origin
           ViewerProtocolPolicy: redirect-to-https
-          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingOptimized
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
           OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
           ResponseHeadersPolicyId: 5cc3b908-e619-4b99-88e5-2cf7f45965bd  # CORS-With-Preflight
           RealtimeLogConfigArn: !GetAtt CMCDRealtimeLogConfig.Arn
@@ -337,7 +361,7 @@ Resources:
     DeletionPolicy: Retain
     Properties:
       Name: !Sub '${DatabaseName}-${AWS::AccountId}'
-      DbInstanceType: db.influx.medium
+      DbInstanceType: !Ref InfluxDBInstanceType
       AllocatedStorage: 20
       Bucket: !Ref TableName
       Organization: cmcd-org
@@ -392,19 +416,6 @@ Resources:
       CidrBlock: 10.0.2.0/24
       AvailabilityZone: !Select [1, !GetAZs '']
 
-  # NAT Gateway for private subnets
-  NATGatewayEIP:
-    Type: AWS::EC2::EIP
-    DependsOn: AttachGateway
-    Properties:
-      Domain: vpc
-
-  NATGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NATGatewayEIP.AllocationId
-      SubnetId: !Ref PublicSubnet
-
   # Route Tables
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -458,6 +469,9 @@ Resources:
           - Sid: ReadStackBucketMetadata
             Effect: Allow
             Principal: '*'
+            Condition:
+              StringEquals:
+                aws:PrincipalAccount: !Sub '${AWS::AccountId}'
             Action:
               - s3:GetBucketLocation
               - s3:ListBucket
@@ -467,6 +481,9 @@ Resources:
           - Sid: AccessStackBucketObjects
             Effect: Allow
             Principal: '*'
+            Condition:
+              StringEquals:
+                aws:PrincipalAccount: !Sub '${AWS::AccountId}'
             Action:
               - s3:DeleteObject
               - s3:GetObject
@@ -474,13 +491,6 @@ Resources:
             Resource:
               - !Sub '${ContentBucket.Arn}/*'
               - !Sub 'arn:${AWS::Partition}:s3:::${DeploymentArtifactsBucketName}/*'
-
-  PrivateRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NATGateway
 
   PrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -507,6 +517,46 @@ Resources:
     Properties:
       GroupDescription: Security group for Lambda function
       VpcId: !Ref VPC
+
+  # Private AWS API path for the two Lambdas; no NAT gateway is required.
+  SecretsManagerEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow CMCD Lambdas to use the Secrets Manager VPC endpoint
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref SecretsManagerEndpointSecurityGroup
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccessStackInfluxDBSecrets
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - secretsmanager:GetSecretValue
+              - secretsmanager:UpdateSecret
+            Resource:
+              - !Ref InfluxDBSecret
+              - !Ref InfluxDBProcessorSecret
+            Condition:
+              StringEquals:
+                aws:PrincipalAccount: !Ref AWS::AccountId
 
   # Security Group for Bastion Host
   BastionSecurityGroup:
@@ -699,16 +749,7 @@ Resources:
                   and resource.get("orgID") == org_id
               )
 
-          def find_or_create_token(
-              opener,
-              endpoint,
-              org_id,
-              bucket_id,
-              description,
-              action,
-              context,
-          ):
-              expected = [permission(action, org_id, bucket_id)]
+          def find_token(opener, endpoint, org_id, bucket_id, description, action, context):
               existing = read_json(
                   opener,
                   f"{endpoint}/api/v2/authorizations?{urlencode({'orgID': org_id})}",
@@ -724,26 +765,58 @@ Resources:
                   ),
                   None,
               )
-              if match:
-                  return match["token"]
+              return match["token"] if match else None
+
+          def find_or_create_token(
+              opener,
+              endpoint,
+              org_id,
+              bucket_id,
+              description,
+              action,
+              context,
+              *,
+              attempts=3,
+          ):
               payload = json.dumps({
                   "orgID": org_id,
                   "description": description,
-                  "permissions": expected,
+                  "permissions": [permission(action, org_id, bucket_id)],
               }).encode()
-              status, body = request(
-                  opener,
-                  f"{endpoint}/api/v2/authorizations",
-                  context,
-                  method="POST",
-                  headers={"Content-Type": "application/json"},
-                  data=payload,
-              )
-              if status != 201:
-                  raise RuntimeError(
-                      f"InfluxDB token creation for {description!r} failed with HTTP {status}"
+              for attempt in range(attempts):
+                  token = find_token(
+                      opener, endpoint, org_id, bucket_id, description, action, context
                   )
-              return json.loads(body)["token"]
+                  if token:
+                      return token
+                  # One POST per lookup: a lost response may still have created the token,
+                  # so a retry looks it up by description first instead of adding a duplicate.
+                  try:
+                      status, body = request(
+                          opener,
+                          f"{endpoint}/api/v2/authorizations",
+                          context,
+                          method="POST",
+                          headers={"Content-Type": "application/json"},
+                          data=payload,
+                          attempts=1,
+                      )
+                  except HTTPError as error:
+                      if not 500 <= error.code < 600 or attempt + 1 == attempts:
+                          raise
+                      wait_before_retry(context, 5)
+                      continue
+                  except (URLError, TimeoutError):
+                      if attempt + 1 == attempts:
+                          raise
+                      wait_before_retry(context, 5)
+                      continue
+                  if status != 201:
+                      raise RuntimeError(
+                          f"InfluxDB token creation for {description!r} failed with HTTP {status}"
+                      )
+                  return json.loads(body)["token"]
+              raise RuntimeError(f"InfluxDB token creation for {description!r} did not finish")
 
           def prove_write_and_read(opener, endpoint, secret, context):
               write_url = f"{endpoint}/api/v2/write?{urlencode({
@@ -931,10 +1004,10 @@ Resources:
   UpdateSecretCustomResource:
     Type: AWS::CloudFormation::CustomResource
     DependsOn:
-      - PrivateRoute
       - PrivateSubnet1RouteTableAssociation
       - PrivateSubnet2RouteTableAssociation
       - S3GatewayEndpoint
+      - SecretsManagerEndpoint
     Properties:
       ServiceToken: !GetAtt UpdateSecretLambda.Arn
       ServiceTimeout: 300
@@ -1011,42 +1084,21 @@ Resources:
   # New Bastion Host EC2 Instance
   NewBastionHost:
     Type: AWS::EC2::Instance
-    DependsOn: InfluxDBInstance
+    DependsOn:
+      - PublicRoute
+      - PublicSubnetRouteTableAssociation
     Properties:
       ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
-      InstanceType: t3.micro
+      InstanceType: !Ref BastionInstanceType
       SubnetId: !Ref PublicSubnet
       SecurityGroupIds:
         - !Ref BastionSecurityGroup
       IamInstanceProfile: !Ref BastionInstanceProfile
       UserData:
-        Fn::Base64: !Sub |
+        Fn::Base64: |
           #!/bin/bash
-          sudo yum update -y
-          sudo yum install -y amazon-ssm-agent curl jq
-          
-          # Start and enable SSM agent
-          sudo systemctl enable amazon-ssm-agent
-          sudo systemctl start amazon-ssm-agent
-          
-          # Install InfluxDB CLI
-          curl -LO https://dl.influxdata.com/influxdb/releases/influxdb2-client-2.7.3-linux-amd64.tar.gz
-          tar xvzf influxdb2-client-2.7.3-linux-amd64.tar.gz
-          sudo cp influx /usr/local/bin/
-          
-          # Create connection script (will be updated after InfluxDB is ready)
-          cat > /home/ec2-user/connect-influxdb.sh << 'EOF'
-          #!/bin/bash
-          # Get InfluxDB endpoint from CloudFormation stack outputs
-          INFLUXDB_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} --query 'Stacks[0].Outputs[?OutputKey==`InfluxDBEndpoint`].OutputValue' --output text --region ${AWS::Region})
-          
-          echo "InfluxDB Endpoint: $INFLUXDB_ENDPOINT"
-          echo "Username: admin"
-          echo "Read the password locally with scripts/manage_cmcd_stack.py show-next-steps."
-          EOF
-          
-          chmod +x /home/ec2-user/connect-influxdb.sh
-          chown ec2-user:ec2-user /home/ec2-user/connect-influxdb.sh
+          # The standard Amazon Linux 2023 AMI includes SSM Agent.
+          systemctl enable --now amazon-ssm-agent
       Tags:
         - Key: Name
           Value: CMCD-New-Bastion-Host
@@ -1136,6 +1188,7 @@ Resources:
 
           http = urllib3.PoolManager()
           influxdb_config = None
+          POSITIVE_CMCD_VALUES = frozenset({"br", "d", "mtp", "pr", "rtp", "tb", "v"})
 
           def load_influxdb_config():
               global influxdb_config
@@ -1257,7 +1310,15 @@ Resources:
                       if '=' in pair:
                           k, v = pair.split('=', 1)
                           # Remove quotes and clean up the value
-                          parsed[k.strip()] = v.strip().strip('"')
+                          key = k.strip()
+                          cleaned = v.strip().strip('"')
+                          if key in POSITIVE_CMCD_VALUES:
+                              try:
+                                  if float(cleaned) <= 0:
+                                      continue
+                              except ValueError:
+                                  pass
+                          parsed[key] = cleaned
                       else:
                           # Handle boolean flags (keys without values)
                           parsed[pair.strip()] = True
@@ -1482,8 +1543,12 @@ Resources:
                   const sessionId = 'session_' + Date.now().toString(36) + Math.random().toString(36).substring(2);
                   
                   function showStatus(message, type = 'info') {{
-                      statusDiv.innerHTML = `<div class="status ${{type}}">${{message}}</div>`;
-                      setTimeout(() => statusDiv.innerHTML = '', 5000);
+                      // Text only: a status message is never parsed as HTML.
+                      const line = document.createElement('div');
+                      line.className = 'status ' + type;
+                      line.textContent = message;
+                      statusDiv.replaceChildren(line);
+                      setTimeout(() => statusDiv.replaceChildren(), 5000);
                   }}
                   
                   if (Hls.isSupported()) {{
@@ -1700,10 +1765,6 @@ Outputs:
   SessionManagerCommand:
     Description: Command to connect to bastion host via Session Manager
     Value: !Sub 'aws ssm start-session --target ${NewBastionHost} --region ${AWS::Region}'
-  
-  InfluxDBConnectionScript:
-    Description: Script location on bastion host to get InfluxDB connection details
-    Value: '/home/ec2-user/connect-influxdb.sh'
   
   VideoPlayerURL:
     Description: URL to access the HLS video player

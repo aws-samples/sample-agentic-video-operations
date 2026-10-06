@@ -3,14 +3,20 @@
 uv run python scripts/invoke_hub.py --actor <you> "Is channel 1234567 healthy?"
 uv run python scripts/invoke_hub.py --actor <you> --session <id> --approve <approval_id>
 
-The hub refuses a request without an actor, and the AWS CLI cannot send the custom actor
-header, so this adds it with a boto3 event hook. AWS_REGION comes from the root .env.
+IAM-authorized hub (the default): the hub refuses a request without an actor, and the AWS CLI
+cannot send the custom actor header, so this adds it with a boto3 event hook.
+JWT-authorized hub (stack output InboundAuth=jwt): this posts with HUB_BEARER_TOKEN instead,
+and the actor is the token's `sub`, so --actor is not used. boto3 cannot send bearer tokens.
+AWS_REGION and HUB_BEARER_TOKEN come from the root .env; the token is never an argument.
 """
 
 import argparse
 import json
 import os
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
@@ -20,6 +26,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 STACK = "MediaOpsHubStack"
 ACTOR_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id"
+SESSION_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"
 
 
 def build_payload(arguments: argparse.Namespace) -> dict[str, Any]:
@@ -50,14 +57,21 @@ def read_events(lines: Iterable[bytes]) -> Iterable[dict[str, Any]]:
 
 
 def invoke_hub(
-    arguments: argparse.Namespace, create_client: Callable[..., Any] = boto3.client
+    arguments: argparse.Namespace,
+    create_client: Callable[..., Any] = boto3.client,
+    open_url: Callable[..., Any] = urllib.request.urlopen,
 ) -> int:
     region = os.environ.get("AWS_REGION", "")
     if not region:
         print("Missing AWS_REGION. Add it to the root .env.")
         return 1
     try:
-        return send(arguments, region, create_client)
+        return send(arguments, region, create_client, open_url)
+    except urllib.error.HTTPError as error:
+        print(f"The hub refused the call: HTTP {error.code} {error.reason}")
+        print("A 401 or 403 means HUB_BEARER_TOKEN is missing, expired or from another client.")
+    except urllib.error.URLError as error:
+        print(f"The hub could not be reached: {error.reason}")
     except (BotoCoreError, ClientError) as error:
         print(f"The hub call failed: {error}")
         print("Check the deployment (just deploy hub) and that your role may invoke it.")
@@ -67,17 +81,37 @@ def invoke_hub(
     return 1
 
 
-def send(arguments: argparse.Namespace, region: str, create_client: Callable[..., Any]) -> int:
+def send(
+    arguments: argparse.Namespace,
+    region: str,
+    create_client: Callable[..., Any],
+    open_url: Callable[..., Any],
+) -> int:
     outputs = read_stack_outputs(create_client("cloudformation", region_name=region))
-    agentcore = create_client("bedrock-agentcore", region_name=region)
-    add_actor_header(agentcore, arguments.actor)
+    jwt_mode = outputs.get("InboundAuth") == "jwt"
+    token = os.environ.get("HUB_BEARER_TOKEN", "").strip()
+    if jwt_mode and not token:
+        print("This hub takes bearer tokens: set HUB_BEARER_TOKEN to a current access token.")
+        return 1
+    if not jwt_mode and not arguments.actor:
+        print("This hub is IAM-authorized: pass --actor <your operator id>.")
+        return 1
     session_id = arguments.session or f"hub-{uuid.uuid4().hex}{uuid.uuid4().hex[:4]}"
     print(f"session: {session_id}")
+    payload = json.dumps(build_payload(arguments)).encode()
+    if jwt_mode:
+        request = build_bearer_request(region, outputs, session_id, payload, token)
+        with open_url(request) as response:
+            for event in read_events(response):
+                print(json.dumps(event))
+        return 0
+    agentcore = create_client("bedrock-agentcore", region_name=region)
+    add_actor_header(agentcore, arguments.actor)
     response = agentcore.invoke_agent_runtime(
         agentRuntimeArn=outputs["AgentRuntimeArn"],
         qualifier=outputs["AgentEndpointName"],
         runtimeSessionId=session_id,
-        payload=json.dumps(build_payload(arguments)).encode(),
+        payload=payload,
         contentType="application/json",
     )
     for event in read_events(response["response"].iter_lines()):
@@ -85,12 +119,29 @@ def send(arguments: argparse.Namespace, region: str, create_client: Callable[...
     return 0
 
 
+def build_bearer_request(
+    region: str, outputs: dict[str, str], session_id: str, payload: bytes, token: str
+) -> urllib.request.Request:
+    """The HTTPS InvokeAgentRuntime call with OAuth instead of SigV4."""
+    arn = urllib.parse.quote(outputs["AgentRuntimeArn"], safe="")
+    qualifier = urllib.parse.quote(outputs["AgentEndpointName"], safe="")
+    url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{arn}/invocations?qualifier={qualifier}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        SESSION_HEADER: session_id,
+    }
+    return urllib.request.Request(url, data=payload, headers=headers, method="POST")
+
+
 def parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )  # noqa: E501
     parser.add_argument("prompt", nargs="?", help="the question to ask")
-    parser.add_argument("--actor", required=True, help="your operator id; approvals are per actor")
+    parser.add_argument(
+        "--actor", help="your operator id on an IAM-authorized hub; approvals are per actor"
+    )
     parser.add_argument("--session", help="resume this session (required for a decision)")
     decision = parser.add_mutually_exclusive_group()
     decision.add_argument("--approve", metavar="APPROVAL_ID")

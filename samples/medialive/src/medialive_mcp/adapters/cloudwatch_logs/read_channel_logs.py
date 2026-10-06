@@ -10,6 +10,7 @@ from media_ops_contracts.call_aws_operation import call_aws_operation
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
 MAX_EVENTS = 20
+MAX_LOG_PAGES = 5
 LOG_GROUP = "ElementalMediaLive"
 
 
@@ -48,7 +49,7 @@ def _collect_log_events(clients: ChannelLogClients, parameters: dict[str, Any]) 
     events: list[Any] = []
     next_token: str | None = None
     seen_tokens: set[str] = set()
-    while True:
+    for _ in range(MAX_LOG_PAGES):
         page_parameters = {
             **parameters,
             **({"nextToken": next_token} if next_token else {}),
@@ -59,6 +60,7 @@ def _collect_log_events(clients: ChannelLogClients, parameters: dict[str, Any]) 
         if not next_token or next_token in seen_tokens:
             return events
         seen_tokens.add(next_token)
+    return events
 
 
 def _exclude_as_run_events(events: list[Any]) -> list[Any]:
@@ -104,6 +106,8 @@ def read_channel_logs(
             "logStreamNamePrefix": prefix,
             "startTime": int(window[0].timestamp() * 1000),
             "endTime": int(window[1].timestamp() * 1000),
+            "limit": MAX_EVENTS,
+            "startFromHead": False,
         },
     )
     encoder_events = _exclude_as_run_events(events)

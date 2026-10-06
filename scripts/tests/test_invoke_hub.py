@@ -104,3 +104,78 @@ def test_a_stack_without_outputs_is_reported_not_a_traceback(monkeypatch, capsys
 
     assert status == 1
     assert "Redeploy" in capsys.readouterr().out
+
+
+JWT_OUTPUTS = [*OUTPUTS, {"OutputKey": "InboundAuth", "OutputValue": "jwt"}]
+
+
+class FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+PLACEHOLDER_TOKEN = "example-access-token"  # noqa: S105 - test placeholder, not a credential
+
+
+def run_jwt(argv, monkeypatch, *, with_token=True):
+    monkeypatch.setenv("AWS_REGION", "us-west-2")
+    if with_token:
+        monkeypatch.setenv("HUB_BEARER_TOKEN", PLACEHOLDER_TOKEN)
+    else:
+        monkeypatch.delenv("HUB_BEARER_TOKEN", raising=False)
+    agentcore, requests = FakeAgentCore(), []
+    cloudformation = SimpleNamespace(
+        describe_stacks=lambda **_: {"Stacks": [{"Outputs": JWT_OUTPUTS}]}
+    )
+    clients = {"cloudformation": cloudformation, "bedrock-agentcore": agentcore}
+
+    def open_url(request):
+        requests.append(request)
+        return FakeResponse(b'data: {"type": "final_answer", "text": "ok"}\n\n')
+
+    status = invoke_hub.invoke_hub(
+        invoke_hub.parse_arguments(argv),
+        create_client=lambda name, **_: clients[name],
+        open_url=open_url,
+    )
+    return status, agentcore, requests
+
+
+def test_a_jwt_hub_is_called_over_https_with_the_bearer_token_and_no_actor_header(
+    monkeypatch, capsys
+):
+    status, agentcore, [request] = run_jwt(["--actor", "ignored", "Status?"], monkeypatch)
+
+    assert status == 0
+    assert agentcore.calls == [] and agentcore.hooks == []  # no SigV4 call, no actor header
+    assert request.full_url == (
+        "https://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/"
+        "arn%3Aaws%3Abedrock-agentcore%3Aus-west-2%3A111122223333%3Aruntime%2FMediaOpsHub_x"
+        "/invocations?qualifier=MediaOpsHubEndpoint_x"
+    )
+    headers = {name.lower(): value for name, value in request.header_items()}
+    assert headers["authorization"] == "Bearer example-access-token"
+    assert len(headers[invoke_hub.SESSION_HEADER.lower()]) >= 33
+    assert invoke_hub.ACTOR_HEADER.lower() not in headers
+    assert json.loads(request.data) == {"prompt": "Status?"}
+    out = capsys.readouterr().out
+    assert '"final_answer"' in out and "example-access-token" not in out
+
+
+def test_a_jwt_hub_without_a_token_sends_nothing(monkeypatch, capsys):
+    status, _, requests = run_jwt(["Status?"], monkeypatch, with_token=False)
+
+    assert status == 1
+    assert requests == []
+    assert "HUB_BEARER_TOKEN" in capsys.readouterr().out
+
+
+def test_an_iam_hub_still_needs_an_actor(monkeypatch, capsys):
+    status, agentcore = run(["Status?"], monkeypatch)
+
+    assert status == 1
+    assert agentcore.calls == []
+    assert "--actor" in capsys.readouterr().out

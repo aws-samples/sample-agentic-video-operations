@@ -42,6 +42,24 @@ def test_demo_server_answers_from_root_fixtures():
     assert result.structured_content["low_buffer_events"][0]["cdn"] == "demo-cdn"
 
 
+def test_average_bitrate_tool_accepts_session_and_content_filters():
+    async def call_average_tool():
+        async with Client(demo_server()) as client:
+            return await client.call_tool(
+                "get_average_bitrate",
+                {
+                    "cmcd_sid": "demo-session-west",
+                    "cmcd_cid": "demo-content",
+                },
+            )
+
+    result = asyncio.run(call_average_tool())
+
+    assert result.structured_content["average_bitrate_kbps"] == 4200
+    assert result.structured_content["session_id"] == "demo-session-west"
+    assert result.structured_content["content_id"] == "demo-content"
+
+
 def test_live_settings_do_not_require_an_unused_aws_region():
     settings = RuntimeSettings(
         influxdb_url="https://influxdb.example.com",
@@ -50,3 +68,22 @@ def test_live_settings_do_not_require_an_unused_aws_region():
     )
 
     assert settings.demo is False
+
+
+def test_the_live_server_starts_without_influxdb_settings_and_each_tool_says_what_is_missing(
+    monkeypatch,
+):
+    for name in ("INFLUXDB_URL", "INFLUXDB_TOKEN", "INFLUXDB_ORG", "DEMO"):
+        monkeypatch.delenv(name, raising=False)
+    server = build_cmcd_server(RuntimeSettings(influxdb_org="org"))
+
+    async def call_tool():
+        async with Client(server) as client:
+            return await client.call_tool("list_session_and_content_ids", raise_on_error=False)
+
+    result = asyncio.run(call_tool())
+
+    assert result.is_error
+    [content] = result.content
+    assert content.text.startswith("InvalidRequest: INFLUXDB_URL, INFLUXDB_TOKEN are not set.")
+    assert "just cmcd-token" in content.text

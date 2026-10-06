@@ -2,6 +2,7 @@
 name = "media-ops-hub"
 version = "0.1.0"
 description = "One Strands agent on AgentCore that investigates across the selected media domain packs."
+license = "MIT-0"
 requires-python = ">=3.12"
 dependencies = [
   "media-ops-contracts",
@@ -11,6 +12,7 @@ dependencies = [
   "pydantic-settings>=2.5,<3",
   "strands-agents>=1.0,<2",
   "bedrock-agentcore>=1.0,<2",
+  "pyjwt>=2.10,<3",
 ]
 
 [project.optional-dependencies]

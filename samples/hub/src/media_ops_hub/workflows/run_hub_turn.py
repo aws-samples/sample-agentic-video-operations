@@ -105,10 +105,28 @@ def run_hub_turn(
         return
     result = agent(agent_input)
     record_result(result)
-    if budget.exceeded:
+    report_turn_usage(recorder, result, hub.settings.agent_model_id)
+    if recorder.has_deferred_terminal:
+        recorder.flush_terminal()
+    elif budget.exceeded:
         recorder.fail(budget.exceeded)
     elif result.stop_reason != "interrupt":
         recorder.answer(str(result).strip())
+
+
+def report_turn_usage(recorder: StreamEventRecorder, result: Any, model_id: str | None) -> None:
+    """Report model-backed usage before the turn's final terminal event."""
+    if model_id is None:
+        return
+    usage = result.metrics.accumulated_usage
+    recorder.usage(
+        model_id,
+        input_tokens=usage.get("inputTokens", 0),
+        output_tokens=usage.get("outputTokens", 0),
+        total_tokens=usage.get("totalTokens", 0),
+        cache_read_input_tokens=usage.get("cacheReadInputTokens", 0),
+        cache_write_input_tokens=usage.get("cacheWriteInputTokens", 0),
+    )
 
 
 def choose_agent_input(agent: Agent, request: HubRequest, actor_id: str) -> Any:

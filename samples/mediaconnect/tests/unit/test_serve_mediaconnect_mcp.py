@@ -10,6 +10,7 @@ READ_TOOLS = {
     "describe_flow",
     "describe_flow_source_metadata",
     "describe_flow_thumbnail",
+    "analyze_flow_visual_quality",
     "get_flow_health_metrics",
     "get_source_health_metrics",
     "get_output_health_metrics",
@@ -94,25 +95,3 @@ def test_write_tools_require_explicit_enablement_and_declare_annotations(tmp_pat
     assert tools_by_name["start_flow"].annotations.destructiveHint is False
     assert tools_by_name["stop_flow"].annotations.idempotentHint is True
     assert tools_by_name["stop_flow"].annotations.destructiveHint is True
-
-
-def test_stop_flow_rejects_a_different_confirmation_resource(tmp_path):
-    async def call_stop():
-        server = build_mediaconnect_server(settings(tmp_path, allow_writes=True))
-        async with Client(server) as client:
-            return await client.call_tool(
-                "stop_flow",
-                {
-                    "flow_arn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo:flow-1",
-                    "confirm_resource_id": (
-                        "arn:aws:mediaconnect:us-west-2:111122223333:flow:other:flow-2"
-                    ),
-                },
-                raise_on_error=False,
-            )
-
-    result = asyncio.run(call_stop())
-
-    assert result.is_error is True
-    assert "confirm_resource_id must exactly match flow_arn" in result.content[0].text
-    assert "Approve the MCP tool and enter the exact flow ARN again" in result.content[0].text

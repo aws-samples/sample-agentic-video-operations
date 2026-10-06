@@ -67,11 +67,14 @@ def list_context(dockerfile: Path, context: Path) -> Iterator[str]:
                 yield path
 
 
-FORBIDDEN = re.compile(r"(^|/)(\.env(?!\.example$)[^/]*|\.claude|\.git|cdk\.out)(/|$)")
+FORBIDDEN = re.compile(
+    r"(^|/)(\.env(?!\.example$)[^/]*|\.claude|\.git|cdk\.out|\.venv|node_modules|__pycache__"
+    r"|\.cache|\.mypy_cache|\.ruff_cache|\.pytest_cache|eval-results\.json)(/|$)"
+)
 
 
 def find_forbidden(paths: list[str]) -> list[str]:
-    """Secrets and local state that must never enter an image's build context."""
+    """Secrets, local state and tool caches that must never enter an image's build context."""
     return [path for path in paths if FORBIDDEN.search(path)]
 
 

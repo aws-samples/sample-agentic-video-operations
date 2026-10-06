@@ -1,4 +1,7 @@
 import asyncio
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -49,6 +52,20 @@ def test_server_parameters_use_just_with_the_temporary_env(tmp_path):
     assert parameters.env["ALLOW_WRITES"] == "false"
     assert "AWS_PROFILE" not in parameters.env
     assert str(smoke.SMOKE_GUARD) in parameters.env["PYTHONPATH"]
+
+
+def test_child_python_refuses_boto3_clients():
+    result = subprocess.run(
+        [sys.executable, "-c", "import boto3; boto3.client('s3')"],
+        env=smoke.build_child_environment(os.environ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "demo smoke attempted to construct a real boto3 client" in result.stderr
 
 
 def test_verify_session_initializes_lists_and_calls_one_read_tool():

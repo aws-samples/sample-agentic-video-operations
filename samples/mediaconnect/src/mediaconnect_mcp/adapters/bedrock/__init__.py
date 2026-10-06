@@ -1,1 +1,0 @@
-"""Amazon Bedrock adapters."""

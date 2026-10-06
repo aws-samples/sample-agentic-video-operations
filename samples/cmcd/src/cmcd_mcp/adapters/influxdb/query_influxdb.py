@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from influxdb_client import InfluxDBClient
 from influxdb_client.client.exceptions import InfluxDBError
+from urllib3.exceptions import HTTPError
 
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
@@ -41,7 +42,7 @@ def query_influxdb(
     try:
         tables = client.query_api().query(org=org, query=flux)
         return [_normalize_record(record) for table in tables for record in table.records]
-    except InfluxDBError as error:
+    except (InfluxDBError, HTTPError) as error:
         raise ToolFailure(
             FailureKind.EXTERNAL_SERVICE_UNAVAILABLE,
             "The InfluxDB query failed.",

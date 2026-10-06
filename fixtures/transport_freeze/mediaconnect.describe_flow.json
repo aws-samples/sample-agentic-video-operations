@@ -1,0 +1,20 @@
+{
+ "Flow": {
+  "FlowArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:1-demo-transport:demo-contribution",
+  "Name": "demo-contribution",
+  "Status": "ACTIVE",
+  "Source": {
+   "Name": "demo-upstream-srt",
+   "Protocol": "srt-listener",
+   "SourceArn": "arn:aws:mediaconnect:us-west-2:111122223333:source:1-demo-transport:demo-upstream-srt"
+  },
+  "SourceMonitoringConfig": {
+   "ThumbnailState": "ENABLED",
+   "ContentQualityAnalysisState": "ENABLED"
+  },
+  "Outputs": []
+ },
+ "Messages": {
+  "Errors": []
+ }
+}

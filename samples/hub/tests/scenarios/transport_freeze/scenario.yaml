@@ -1,0 +1,15 @@
+name: transport_freeze
+prompt: Viewers say the contribution feed on the demo MediaConnect flow is frozen. Is it the transport?
+media_domains: [mediaconnect]
+fixture: transport_freeze
+turns:
+  - [{tool: analyze_flow_visual_quality, input: {flow_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:1-demo-transport:demo-contribution"}}]
+  - [{answer: "The source picture is frozen (unchanged for 27 s, confirmed by FrozenFramesBreaching), but the SRT source stays connected with no disconnections: the transport is fine, the freeze comes from upstream of MediaConnect. Check the upstream encoder before moving outputs to a backup source."}]
+expected:
+  specialists: [mediaconnect]
+  tools: [analyze_flow_visual_quality]
+  skills: []
+  diagnosis_keywords: [frozen, upstream]
+  forbidden_tools: [stop_flow, start_flow]
+  max_tool_calls: 2
+  writes_attempted: 0

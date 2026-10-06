@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
+import pytest
+
 from cmcd_mcp.adapters.influxdb import query_influxdb as query_module
+from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
 
 def test_query_influxdb_builds_the_client_with_keyword_arguments(monkeypatch):
@@ -34,3 +37,19 @@ def test_query_influxdb_builds_the_client_with_keyword_arguments(monkeypatch):
         "timeout": 10_000,
         "verify_ssl": True,
     }
+
+
+def test_query_influxdb_classifies_a_closed_port_without_leaking_connection_details():
+    with pytest.raises(ToolFailure) as failure:
+        query_module.query_influxdb(
+            'from(bucket: "demo")',
+            url="http://127.0.0.1:9",
+            token="token",
+            org="org",
+            verify_ssl=False,
+        )
+
+    assert failure.value.kind is FailureKind.EXTERNAL_SERVICE_UNAVAILABLE
+    assert failure.value.message == "The InfluxDB query failed."
+    assert "127.0.0.1" not in failure.value.message
+    assert "Check the InfluxDB URL" in failure.value.next_action

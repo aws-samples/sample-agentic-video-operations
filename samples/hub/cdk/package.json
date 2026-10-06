@@ -1,6 +1,8 @@
 {
   "name": "media-ops-hub-cdk",
   "version": "0.1.0",
+  "private": true,
+  "license": "MIT-0",
   "bin": {
     "media-ops-hub-cdk": "bin/app.js"
   },

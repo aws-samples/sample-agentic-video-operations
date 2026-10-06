@@ -1,6 +1,9 @@
 import * as cdk from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
-import { ACTOR_HEADER, MediaOpsHubStack, RUNTIME_NAME, readPackPermissions } from '../lib/media-ops-hub-stack';
+import {
+  ACTOR_HEADER, AUTHORIZATION_HEADER, MediaOpsHubStack, RUNTIME_NAME, readJwtSettings,
+  readPackPermissions, readWriteTag,
+} from '../lib/media-ops-hub-stack';
 
 function synth(context: Record<string, string> = {}): Template {
   const app = new cdk.App({ context });
@@ -42,6 +45,12 @@ describe('runtime environment', () => {
     }
   });
 
+  test('the runtime samples visual quality in a short, bounded window', () => {
+    const env = runtimeEnvironment(defaultTemplate);
+    expect(env.VISUAL_QUALITY_FRAMES).toBe('8');
+    expect(env.VISUAL_QUALITY_WINDOW_SECONDS).toBe('20');
+  });
+
   test('model ids come from parameters, not literals in the runtime', () => {
     const env = runtimeEnvironment(defaultTemplate);
     expect(env.AGENT_MODEL_ID).toEqual({ Ref: 'BedrockModelId' });
@@ -70,6 +79,47 @@ describe('caller identity', () => {
     defaultTemplate.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
       RequestHeaderConfiguration: { RequestHeaderAllowlist: [ACTOR_HEADER] },
     });
+  });
+});
+
+describe('inbound JWT authorization', () => {
+  const issuer = 'https://cognito-idp.us-west-2.amazonaws.com/us-west-2_EXAMPLE';
+  const jwtContext = { jwtDiscoveryUrl: `${issuer}/.well-known/openid-configuration`, jwtClientIds: 'client-a, client-b' };
+  const jwtTemplate = synth(jwtContext);
+
+  test('is off by default: IAM callers, the actor header, no issuer for the hub', () => {
+    const [runtime] = Object.values(defaultTemplate.findResources('AWS::BedrockAgentCore::Runtime')) as any[];
+    expect(runtime.Properties.AuthorizerConfiguration).toBeUndefined();
+    expect(runtimeEnvironment(defaultTemplate)).not.toHaveProperty('HUB_JWT_ISSUER');
+    defaultTemplate.hasOutput('InboundAuth', { Value: 'iam' });
+  });
+
+  test('accepts only tokens from the provider and clients, and forwards only the token', () => {
+    jwtTemplate.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
+      AuthorizerConfiguration: {
+        CustomJWTAuthorizer: { DiscoveryUrl: jwtContext.jwtDiscoveryUrl, AllowedClients: ['client-a', 'client-b'] },
+      },
+      RequestHeaderConfiguration: { RequestHeaderAllowlist: [AUTHORIZATION_HEADER] },
+    });
+    const env = runtimeEnvironment(jwtTemplate);
+    expect(env.HUB_JWT_ISSUER).toBe(issuer);
+    expect(env.HUB_JWT_ALLOWED_CLIENTS).toBe('client-a,client-b');
+    expect(env).not.toHaveProperty('HUB_LOCAL_MODE');
+    jwtTemplate.hasOutput('InboundAuth', { Value: 'jwt' });
+  });
+
+  test('creates no IAM invoke policy, which a JWT runtime would refuse anyway', () => {
+    expect(Object.keys(jwtTemplate.findResources('AWS::IAM::ManagedPolicy'))).toHaveLength(0);
+    expect(() => synth({ ...jwtContext, invokerRoleName: 'media-ops-operator' })).toThrow(/invokerRoleName/);
+  });
+
+  test.each([
+    [`${issuer}/.well-known/openid-configuration`, ''],
+    ['', 'client-a'],
+    ['http://issuer.example.com/.well-known/openid-configuration', 'client-a'],
+    [issuer, 'client-a'],
+  ])('needs an https discovery URL and at least one client id (%s, %s)', (url, clients) => {
+    expect(() => readJwtSettings(url, clients)).toThrow(/jwtDiscoveryUrl/);
   });
 });
 
@@ -118,6 +168,41 @@ describe('pack IAM', () => {
       expect(granted).toContain(action);
     }
     expect(runtimeEnvironment(template).ALLOW_WRITES).toBe('true');
+    for (const statement of roleStatements(template).filter((item) => /Write\d+$/.test(item.Sid))) {
+      expect(statement.Condition).toBeUndefined();
+    }
+  });
+
+  test('optionally limits every pack write to resources with one exact tag', () => {
+    const statements = roleStatements(
+      synth({ allowWrites: 'true', writeTag: 'MediaOpsManaged=true' }),
+    );
+    const packWrites = statements.filter((item) => /^(Medialive|Mediaconnect)Write\d+$/.test(item.Sid));
+    const packReads = statements.filter((item) => /^(Medialive|Mediaconnect)Read\d+$/.test(item.Sid));
+
+    expect(packWrites).toHaveLength(2);
+    for (const statement of packWrites) {
+      expect(statement.Condition).toEqual({
+        StringEquals: { 'aws:ResourceTag/MediaOpsManaged': 'true' },
+      });
+    }
+    for (const statement of packReads) {
+      expect(statement.Condition).toBeUndefined();
+    }
+  });
+
+  test.each(['missing-value', '=value', 'bad key=value', 'key='])(
+    'rejects an invalid write tag before synth (%s)',
+    (writeTag) => {
+      expect(() => synth({ allowWrites: 'true', writeTag })).toThrow(/writeTag must be Key=Value/);
+    },
+  );
+
+  test('parses a tag value containing an equals sign', () => {
+    expect(readWriteTag('MediaOpsScope=live=primary')).toEqual({
+      key: 'MediaOpsScope',
+      value: 'live=primary',
+    });
   });
 
   test('fills in region and account, leaving no template placeholder', () => {

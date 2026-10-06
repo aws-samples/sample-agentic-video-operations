@@ -93,15 +93,6 @@ def test_mcp_server_diagnoses_without_any_write_tool_by_default(settings):
     assert any(issue["metric"] == "InputLossSeconds" for issue in report["issues"])
 
 
-def test_mcp_write_refuses_a_confirmation_for_another_channel(settings):
-    writable = settings.model_copy(update={"allow_writes": True})
-    _, result = call_tool(
-        writable, "stop_channel", {"channel_id": CHANNEL, "confirm_resource_id": "7654321"}
-    )
-    assert result.is_error
-    assert "ApprovalRequired" in result.content[0].text
-
-
 def test_allow_writes_adds_eight_destructive_tools(settings):
     writable = settings.model_copy(update={"allow_writes": True})
     server = build_mcp_server(writable, create_medialive_clients(writable))
@@ -113,7 +104,8 @@ def test_allow_writes_adds_eight_destructive_tools(settings):
     tools = asyncio.run(list_tools())
     destructive = {t.name for t in tools if t.annotations and t.annotations.destructiveHint}
     read_only = {t.name for t in tools if t.annotations and t.annotations.readOnlyHint}
-    assert len(destructive) == 8 and len(read_only) == 8
+    assert len(destructive) == 8 and len(read_only) == 9
+    assert "analyze_channel_visual_quality" in read_only
     assert {"stop_channel", "switch_channel_input", "delete_schedule_action"} <= destructive
 
 

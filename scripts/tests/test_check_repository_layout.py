@@ -58,6 +58,12 @@ def test_a_tracked_plan_file_fails():
     assert problem.startswith("tracked plan file")
 
 
+@pytest.mark.parametrize("name", [".env", ".env.example"])
+def test_a_sample_environment_file_fails(name):
+    path = f"samples/cmcd/{name}"
+    assert problems(path) == [f"sample environment file (use the root .env.example): {path}"]
+
+
 @pytest.mark.parametrize(
     "path",
     [

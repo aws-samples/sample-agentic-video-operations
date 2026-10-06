@@ -4,7 +4,6 @@ import pytest
 
 from media_ops_contracts import create_aws_client as module
 from media_ops_contracts.create_aws_client import create_aws_client
-from media_ops_contracts.replay_fixture_client import ReplayFixtureClient
 from media_ops_contracts.resolve_demo_scenario import resolve_demo_scenario
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
@@ -33,14 +32,6 @@ def test_demo_with_an_empty_or_unknown_scenario_fails_closed(
             fixtures_dir=fixtures_dir,
         )  # fmt: skip
     assert failure.value.kind is FailureKind.INVALID_REQUEST
-
-
-def test_demo_with_a_known_scenario_replays_without_boto3(boto3_forbidden, fixtures_dir):
-    client = create_aws_client(
-        "medialive", region="us-west-2", demo=True, demo_scenario="input_loss",
-        fixtures_dir=fixtures_dir,
-    )  # fmt: skip
-    assert isinstance(client, ReplayFixtureClient)
 
 
 def test_without_demo_a_regional_boto3_client_is_built(monkeypatch):

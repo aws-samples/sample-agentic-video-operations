@@ -1,4 +1,6 @@
 import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { applyChartFormatters } from "./chartFormatters";
+import { logEvent, logFailure } from "./logMetadata";
 import {
   BedrockRuntimeClient,
   InvokeModelCommand,
@@ -7,13 +9,9 @@ import { createAwsClient } from "./AwsAuth.js";
 import {
   extractBetweenTags,
   removeCharFromStartAndEnd,
-  handleFormatter,
 } from "./Utils.js";
-import {
-  QUESTION_ANSWERS_TABLE_NAME,
-  CHART_MODEL_ID,
-  CHART_PROMPT,
-} from "../env.js";
+import { QUESTION_ANSWERS_TABLE_NAME, CHART_MODEL_ID } from "../env.js";
+import { CHART_PROMPT } from "../prompts/chartPrompt.js";
 
 /**
  * Query data from DynamoDB
@@ -35,8 +33,6 @@ export const getQueryResults = async (queryUuid = "") => {
       },
       ConsistentRead: true,
     };
-    console.log("------- Get Query Results -------");
-    console.log(input);
     const command = new QueryCommand(input);
     const response = await dynamodb.send(command);
     if (response.hasOwnProperty("Items")) {
@@ -70,7 +66,7 @@ export const getQueryResults = async (queryUuid = "") => {
     }
     return queryResults;
   } catch (error) {
-    console.error("Error querying DynamoDB:", error);
+    logFailure("query results table", error);
     throw error;
   }
 };
@@ -119,8 +115,7 @@ export const generateChart = async (answer) => {
 
   try {
     // Send the request to Bedrock
-    console.log("------- Request chart -------");
-    console.log(payload);
+    logEvent("chart requested", { results: answer.queryResults.length });
 
     const command = new InvokeModelCommand({
       contentType: "application/json",
@@ -131,30 +126,28 @@ export const generateChart = async (answer) => {
     const apiResponse = await bedrock.send(command);
     const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
     const responseBody = JSON.parse(decodedResponseBody).content[0].text;
-    console.log("------- Response chart generation -------");
-    console.log(responseBody);
 
     // Process the response
     const has_chart = parseInt(extractBetweenTags(responseBody, "has_chart"));
 
     if (has_chart) {
-      const chartConfig = JSON.parse(
-        extractBetweenTags(responseBody, "chart_configuration")
+      const formatted = applyChartFormatters(
+        JSON.parse(extractBetweenTags(responseBody, "chart_configuration"))
       );
       const chart = {
         chart_type: removeCharFromStartAndEnd(
           extractBetweenTags(responseBody, "chart_type"),
           "\n"
         ),
-        chart_configuration: handleFormatter(chartConfig),
+        // Formatters by name only: model output is never evaluated (RB11).
+        chart_configuration: formatted.configuration,
         caption: removeCharFromStartAndEnd(
           extractBetweenTags(responseBody, "caption"),
           "\n"
         ),
       };
 
-      console.log("------- Final chart generation -------");
-      console.log(chart);
+      logEvent("chart generated", { hasChart: true, droppedFormatters: formatted.dropped });
 
       return chart;
     } else {
@@ -166,27 +159,9 @@ export const generateChart = async (answer) => {
       };
     }
   } catch (error) {
-    console.error("Chart generation failed:", error);
+    logFailure("chart generation", error);
     return {
       rationale: "Error generating or parsing chart data.",
     };
-  }
-};
-
-/**
- * Get agent responses for a specific query UUID
- * @param {string} queryUuid - The query UUID to fetch responses for
- * @returns {Promise<Array>} - Array of agent responses
- */
-export const getAgentResponses = async (queryUuid = "") => {
-  // This is a placeholder function for agent responses
-  // In a real implementation, this would fetch additional agent response data
-  // For now, return empty array as the main response is handled in the streaming
-  try {
-    console.log("Fetching agent responses for:", queryUuid);
-    return [];
-  } catch (error) {
-    console.error("Error fetching agent responses:", error);
-    return [];
   }
 };

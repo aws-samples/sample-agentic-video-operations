@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from channel_test_pack import SIGNING_KEY
-from hub_test_setup import OPERATOR, build_hub, only, types
+from hub_test_setup import COSTED_MODEL_ID, OPERATOR, build_hub, only, types
 from scripted_model import ScriptedModel, call, say
 
 from media_ops_contracts.approved_action import ActionProposal, sign_approved_action
@@ -11,16 +11,24 @@ from media_ops_contracts.approved_action import ActionProposal, sign_approved_ac
 STOP = call("stop_channel", "use-1", channel_id="ch-1")
 
 
-def paused_hub(tmp_path, *after):
-    hub = build_hub(tmp_path, ScriptedModel([STOP], *after))
+def paused_hub(tmp_path, *after, model_id: str | None = None):
+    hub = build_hub(tmp_path, ScriptedModel([STOP], *after), model_id=model_id)
     approval = only(hub.ask("Stop ch-1."), "approval_requested")
     return hub, approval
 
 
 def test_a_write_pauses_for_approval_and_does_not_run(tmp_path):
-    hub, approval = paused_hub(tmp_path)
+    hub = build_hub(tmp_path, ScriptedModel([STOP]), model_id=COSTED_MODEL_ID)
+    events = hub.ask("Stop ch-1.")
+    approval = only(events, "approval_requested")
 
     assert hub.pack.states["ch-1"] == "RUNNING"
+    assert types(events) == [
+        "task_started",
+        "tool_called",
+        "usage_reported",
+        "approval_requested",
+    ]
     assert approval.proposal == ActionProposal(
         actor_id=OPERATOR,
         action="stop_channel",
@@ -31,13 +39,13 @@ def test_a_write_pauses_for_approval_and_does_not_run(tmp_path):
 
 
 def test_an_approved_write_runs_once_with_the_stored_deadline(tmp_path):
-    hub, approval = paused_hub(tmp_path, [say("Stopped ch-1.")])
+    hub, approval = paused_hub(tmp_path, [say("Stopped ch-1.")], model_id=COSTED_MODEL_ID)
 
     events = hub.decide(approval.approval_id, approve=True)
 
     assert types(events) == [
         "task_started", "tool_called", "action_completed", "verification_completed",
-        "final_answer",
+        "usage_reported", "final_answer",
     ]  # fmt: skip
     [signed] = hub.pack.approvals
     assert signed.approval_id == approval.approval_id
@@ -85,12 +93,41 @@ def test_a_decision_in_another_session_is_refused(tmp_path):
 
 
 def test_a_decision_after_the_deadline_is_refused_and_nothing_is_signed(tmp_path):
-    hub, approval = paused_hub(tmp_path, [say("The approval expired.")])
+    hub, approval = paused_hub(
+        tmp_path,
+        [say("The approval expired.")],
+        model_id=COSTED_MODEL_ID,
+    )
     hub.clock.advance(minutes=11)
 
     events = hub.decide(approval.approval_id, approve=True)
 
+    assert types(events)[-3:] == ["error", "usage_reported", "final_answer"]
     assert only(events, "error").kind == "ApprovalExpired"
+    assert "approval expired" in only(events, "error").message.lower()
+    assert only(events, "final_answer").text == "The approval expired."
+    assert hub.pack.approvals == []
+    assert hub.pack.states["ch-1"] == "RUNNING"
+
+
+def test_a_late_decision_streams_the_refusal_before_a_new_approval(tmp_path):
+    retry = call("stop_channel", "use-2", channel_id="ch-1")
+    hub, approval = paused_hub(tmp_path, [retry], model_id=COSTED_MODEL_ID)
+    hub.clock.advance(minutes=11)
+
+    events = hub.decide(approval.approval_id, approve=True)
+
+    assert types(events) == [
+        "task_started",
+        "tool_called",
+        "error",
+        "tool_called",
+        "usage_reported",
+        "approval_requested",
+    ]
+    assert only(events, "error").kind == "ApprovalExpired"
+    replacement = only(events, "approval_requested")
+    assert replacement.approval_id != approval.approval_id
     assert hub.pack.approvals == []
     assert hub.pack.states["ch-1"] == "RUNNING"
 

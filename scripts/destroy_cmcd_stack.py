@@ -247,11 +247,27 @@ def delete_influxdb_if_present(
 def empty_bucket_if_present(
     runner: Runner, bucket: str, *, expected_owner: str | None = None
 ) -> int:
-    owner = ["--expected-bucket-owner", expected_owner] if expected_owner else []
-    lookup = runner(
-        ["s3api", "head-bucket", "--bucket", bucket, "--region", REGION, *owner],
-        True,
-    )
+    if expected_owner:
+        lookup_arguments = [
+            "s3api",
+            "head-bucket",
+            "--bucket",
+            bucket,
+            "--region",
+            REGION,
+            "--expected-bucket-owner",
+            expected_owner,
+        ]
+    else:
+        lookup_arguments = [
+            "s3api",
+            "head-bucket",
+            "--bucket",
+            bucket,
+            "--region",
+            REGION,
+        ]
+    lookup = runner(lookup_arguments, True)
     if lookup.returncode != 0:
         if is_missing_resource(lookup):
             print(f"S3 bucket {bucket} is already absent.")

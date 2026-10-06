@@ -1,8 +1,9 @@
 """MCP stdio server for MediaLive (`just run medialive`).
 
 Read tools are always registered. Write tools exist only with ALLOW_WRITES=true; each one
-needs `confirm_resource_id` equal to the channel id, the MCP client's own tool-approval
-prompt is the human approval, and the adapter verifies the result (write_safe_tools.md §3).
+first asks the client's user, by elicitation, to type the exact channel id, and the adapter
+verifies the result (write_safe_tools.md §3). That assumes a trusted client that shows the
+question to a person: one that answers elicitations by itself defeats it.
 """
 
 import functools
@@ -38,7 +39,7 @@ def build_mcp_server(settings: RuntimeSettings, clients: MediaLiveClients) -> Fa
 
 def main() -> None:
     settings = load_runtime_settings()
-    build_mcp_server(settings, create_medialive_clients(settings)).run()
+    build_mcp_server(settings, create_medialive_clients(settings)).run(show_banner=False)
 
 
 if __name__ == "__main__":

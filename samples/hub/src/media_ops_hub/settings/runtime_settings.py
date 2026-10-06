@@ -20,6 +20,24 @@ class HubSettings(BaseSettings):
     # Only `just run hub` sets this. It lets a request without an actor header or session id
     # run as one local operator; everywhere else such a request is refused.
     hub_local_mode: bool = Field(default=False)
+    # Set only by the CDK on a runtime with inbound JWT authorization (HUB_JWT_DISCOVERY_URL
+    # at deploy). The actor is then the verified token's `sub`; the actor header is ignored.
+    hub_jwt_issuer: str = Field(default="")
+    hub_jwt_allowed_clients: str = Field(default="")
+
+    @property
+    def jwt_allowed_clients(self) -> frozenset[str]:
+        return frozenset(c.strip() for c in self.hub_jwt_allowed_clients.split(",") if c.strip())
+
+    @model_validator(mode="after")
+    def require_a_complete_jwt_setting_outside_local_mode(self) -> "HubSettings":
+        """The hub reads token claims without re-verifying the signature (AgentCore did), so
+        JWT mode must never run where AgentCore is not in front: not in local mode."""
+        if self.hub_jwt_issuer and not self.jwt_allowed_clients:
+            raise ValueError("HUB_JWT_ISSUER is set, so HUB_JWT_ALLOWED_CLIENTS must be too.")
+        if self.hub_jwt_issuer and self.hub_local_mode:
+            raise ValueError("HUB_JWT_ISSUER is for the deployed runtime; unset HUB_LOCAL_MODE.")
+        return self
 
     @model_validator(mode="after")
     def require_a_shared_key_with_shared_sessions(self) -> "HubSettings":

@@ -30,7 +30,7 @@ def check_approval_decision(
     if now >= pending.expires_at:
         return ToolFailure(
             FailureKind.APPROVAL_EXPIRED,
-            "The approval request expired before the decision arrived.",
+            "The approval expired before the decision arrived.",
             "Propose the action again and decide within 10 minutes.",
         )
     if current != pending.proposal:

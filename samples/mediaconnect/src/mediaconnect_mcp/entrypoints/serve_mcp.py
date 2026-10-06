@@ -1,10 +1,11 @@
 """Register MediaConnect adapters as MCP tools and serve stdio."""
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from media_ops_contracts.approved_action import (
     APPROVAL_LIFETIME,
@@ -13,7 +14,6 @@ from media_ops_contracts.approved_action import (
     sign_approved_action,
 )
 from media_ops_contracts.resolve_approval_signing_key import resolve_approval_signing_key
-from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from mediaconnect_mcp.adapters.media_connect.start_flow import start_flow as apply_start_flow
 from mediaconnect_mcp.adapters.media_connect.stop_flow import stop_flow as apply_stop_flow
 from mediaconnect_mcp.adapters.media_connect.verify_flow_state import FlowActionResult
@@ -21,6 +21,7 @@ from mediaconnect_mcp.bootstrap.create_mediaconnect_clients import (
     MediaConnectClients,
     create_mediaconnect_clients,
 )
+from mediaconnect_mcp.entrypoints.confirm_with_operator import confirm_with_operator
 from mediaconnect_mcp.entrypoints.report_tool_failures import report_tool_failures
 from mediaconnect_mcp.settings.runtime_settings import RuntimeSettings, load_runtime_settings
 from mediaconnect_mcp.tool_surface.create_read_tools import create_read_tools
@@ -50,33 +51,31 @@ def build_mediaconnect_server(
 
 
 def _register_write_tools(server: FastMCP, media_connect: Any, signing_key: bytes) -> None:
+    async def run(ctx: Context, action: str, flow_arn: str, adapter: Any) -> FlowActionResult:
+        await confirm_with_operator(
+            ctx, action=action, resource_label="flow ARN", resource_id=flow_arn, parameters={}
+        )
+        approved = _approve_stdio_action(action, flow_arn, signing_key)
+        # The adapter polls until the flow settles; keep the server responsive meanwhile.
+        return await asyncio.to_thread(
+            adapter, approved, media_connect, signing_key, datetime.now(UTC)
+        )
+
     @server.tool(annotations=START_WRITE)
     @report_tool_failures
-    def start_flow(flow_arn: str, confirm_resource_id: str) -> FlowActionResult:
-        """Start the exact flow named again in confirm_resource_id."""
-        approved = _approve_stdio_action("start_flow", flow_arn, confirm_resource_id, signing_key)
-        return apply_start_flow(approved, media_connect, signing_key, datetime.now(UTC))
+    async def start_flow(flow_arn: str, ctx: Context) -> FlowActionResult:
+        """Start a flow. The MCP client first asks its user to type the exact flow ARN."""
+        return await run(ctx, "start_flow", flow_arn, apply_start_flow)
 
     @server.tool(annotations=STOP_WRITE)
     @report_tool_failures
-    def stop_flow(flow_arn: str, confirm_resource_id: str) -> FlowActionResult:
-        """Stop the exact flow named again in confirm_resource_id."""
-        approved = _approve_stdio_action("stop_flow", flow_arn, confirm_resource_id, signing_key)
-        return apply_stop_flow(approved, media_connect, signing_key, datetime.now(UTC))
+    async def stop_flow(flow_arn: str, ctx: Context) -> FlowActionResult:
+        """Stop a flow. The MCP client first asks its user to type the exact flow ARN."""
+        return await run(ctx, "stop_flow", flow_arn, apply_stop_flow)
 
 
-def _approve_stdio_action(
-    action: str,
-    resource_id: str,
-    confirm_resource_id: str,
-    signing_key: bytes,
-) -> ApprovedAction:
-    if confirm_resource_id != resource_id:
-        raise ToolFailure(
-            FailureKind.APPROVAL_REQUIRED,
-            "confirm_resource_id must exactly match flow_arn.",
-            "Approve the MCP tool and enter the exact flow ARN again.",
-        )
+def _approve_stdio_action(action: str, resource_id: str, signing_key: bytes) -> ApprovedAction:
+    """Sign what the operator just confirmed by typing the exact flow ARN."""
     now = datetime.now(UTC)
     proposal = ActionProposal(
         actor_id="mcp-stdio-operator",
@@ -98,7 +97,7 @@ def _read_signing_key(settings: RuntimeSettings) -> bytes:
 def main() -> None:
     settings = load_runtime_settings()
     clients = create_mediaconnect_clients(settings)
-    build_mediaconnect_server(settings, clients).run()
+    build_mediaconnect_server(settings, clients).run(show_banner=False)
 
 
 if __name__ == "__main__":

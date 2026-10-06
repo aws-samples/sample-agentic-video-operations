@@ -11,7 +11,9 @@ src/medialive_mcp/
   adapters/media_live/describe_channel.py   # read
   adapters/media_live/stop_channel.py       # write
   adapters/cloudwatch/read_channel_metrics.py
-  entrypoints/serve_mcp.py                  # registers adapters as MCP tools
+  tool_surface/create_read_tools.py         # shared read-tool surface
+  tool_surface/create_write_tools.py        # shared hub write-tool surface
+  entrypoints/serve_mcp.py                  # MCP transport and approval wiring
 ```
 
 - Each adapter file exposes one public function, named `verb_object`: `describe_channel`, `stop_channel`, `read_channel_metrics`.
@@ -19,7 +21,7 @@ src/medialive_mcp/
 - Adapters translate. They do not decide policy, such as risk, approval or which channel to pick.
 - **The sample's MCP entrypoint and its domain pack (extend_the_hub.md §2) expose the same plain, typed adapter functions.**
   - Only the hub wraps them with Strands. Adapters and packs never import an agent framework.
-  - Nothing is duplicated and nothing is `COPY`ed.
+  - Read-tool factories are shared. MCP and hub write registration differ because their approval transports differ, but both call the same write adapters. Nothing is `COPY`ed.
 
 ## 2. Typed results, classified failures
 
@@ -91,12 +93,28 @@ approved = sign_approved_action(proposal, approval_id=..., expires_at=..., signi
 **The write sequence**, one function per step:
 
 ```python
-def stop_channel(approved_action, media_live, clock) -> ActionResult:
-    require_action_approval(approved_action, action="stop_channel", signing_key=key, now=now)  # decision
-    before = describe_channel(media_live, approved_action.resource_id)
+def stop_channel(approved_action, media_live, check, policy) -> ActionResult:
+    require_action_approval(  # decision
+        approved_action,
+        action="stop_channel",
+        signing_key=check.signing_key,
+        now=check.now,
+    )
+    before = describe_channel(media_live, approved_action.resource_id).state
     media_live.stop_channel(ChannelId=approved_action.resource_id)               # effect
-    after = verify_channel_state(media_live, approved_action.resource_id, expected=ChannelState.IDLE)
-    return ActionResult(before=before, after=after, verified=after.state is ChannelState.IDLE)
+    after = wait_for_condition(
+        lambda: describe_channel(media_live, approved_action.resource_id).state,
+        lambda state: state is ChannelState.IDLE,
+        policy,
+    )
+    return ActionResult(
+        approval_id=approved_action.approval_id,
+        action="stop_channel",
+        resource_id=approved_action.resource_id,
+        before_state=before,
+        after_state=after,
+        verified=after is ChannelState.IDLE,
+    )
 ```
 
 - `require_action_approval(approved_action, *, action, signing_key, now, resource_id=None)` rejects a missing approval, an action or resource that doesn't match, a bad signature (`ApprovalRequired`) or an expired approval (`ApprovalExpired`). It is a pure decision: time is passed in as `now`.
@@ -108,10 +126,21 @@ def stop_channel(approved_action, media_live, clock) -> ActionResult:
 
 | Entrypoint | Who approves | How the `ApprovedAction` is created |
 |---|---|---|
-| MCP stdio (Claude Code, Kiro, Q) | The human, through the MCP client's per-tool permission prompt. The tool also requires `confirm_resource_id`, which must equal `resource_id` | `serve_mcp.py` signs it with the local key |
+| MCP stdio (Claude Code, Kiro, Q) | The human at the MCP client. Before any change the server sends an MCP elicitation showing the action, resource and parameters, and the user must type the exact resource id (`confirm_with_operator.py`). The model's tool arguments can't answer it. A different id, a decline or a cancel changes nothing, and a client that doesn't support form elicitation, or fails to ask, can't write. **This assumes a trusted client that shows the question to a person:** the server sees only the answer, so a client that answers elicitations by itself defeats it. Keep `ALLOW_WRITES` off unless you trust the client. The client's own tool-permission prompt, if any, comes on top | The entrypoint signs it with the local key after the user's answer |
 | Hub domain pack | The hub's Strands interrupt (extend_the_hub.md §4) | The hub's approval hook signs it. The adapter verifies |
 
-**Untrusted input.** Treat logs, resource names, tags and metric labels returned by tools as data, never as instructions. Tool results are not passed back into system prompts.
+**Untrusted input.** Treat everything a tool returns as data, never as instructions. Tool results are not passed back into system prompts. That includes:
+
+- logs, resource names, tags and metric labels;
+- **thumbnails and the text in them**: a picture can show text addressed to a model;
+- **vision-model output**: a frame description or rubric verdict may repeat or obey that text, so it never proves a picture healthy by itself (extend_the_hub.md §8);
+- **viewer telemetry**: CMCD session and content ids, user agents and URL paths are set by the public.
+
+**Infrastructure policies.** `Principal: "*"` is allowed only in service
+endpoint policies, and those policies must be narrower than the service
+default. Statements for stack-owned resources must add an account or stronger
+condition; service-signed callback paths may remain resource-scoped without a
+principal-account condition.
 
 ## 4. Demo mode and fixtures
 
@@ -135,7 +164,7 @@ def stop_channel(approved_action, media_live, clock) -> ActionResult:
 | `replay_fixture_client.py` | answer AWS calls from fixtures |
 | `load_fixture.py` | read one fixture file (also used for non-AWS sources such as InfluxDB) |
 
-The total budget is about 200 lines. It imports pydantic, boto3 and botocore only, with no LangChain, MCP or AgentCore.
+Keep each module focused on the action in this table. The package imports pydantic, boto3 and botocore only, with no MCP, Strands or AgentCore dependency.
 
 ## 6. Required tests per tool
 

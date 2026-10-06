@@ -66,11 +66,17 @@ uv run scripts/check_prerequisites.py
 
 ### Run Locally
 
-1. Clone the repository and enter it:
+Clone the repository and enter its root:
+
+```bash
+git clone https://github.com/aws-samples/sample-agentic-video-operations.git
+cd sample-agentic-video-operations
+```
+
+1. Create the one root configuration:
 
    ```bash
-   git clone https://github.com/aws-samples/sample-agentic-video-operations.git
-   cd sample-agentic-video-operations
+   cp .env.example .env
    ```
 
 2. Install `just`:
@@ -79,12 +85,8 @@ uv run scripts/check_prerequisites.py
    uv tool install rust-just
    ```
 
-3. Create the root configuration, then add the variables listed in this
-   sample's `.env.example`:
-
-   ```bash
-   cp .env.example .env
-   ```
+3. Uncomment only this sample's labelled section in the root `.env`, then add
+   required live values. Keep safe defaults such as `ALLOW_WRITES=false`.
 
 4. Start the sample:
 

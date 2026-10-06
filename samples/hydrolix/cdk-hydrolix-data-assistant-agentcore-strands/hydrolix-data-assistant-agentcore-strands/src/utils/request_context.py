@@ -1,75 +1,44 @@
 """
-Request Context Singleton
+Request Context
 
-Provides a thread-safe singleton to share request context (prompt_uuid, user_timezone, etc.)
-across the orchestrator and subagents within a single request lifecycle.
+Shares one request's values (prompt_uuid, timezone, tool budget and deadline) between the
+orchestrator and its subagents. It is a ContextVar, not a process-wide object, so two
+requests a runtime serves at once each see their own. Strands runs the subagent tools with
+asyncio.to_thread, which copies the context, so a subagent sees the request that called it.
 """
 
-from threading import Lock
-from typing import Optional
+import time
+from contextvars import ContextVar
+from dataclasses import dataclass
+
+from .limit_tool_calls import ToolCallBudget
+from .resolve_user_timezone import DEFAULT_TIMEZONE
+
+# From the moment a request arrives: secret reads, MCP starts and every subagent run.
+REQUEST_TIMEOUT_SECONDS = 180
 
 
+@dataclass(frozen=True)
 class RequestContext:
-    """Singleton class to hold request-scoped context values."""
-    
-    _instance: Optional["RequestContext"] = None
-    _lock: Lock = Lock()
-    
-    def __new__(cls) -> "RequestContext":
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
-            return
-        self._prompt_uuid: str = ""
-        self._user_timezone: str = "US/Pacific"
-        self._session_id: str = ""
-        self._user_id: str = "guest"
-        self._initialized = True
-    
-    def set(
-        self,
-        prompt_uuid: str,
-        user_timezone: str = "US/Pacific",
-        session_id: str = "",
-        user_id: str = "guest"
-    ) -> None:
-        """Set the request context values."""
-        self._prompt_uuid = prompt_uuid
-        self._user_timezone = user_timezone
-        self._session_id = session_id
-        self._user_id = user_id
-    
-    @property
-    def prompt_uuid(self) -> str:
-        return self._prompt_uuid
-    
-    @property
-    def user_timezone(self) -> str:
-        return self._user_timezone
-    
-    @property
-    def session_id(self) -> str:
-        return self._session_id
-    
-    @property
-    def user_id(self) -> str:
-        return self._user_id
-    
-    def clear(self) -> None:
-        """Clear the context values."""
-        self._prompt_uuid = ""
-        self._user_timezone = "US/Pacific"
-        self._session_id = ""
-        self._user_id = "guest"
+    prompt_uuid: str
+    user_timezone: str
+    tool_budget: ToolCallBudget  # also holds the request's deadline
 
 
-# Global instance accessor
+_CURRENT: ContextVar[RequestContext] = ContextVar("hydrolix_request_context")
+
+
+def set_request_context(prompt_uuid: str, user_timezone: str = DEFAULT_TIMEZONE) -> RequestContext:
+    """Start a request: its own values, a full tool budget, and a deadline from now."""
+    deadline = time.monotonic() + REQUEST_TIMEOUT_SECONDS
+    context = RequestContext(prompt_uuid, user_timezone, ToolCallBudget(deadline))
+    _CURRENT.set(context)
+    return context
+
+
 def get_request_context() -> RequestContext:
-    """Get the singleton RequestContext instance."""
-    return RequestContext()
+    """The current request's context. Outside a request this is an error, not a default."""
+    try:
+        return _CURRENT.get()
+    except LookupError:
+        raise RuntimeError("No request context: subagents run only inside a request") from None

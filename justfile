@@ -26,11 +26,11 @@ run sample *args:
       mediaconnect) uv run --package mediaconnect-mcp-server serve-mediaconnect {{ args }} ;;
       medialive)    uv run --package medialive-mcp-server serve-medialive {{ args }} ;;
       hub)          HUB_LOCAL_MODE=true uv run --package media-ops-hub serve-hub {{ args }} ;;
-      hydrolix)     just _pending hydrolix 5 ;;
+      hydrolix)     just _pending hydrolix ;;
       *)            just _unknown "{{ sample }}" ;;
     esac
 
-# Offline tests: all, or one sample (`just test contracts` for packages/media_ops_contracts)
+# Offline tests: all, one sample, or one shared package (`contracts`, `video-quality`)
 [group('develop')]
 test sample="":
     #!/usr/bin/env bash
@@ -38,6 +38,7 @@ test sample="":
     case "{{ sample }}" in
       "")        uv run pytest ;;
       contracts) uv run pytest packages/media_ops_contracts/tests ;;
+      video-quality) uv run pytest packages/media_ops_video_quality/tests ;;
       cmcd)      uv run pytest samples/cmcd/tests ;;
       mediaconnect) uv run pytest samples/mediaconnect/tests ;;
       medialive) uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack ;;
@@ -67,10 +68,16 @@ eval:
 demo:
     uv run --package media-ops-hub demo-hub
 
-# Start every converted MCP server on fixtures and call one read tool
+# Start every converted MCP server on fixtures, or probe live read paths with `just smoke aws`
 [group('develop')]
-smoke:
-    uv run python scripts/smoke_demo_servers.py
+smoke target="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ target }}" in
+      "")  uv run python scripts/smoke_demo_servers.py ;;
+      aws) uv run python scripts/smoke_aws_servers.py ;;
+      *)   echo "Unknown smoke target '{{ target }}'. Use: aws" >&2; exit 1 ;;
+    esac
 
 # Check README structure, relative links and model-ID consistency
 [group('develop')]
@@ -79,6 +86,12 @@ docs-check:
     uv run python scripts/check_repository_layout.py
     uv run python scripts/check_docs_claims.py
     uv run python scripts/check_model_ids.py
+
+# Remove tool caches, eval output and Python bytecode (keeps .venv, node_modules and .env)
+[group('develop')]
+clean:
+    rm -rf .cache .mypy_cache .ruff_cache .pytest_cache
+    find . -name __pycache__ -type d -prune -not -path './.venv/*' -not -path '*/node_modules/*' -exec rm -rf {} +
 
 # Deploy a sample with its existing deploy material (scripts/confirm_aws_action.py asks first; --yes skips)
 [group('deploy')]
@@ -118,7 +131,7 @@ destroy sample *flags:
 
 [private]
 _pending sample step="":
-    @echo "'{{ sample }}' is not converted yet{{ if step != '' { ' (step ' + step + ')' } else { '' } }}; see its README." >&2; exit 1
+    @echo "'{{ sample }}' uses separate runtime and web-app processes; follow samples/{{ sample }}/README.md." >&2; exit 1
 
 [private]
 _unknown sample:

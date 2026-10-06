@@ -24,26 +24,34 @@ flowchart LR
     Operator --> Client[MCP-compatible client]
     Client --> Server[MediaConnect MCP server]
     Server -->|demo| Fixtures[Recorded AWS responses]
+    Operator --> Hub[Media Ops hub on AgentCore]
+    Hub --> Pack[MediaConnect domain pack]
     Server --> MC[AWS Elemental MediaConnect]
     Server --> CW[Amazon CloudWatch]
     Server --> BR[Amazon Bedrock]
+    Pack --> MC
+    Pack --> CW
+    Pack --> BR
 
-    Client --> Approval[Human tool permission]
-    Approval --> Confirm[Exact flow ARN confirmation]
+    Server --> Confirm[Elicitation: the client's user types the exact flow ARN]
     Confirm --> Write[Start or stop adapter]
     Write --> Verify[Bounded state verification]
     Verify --> MC
 ```
 
-The stdio entrypoint creates regional clients and registers typed tools.
-Action-named adapters each talk to MediaConnect, CloudWatch, or Bedrock.
-Workflows combine typed adapter results for issue detection, metric tables, and
-thumbnail descriptions.
+The stdio entrypoint and the hub domain pack expose the same typed,
+action-named adapters for MediaConnect, CloudWatch, and Bedrock. Workflows
+combine their results for issue detection, metric tables, and thumbnail
+descriptions.
 
 Read tools are always available. Write tools do not exist unless
-`ALLOW_WRITES=true`; when enabled, the MCP client must obtain human permission,
-the operator must repeat the exact flow ARN, and the adapter verifies the final
-flow state.
+`ALLOW_WRITES=true`. When they do, the server enforces one human step itself:
+before anything changes, it asks the MCP client's user, through MCP elicitation, to
+type the exact flow ARN. The model's tool arguments can't answer that question; a
+different ARN, a decline or a cancel changes nothing, and a client that doesn't
+support form elicitation, or fails to ask, can't write at all. The adapter then verifies
+the final flow state. Your client's own tool-permission prompt, if it has one, comes on
+top. **It assumes a trusted client.** The server can check only that the client returned the exact id, not that a person typed it: a client that answers elicitations by itself (or with a model) defeats this step. Keep `ALLOW_WRITES=false` unless you trust the client to show the question to a person.
 
 ## Prerequisites
 
@@ -91,11 +99,17 @@ aws configure get region
 
 ### Run Locally
 
-1. Clone the repository and enter its root:
+Clone the repository and enter its root:
+
+```bash
+git clone https://github.com/aws-samples/sample-agentic-video-operations.git
+cd sample-agentic-video-operations
+```
+
+1. Create the one root configuration:
 
    ```bash
-   git clone https://github.com/aws-samples/sample-agentic-video-operations.git
-   cd sample-agentic-video-operations
+   cp .env.example .env
    ```
 
 2. Install `just`:
@@ -104,21 +118,7 @@ aws configure get region
    uv tool install rust-just
    ```
 
-3. Create the shared configuration:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Add the required runtime values to the root `.env`. Keep writes disabled:
-
-   ```dotenv
-   AWS_REGION=us-west-2
-   THUMBNAIL_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
-   ALLOW_WRITES=false
-   ```
-
-5. Start the fixture-backed server:
+3. Start the fixture-backed server:
 
    ```bash
    DEMO=1 DEMO_SCENARIO=srt_packet_loss just run mediaconnect
@@ -136,7 +136,7 @@ aws configure get region
    check with `Ctrl+C`; the client configuration in the next step launches the
    same server.
 
-6. Add the live and demo entries from [`mcp.json`](mcp.json) to your MCP
+4. Add the live and demo entries from [`mcp.json`](mcp.json) to your MCP
    client. Replace the repository path with its absolute path:
 
    ```json
@@ -175,7 +175,7 @@ aws configure get region
    }
    ```
 
-7. Restart the MCP client and send this known-good request:
+5. Restart the MCP client and send this known-good request:
 
    ```text
    Inspect source health for the demo MediaConnect flow. Is the source still
@@ -192,18 +192,25 @@ aws configure get region
    The evidence points to upstream SRT packet loss rather than a stopped flow.
    ```
 
+Keep `ALLOW_WRITES=false` for diagnosis. To use `start_flow` and `stop_flow` from your
+MCP client, set it to `true` and a private `APPROVAL_SIGNING_KEY` in `.env`, then restart
+the client. Every write then asks you, through your MCP client, to type the exact flow
+ARN. That needs a client that supports MCP form elicitation (the 2025-06-18
+specification or later) and shows the question to you; with any other client the write
+tools refuse, and say so. Don't enable writes with a client that answers elicitations by
+itself.
+
 ### Deploy to AWS
 
-This MCP server runs locally against existing AWS MediaConnect, CloudWatch, and
-Bedrock APIs. To run MediaConnect in the cloud, deploy it as a domain pack of the
-[hub](../hub/README.md) with `just deploy hub`.
+This sample can run locally over MCP stdio or in AWS as a domain pack of the
+[hub](../hub/README.md).
 
-To use live AWS data today:
-
-1. Set these values in the root `.env`:
+1. Set these values in the root `.env`. Use `MEDIA_DOMAINS=mediaconnect` to
+   deploy only this pack, or keep the default to deploy it with MediaLive:
 
    ```dotenv
    AWS_REGION=us-west-2
+   MEDIA_DOMAINS=mediaconnect
    THUMBNAIL_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
    ALLOW_WRITES=false
    DEMO=false
@@ -218,43 +225,38 @@ To use live AWS data today:
      --query "Flows[].{Name:Name,State:Status,Arn:FlowArn}"
    ```
 
-3. Start the server:
+3. Deploy the hub:
 
    ```bash
-   just run mediaconnect
+   just deploy hub
    ```
 
    Raw command:
 
    ```bash
-   uv run --env-file .env \
-     --package mediaconnect-mcp-server \
-     serve-mediaconnect
+   uv run python scripts/manage_hub_stack.py deploy
    ```
 
-4. Use the `mediaconnect` live entry from the local MCP configuration.
-
 Keep `ALLOW_WRITES=false` for diagnosis. To opt into start/stop tools, set it
-to `true`, configure a private `APPROVAL_SIGNING_KEY`, and restart the server.
-Every write still requires the MCP client's human permission prompt and an
-exact `confirm_resource_id`.
+to `true` before deployment. The hub pauses every write for an operator
+decision and verifies the resulting flow state.
 
 ### Verify the Deployment
 
-There is no deployed runtime to verify yet. Verify the live local connection
-through your MCP client with:
+Ask the deployed hub a known-good question:
 
-```text
-List MediaConnect flows in the configured region and summarize their states.
-For one ACTIVE flow, check source health over the last hour.
+```bash
+uv run python scripts/invoke_hub.py --actor <your-operator-id> \
+  "List MediaConnect flows and check source health for one ACTIVE flow over the last hour"
 ```
 
 Expected result:
 
 ```text
-The assistant calls list_flows, selects a returned ARN, and reports typed
-source connection, loss, recovery, bitrate, and round-trip evidence. With
-ALLOW_WRITES=false, start_flow and stop_flow are not available.
+The hub emits task_started and tool_called events for list_flows and the source
+health tools, then usage_reported and a final_answer with connection, loss,
+recovery, bitrate and round-trip evidence. With ALLOW_WRITES=false, start_flow
+and stop_flow are not available.
 ```
 
 ## Available Tools
@@ -265,6 +267,7 @@ ALLOW_WRITES=false, start_flow and stop_flow are not available.
 | `describe_flow` | Read | Returns state, source, outputs, and AWS errors for one flow |
 | `describe_flow_source_metadata` | Read | Returns transport-stream and NDI source metadata |
 | `describe_flow_thumbnail` | Read | Describes the current source thumbnail with Bedrock |
+| `analyze_flow_visual_quality` | Read | Samples the source thumbnail over a window (10 frames in 30 s; the hub uses 8 in 20 s) and scores it: freeze, black, slate, blur and a blockiness **estimate**, plus one vision-model rubric, checked against the flow's content-quality (frozen and black frames) and source-connection metrics. Without thumbnails or a vision verdict the flow is `UNVERIFIED`, never healthy, with the reason; no `THUMBNAIL_MODEL_ID` reads `not_requested`. `frames` 2–20 and `window_seconds` 1–120. Blocks for the whole window |
 | `get_flow_health_metrics` | Read | Reads flow transport and TR 101 290 metrics |
 | `get_source_health_metrics` | Read | Reads source connection, packet loss, recovery, and merge metrics |
 | `get_output_health_metrics` | Read | Reads output connection, packet, and payload metrics |
@@ -280,24 +283,35 @@ ALLOW_WRITES=false, start_flow and stop_flow are not available.
 
 Stop the MCP process with `Ctrl+C`.
 
-The local server creates no AWS infrastructure, so there is nothing to destroy
-(a hub deployment is removed with `just destroy hub`). Do not delete MediaConnect flows merely
-to clean up this local server; they are pre-existing operator-owned resources.
+The local server creates no AWS infrastructure. Remove the hub deployment with:
+
+```bash
+just destroy hub
+```
+
+Raw command:
+
+```bash
+uv run python scripts/manage_hub_stack.py destroy
+```
+
+Do not delete MediaConnect flows merely to clean up this sample; they are
+pre-existing operator-owned resources.
 
 If you explicitly enabled writes and changed a flow state during testing,
 restore the intended state through another separately approved `start_flow` or
 `stop_flow` call. Remove the local `.env` when it is no longer needed because
 it may contain the approval signing key.
 
-When the AgentCore hub deployment lands, its README must own complete runtime,
-log, image, memory, and role cleanup. Orphaned AWS resources can continue to
-incur cost.
+The hub teardown removes its stack and runtime log groups. The CDK bootstrap
+ECR repository may retain the image; remove it there if unused. Orphaned AWS
+resources can continue to incur cost.
 
 ## Known Limitations
 
 - This is an educational sample, not a production-ready operations service.
-- The MCP server currently runs locally over stdio; an AgentCore hub deployment
-  is approved but not implemented.
+- The MCP server uses stdio locally; cloud operation uses the shared AgentCore
+  hub rather than a dedicated MediaConnect runtime.
 - The sample inspects existing MediaConnect resources and does not provision a
   test flow.
 - IAM, tenant isolation, audit retention, rate limiting, retries, and
@@ -338,8 +352,8 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-Keep adapters importable as plain typed functions so the future in-process
-domain pack can wrap them without importing MCP transport.
+Keep adapters importable as plain typed functions. The in-process domain pack
+and the MCP server both expose them without importing the other's transport.
 
 ## Contributing
 

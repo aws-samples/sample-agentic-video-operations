@@ -6,8 +6,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
-from mediaconnect_mcp.adapters.bedrock.describe_thumbnail import describe_thumbnail
+from media_ops_video_quality.decode_thumbnail import decode_thumbnail
+from media_ops_video_quality.score_with_vision import describe_frame
 from mediaconnect_mcp.adapters.media_connect.read_flow_thumbnail import read_flow_thumbnail
+from mediaconnect_mcp.prompts.describe_thumbnail_prompt import DESCRIBE_THUMBNAIL_PROMPT
 
 
 class FlowThumbnailDescription(BaseModel):
@@ -32,10 +34,11 @@ def describe_flow_thumbnail(
             "Set THUMBNAIL_MODEL_ID in the root .env (see .env.example).",
         )
     thumbnail = read_flow_thumbnail(media_connect, flow_arn)
-    description = describe_thumbnail(bedrock, thumbnail.image_base64, model_id)
+    frame = decode_thumbnail(thumbnail.image_base64)
+    description = describe_frame(bedrock, model_id, frame, DESCRIBE_THUMBNAIL_PROMPT)
     return FlowThumbnailDescription(
         flow_arn=thumbnail.flow_arn,
-        description=description.text,
+        description=description,
         observed_at=thumbnail.observed_at,
         timecode=thumbnail.timecode,
         messages=thumbnail.messages,

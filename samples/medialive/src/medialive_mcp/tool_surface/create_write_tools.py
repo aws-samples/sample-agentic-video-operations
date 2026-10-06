@@ -5,11 +5,13 @@ approval hook injects after the operator approves. The function refuses an appro
 other inputs, then the adapter checks signature and expiry, acts once and verifies.
 """
 
-from datetime import UTC, datetime
+from collections.abc import Callable
+from datetime import datetime
 
 from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import ApprovedAction
 from media_ops_contracts.domain_pack import WriteTool
+from media_ops_contracts.read_utc_now import read_utc_now
 from media_ops_contracts.resolve_approval_signing_key import resolve_approval_signing_key
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from medialive_mcp.adapters.media_live import create_schedule_action as schedule_create
@@ -37,11 +39,16 @@ def require_matching_approval(
         )
 
 
-def create_write_tools(settings: RuntimeSettings, clients: MediaLiveClients) -> list[WriteTool]:
+def create_write_tools(
+    settings: RuntimeSettings,
+    clients: MediaLiveClients,
+    *,
+    clock: Callable[[], datetime] = read_utc_now,
+) -> list[WriteTool]:
     signing_key = resolve_approval_signing_key(settings.approval_signing_key)
 
     def check() -> ApprovalCheck:
-        return ApprovalCheck(signing_key=signing_key, now=datetime.now(UTC))
+        return ApprovalCheck(signing_key=signing_key, now=clock())
 
     def start_channel(channel_id: str, approved_action: ApprovedAction) -> ActionResult:
         """Start a channel (billable), then verify it is RUNNING. Needs operator approval."""

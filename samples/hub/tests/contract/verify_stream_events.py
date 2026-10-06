@@ -1,5 +1,6 @@
 """Run the hub's progressive typed-stream contract with a scripted model."""
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from channel_test_pack import RAW_OUTPUT_MARKER
 from hub_test_setup import build_hub, types
 from scripted_model import GatedModel, call, say
 
-from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER, encode_stream_event
+from media_ops_contracts.stream_event import STREAM_EVENT_ADAPTER
 
 
 def verify_stream_events() -> list[str]:
@@ -26,10 +27,16 @@ def verify_stream_events() -> list[str]:
             model.gate.set()
         events.extend(stream)
 
-    encoded = [encode_stream_event(event) for event in events]
-    validated = [STREAM_EVENT_ADAPTER.validate_json(line).type for line in encoded]
+    payloads = [
+        STREAM_EVENT_ADAPTER.dump_python(
+            STREAM_EVENT_ADAPTER.validate_python(event),
+            mode="json",
+        )
+        for event in events
+    ]
+    validated = [STREAM_EVENT_ADAPTER.validate_python(payload).type for payload in payloads]
     assert validated == ["task_started", "tool_called", "final_answer"]
-    assert RAW_OUTPUT_MARKER not in "".join(encoded)
+    assert RAW_OUTPUT_MARKER not in json.dumps(payloads)
     assert model.opened_by_test
     return validated
 

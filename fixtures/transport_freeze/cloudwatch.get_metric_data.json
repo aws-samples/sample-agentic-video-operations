@@ -1,0 +1,164 @@
+{
+ "sequence": [
+  {
+   "Messages": [],
+   "MetricDataResults": [
+    {
+     "Id": "m0_audiostreammissing",
+     "Label": "AudioStreamMissing",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "Id": "m1_blackframesbreaching",
+     "Label": "BlackFramesBreaching",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "Id": "m2_frozenframesbreaching",
+     "Label": "FrozenFramesBreaching",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      0.0,
+      1.0,
+      1.0
+     ]
+    },
+    {
+     "Id": "m3_silentaudiobreaching",
+     "Label": "SilentAudioBreaching",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "Id": "m4_timecodepresent",
+     "Label": "TimecodePresent",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      300.0,
+      300.0,
+      300.0
+     ]
+    },
+    {
+     "Id": "m5_videostreammissing",
+     "Label": "VideoStreamMissing",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    }
+   ]
+  },
+  {
+   "Messages": [],
+   "MetricDataResults": [
+    {
+     "Id": "m1_sourcebitrate",
+     "Label": "SourceBitRate",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      8000000.0,
+      8000000.0,
+      8000000.0
+     ]
+    },
+    {
+     "Id": "m2_sourceconnected",
+     "Label": "SourceConnected",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      300.0,
+      300.0,
+      300.0
+     ]
+    },
+    {
+     "Id": "m3_sourcedisconnections",
+     "Label": "SourceDisconnections",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "Id": "m6_sourcepacketlosspercent",
+     "Label": "SourcePacketLossPercent",
+     "StatusCode": "Complete",
+     "Timestamps": [
+      "2026-10-06T14:22:00Z",
+      "2026-10-06T14:27:00Z",
+      "2026-10-06T14:32:00Z"
+     ],
+     "Values": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    }
+   ]
+  }
+ ]
+}

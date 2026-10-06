@@ -12,6 +12,10 @@
 **/node_modules
 **/__pycache__
 **/.pytest_cache
+**/.cache
+**/.mypy_cache
+**/.ruff_cache
+**/eval-results.json
 .kiro
 docs/images
 samples/hydrolix

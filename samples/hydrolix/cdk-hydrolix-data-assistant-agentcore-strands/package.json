@@ -1,6 +1,8 @@
 {
   "name": "cdk-hydrolix-data-assistant-agentcore-strands",
   "version": "0.1.0",
+  "private": true,
+  "license": "MIT-0",
   "bin": {
     "cdk-hydrolix-data-assistant-agentcore-strands": "bin/cdk-hydrolix-data-assistant-agentcore-strands.js"
   },

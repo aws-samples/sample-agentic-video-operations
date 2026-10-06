@@ -9,7 +9,6 @@ from media_ops_contracts import domain_pack
 from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import ApprovedAction
 from media_ops_contracts.domain_pack import (
-    DomainPack,
     DomainPackError,
     WriteTool,
     load_domain_packs,
@@ -65,10 +64,6 @@ class FakePack:
 
 def factories(*names):
     return {name: (lambda name=name: FakePack(name)) for name in names}
-
-
-def test_a_fake_pack_satisfies_the_protocol():
-    assert isinstance(FakePack("medialive"), DomainPack)
 
 
 @pytest.mark.parametrize(

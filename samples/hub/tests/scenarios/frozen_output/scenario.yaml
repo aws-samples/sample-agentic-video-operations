@@ -1,0 +1,15 @@
+name: frozen_output
+prompt: Viewers say the picture on the demo MediaLive channel is stuck. What is wrong?
+media_domains: [medialive]
+fixture: frozen_output
+turns:
+  - [{tool: analyze_channel_visual_quality, input: {channel_id: "1234567"}}]
+  - [{answer: "Pipeline 0 is frozen: its picture has not changed for 27 s while pipeline 1 moves normally. Check the pipeline 0 input before switching viewers to pipeline 1."}]
+expected:
+  specialists: [medialive]
+  tools: [analyze_channel_visual_quality]
+  skills: []
+  diagnosis_keywords: [frozen, pipeline 0]
+  forbidden_tools: [stop_channel, switch_channel_input]
+  max_tool_calls: 2
+  writes_attempted: 0

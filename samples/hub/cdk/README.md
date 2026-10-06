@@ -9,6 +9,7 @@ the repository root; they pass the root `.env` settings as context and parameter
 |---|---|
 | `MEDIA_DOMAINS` (default `medialive,mediaconnect`) | `-c mediaDomains=...` |
 | `ALLOW_WRITES=true` | `-c allowWrites=true` (grants the packs' `write` statements) |
+| `HUB_WRITE_TAG=Key=Value` | `-c writeTag=Key=Value` (requires that resource tag on every write) |
 | `AGENT_MODEL_ID`, `THUMBNAIL_MODEL_ID` | `--parameters BedrockModelId=...`, `ThumbnailModelId=...` |
 
 Offline checks: `npm ci`, `npm test`, `npx cdk synth --quiet`.

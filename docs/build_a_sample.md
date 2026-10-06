@@ -17,7 +17,7 @@ The sample key is the argument to every `just` recipe.
 | `cmcd` | Viewer QoE from CMCD data in InfluxDB | `cloudfront-cmcd-kinesis.yaml` (CloudFormation) | `cmcd-mcp-server/` |
 | `mediaconnect` | MediaConnect flow health and control | No own deploy. Runs in the cloud as a domain pack of `hub` | `mediaconnect-mcp-server/` |
 | `medialive` | MediaLive channel health and control | No own deploy. Runs in the cloud as a domain pack of `hub`; its former `cdk/` is now the hub's | `medialive-mcp-server/` |
-| `hub` | One agent that investigates across the selected media domains (extend_the_hub.md) | `samples/hub/cdk/` · `demo-channel.json` | consolidates the earlier multi-runtime sample |
+| `hub` | One agent that investigates across the selected media domains (extend_the_hub.md) | `samples/hub/cdk/` | consolidates the earlier multi-runtime sample |
 | `hydrolix` | CDN analytics with a web UI | Its existing CDK + Amplify | `hydrolix-cdn-insights/` |
 
 Adding a sample means adding a row here, a `samples/<key>/` folder that follows section 2, and its recipes in the `justfile`.
@@ -28,15 +28,20 @@ Adding a sample means adding a row here, a `samples/<key>/` folder that follows 
 samples/<key>/
   pyproject.toml        # uv workspace member; pinned deps; one console script
   README.md             # sections in section 6
-  .env.example          # the sample's variables to add to the root .env (safe placeholders)
   Dockerfile            # only if the sample ships a container
   src/<package>/
     entrypoints/        # transport only: serve_mcp.py, handle_agentcore_invocation.py
     adapters/<system>/  # one external action per file: describe_channel.py, stop_channel.py
-    prompts/            # agents only; one prompt purpose per file
+    domain/             # when needed: typed rules and records; no SDK/framework imports
+    workflows/          # when needed: application actions that coordinate adapters
+    tool_surface/       # domain packs: shared read/write tool factories
+    skills/             # domain packs/agents: one purpose per SKILL.md
+    prompts/            # agents only: one prompt purpose per file
     settings/runtime_settings.py
+    domain_pack.py      # domain packs only; exposes the shared tool surface
   tests/
     unit/               # offline, no AWS credentials, no network
+    pack/               # domain-pack contract and IAM coverage
     scenarios/          # replays fixtures end to end (agents)
   iam_permissions.json  # domain packs only: IAM the hub grants for this pack (extend_the_hub.md §1)
   docs/                 # optional; the sample's own images go in docs/images/
@@ -96,13 +101,25 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 
 | Recipe | Meaning | Native command it wraps |
 |---|---|---|
-| `just doctor` | Check prerequisites, printing a fix command for each failure | `uv run scripts/check_prerequisites.py` |
-| `just docs-check` | README structure (§6) and repository layout (§3) | `uv run python scripts/check_readme_structure.py && uv run python scripts/check_repository_layout.py` |
-| `just run <key>` | Run the sample locally (MCP stdio or local agent server) | `uv run --package <distribution> serve-<key>` |
-| `just test [key]` | Offline unit and scenario tests | `uv run pytest samples/<key>/tests` |
+| `just doctor` | Check prerequisites, printing a fix command for each failure | `uv run python scripts/check_prerequisites.py` |
+| `just smoke` | Start each converted MCP server on fixtures and make one read | `uv run python scripts/smoke_demo_servers.py` |
+| `just smoke aws` | Run one live list and health read per converted MCP sample | `uv run python scripts/smoke_aws_servers.py` |
+| `just docs-check` | README structure, repository layout, documentation claims and model ids | `uv run python scripts/check_readme_structure.py && uv run python scripts/check_repository_layout.py && uv run python scripts/check_docs_claims.py && uv run python scripts/check_model_ids.py` |
+| `just run cmcd\|mediaconnect\|medialive` | Run one MCP stdio server | `uv run --package <distribution> serve-<key>` |
+| `just run hub` | Run the hub server locally | `HUB_LOCAL_MODE=true uv run --package media-ops-hub serve-hub` |
+| `just test` | All offline unit and scenario tests | `uv run pytest` |
+| `just test contracts` | Shared contract tests | `uv run pytest packages/media_ops_contracts/tests` |
+| `just test cmcd` | CMCD tests | `uv run pytest samples/cmcd/tests` |
+| `just test mediaconnect` | MediaConnect tests | `uv run pytest samples/mediaconnect/tests` |
+| `just test medialive` | MediaLive scenario and pack tests | `uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack` |
+| `just test hub` | Hub contract tests | `uv run pytest samples/hub/tests/contract` |
+| `just test hydrolix` | Hydrolix deployment-management tests | `uv run pytest scripts/tests/test_manage_hydrolix_stack.py` |
 | `just lint` | ruff check + format check | `uv run ruff check . && uv run ruff format --check .` |
+| `just typecheck` | Static type check with the repository ratchet | `uv run mypy` |
 | `just eval` | Replay the fixture scenarios and score them | `uv run pytest -m eval` |
-| `just demo` | Hub on fixtures, with no AWS account | `DEMO=1 uv run --package media-ops-hub demo` |
+| `just demo` | Hub on fixtures, with no AWS account | `uv run --package media-ops-hub demo-hub` |
+| `just cmcd-token` | Create or reuse a CMCD bucket-read token | `uv run python scripts/manage_cmcd_stack.py create-read-token` |
+| `just cmcd-token-verify` | Verify that the CMCD token can read but cannot write | `uv run python scripts/verify_influxdb_read_token.py` |
 | `just deploy <key>` | Deploy with the sample's existing material | per sample, see section 1 |
 | `just destroy <key>` | Remove everything `deploy` created | per sample |
 
@@ -135,11 +152,16 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 - `BEDROCK_AGENTCORE_MEMORY_ID` → `MEMORY_ID`.
 - `MEDIALIVE_DEFAULT_CHANNEL_ID` and `MEDIALIVE_TEST_CHANNEL_ID` → `MEDIALIVE_CHANNEL_ID`.
 
-Sample-specific variables keep their current names: `INFLUXDB_URL`, `INFLUXDB_TOKEN`, `INFLUXDB_ORG`, `VERIFY_SSL` (default now `true`), `HYDROLIX_*`, `MEDIACONNECT_FLOW_ARN`, `MEDIALIVE_CHANNEL_ID`.
+Sample runtime variables keep their current names: `INFLUXDB_URL`, `INFLUXDB_TOKEN`, `INFLUXDB_ORG`, `VERIFY_SSL` (default now `true`), `HYDROLIX_*`, and `MEDIALIVE_CHANNEL_ID`. The live AWS smoke script also requires `MEDIACONNECT_FLOW_ARN` to choose the flow it probes; MediaConnect tools themselves require `flow_arn` in each applicable call.
 
-**One root `.env`.** `just` loads only the root `.env` (`set dotenv-load`). A sample's `.env.example` lists the variables to add there, and the sample never reads its own `.env`. Settings read the process environment only.
+**One root `.env`.** `just` loads only the root `.env` (`set dotenv-load`).
+The root `.env.example` is the only configuration template: shared defaults
+are active, and each sample's optional settings live in a clearly labelled,
+commented section. A sample README tells the user which section to uncomment.
+Samples MUST NOT add their own `.env` or `.env.example`; settings read the
+process environment only.
 
-`.env` is never committed. `.env.example` is always committed.
+The root `.env` is never committed. The root `.env.example` is always committed.
 
 ### Model selection (every deployment)
 
@@ -177,7 +199,9 @@ Follow guidelines §16 exactly. Use its skeleton and section order:
 
 **What this contract adds to §16:**
 - **Setup and Run:** the primary path is `just` recipes, with the raw native command shown under each.
-  - *Run Locally* comes first. Use `DEMO=1` where fixtures exist, so it needs no AWS account.
+  - *Run Locally* comes first, and its first numbered step is exactly
+    `cp .env.example .env` from the repository root.
+  - Use `DEMO=1` where fixtures exist, so it needs no AWS account.
   - *Deploy to AWS* uses `just deploy <key>`.
   - Include one known-good request and its expected result.
 - **MCP samples:** also include the `mcp.json` snippet, plus a Tools table with three columns: tool, read/write, what it does.

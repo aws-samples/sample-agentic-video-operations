@@ -45,7 +45,8 @@ flowchart LR
   - content quality.
 - **Writes are authorized and verified in code**, not by the prompt:
   - Write tools exist only with `ALLOW_WRITES=true`.
-  - Each one needs `confirm_resource_id` equal to the channel id, and your MCP client's tool-approval prompt.
+  - Before any change, the server asks your MCP client's user, through MCP elicitation, to type the exact channel id, and shows the action and every parameter. The model's arguments can't answer: another id, a decline or a cancel changes nothing, and a client without elicitation support can't write at all.
+  - **It assumes a trusted client.** The server can check only that the client returned the exact id, not that a person typed it: a client that answers elicitations by itself (or with a model) defeats this step. Keep `ALLOW_WRITES=false` unless you trust the client to show the question to a person.
   - The adapter rejects an unsigned or expired approval, sends the change once, then polls until the channel reaches the target state.
 - **The hub registers writes only when enabled,** and uses its signed approval
   flow before calling the same verified write adapters.
@@ -72,12 +73,13 @@ just doctor
 
 ### Run Locally
 
-1. From the repository root, create the configuration and add this sample's variables
-   from `samples/medialive/.env.example`:
+1. From the repository root, create the one shared configuration:
 
    ```bash
    cp .env.example .env
    ```
+
+   For live defaults, uncomment the MediaLive section in that root file.
 
 2. Replay the recorded incident (no AWS account needed):
 
@@ -187,6 +189,7 @@ Expected result: `task_started` and `tool_called` (`list_channels`) events, then
 | `read_metrics_table` | Read | Key metrics as rows for charts |
 | `describe_schedule` | Read | Scheduled input switches, SCTE-35, pauses |
 | `describe_channel_thumbnail` | Read | Vision-model description of a pipeline's thumbnail |
+| `analyze_channel_visual_quality` | Read | Samples thumbnails over a window (10 frames in 30 s; the hub uses 8 in 20 s) and scores each pipeline: freeze, black, slate, blur and a blockiness **estimate**, plus one vision-model rubric, then checks each finding against the encoder's MQCS freeze and black, fill-frame and input-loss signals. Every pipeline is scored and the channel status is the worst one's; `pipeline_id` only narrows the list returned. Without thumbnails or a vision verdict a pipeline is `UNVERIFIED`, never healthy; no `THUMBNAIL_MODEL_ID` reads `not_requested`. `frames` 2–20 and `window_seconds` 1–120. Blocks for the whole window |
 | `start_channel`, `stop_channel` | Write | Change channel state, then verify RUNNING / IDLE |
 | `switch_channel_input` | Write | Switch now, then verify every pipeline's active input |
 | `create_input_switch_action`, `create_scte35_action`, `create_pause_action`, `create_unpause_action` | Write | Add a timed action, then verify it is scheduled |
@@ -224,8 +227,9 @@ just lint
 ```
 
 Add a tool as one adapter file under `src/medialive_mcp/adapters/<system>/`, returning a
-typed result. Register it in `entrypoints/serve_mcp.py`. Write tools take an
-`ApprovedAction` and verify the result (see `docs/write_safe_tools.md`).
+typed result. Expose a read tool in `tool_surface/create_read_tools.py`, which serves both
+MCP and the hub domain pack. Write tools take an `ApprovedAction` and verify the result
+(see `docs/write_safe_tools.md`).
 
 ## Contributing
 

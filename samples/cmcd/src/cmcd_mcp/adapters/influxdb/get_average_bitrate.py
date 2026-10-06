@@ -32,6 +32,7 @@ def get_average_bitrate(
     filters = [
         'r["_measurement"] == "cloudfront_logs"',
         'r["_field"] == "cmcd_br"',
+        'r["_value"] > 0',
     ]
     if cmcd_sid:
         filters.append(f'r["cmcd_sid"] == {quote_flux_string(cmcd_sid)}')
@@ -47,7 +48,7 @@ def get_average_bitrate(
     )
     records = query_influxdb(flux)
     value = records[0].get("_value") if records else None
-    if not isinstance(value, int | float):
+    if not isinstance(value, int | float) or value <= 0:
         raise ToolFailure(
             FailureKind.RESOURCE_NOT_FOUND,
             "No bitrate data matched the requested criteria.",

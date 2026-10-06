@@ -6,6 +6,11 @@
  * - DynamoDB tables for query results
  * - IAM roles and permissions for AgentCore
  * - Hydrolix credentials in Secrets Manager
+ *
+ * Inbound auth (RB9): with -c jwtDiscoveryUrl=... -c jwtClientIds=... the runtime accepts
+ * only Cognito access tokens from that user pool and app clients, forwards only the
+ * Authorization header, and the agent's actor is the token's `sub`. Without them the
+ * runtime is IAM-authorized and the agent runs with memory off (no verified identity).
  */
 
 import * as cdk from "aws-cdk-lib";
@@ -16,6 +21,33 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ecr_assets from 'aws-cdk-lib/aws-ecr-assets';
 import * as path from 'path';
 import { aws_bedrockagentcore as bedrockagentcore } from 'aws-cdk-lib';
+
+// AgentCore verifies this header's token and forwards it; the agent reads `sub` from it.
+export const AUTHORIZATION_HEADER = 'Authorization';
+const DISCOVERY_SUFFIX = '/.well-known/openid-configuration';
+
+export interface JwtSettings {
+  discoveryUrl: string;
+  issuer: string;
+  clientIds: string[];
+}
+
+/** Both or neither: a discovery URL without client ids would admit any client of the pool. */
+export function readJwtSettings(discoveryUrl?: string, clientIds?: string): JwtSettings | undefined {
+  const url = `${discoveryUrl ?? ''}`.trim();
+  const clients = `${clientIds ?? ''}`.split(',').map((c) => c.trim()).filter(Boolean);
+  if (!url && clients.length === 0) {
+    return undefined;
+  }
+  if (!/^https:\/\/\S+\/\.well-known\/openid-configuration$/.test(url) || clients.length === 0) {
+    throw new Error(
+      'JWT auth needs both -c jwtDiscoveryUrl=https://<issuer>/.well-known/openid-configuration '
+      + 'and -c jwtClientIds=<app client id>[,<app client id>].',
+    );
+  }
+  // OpenID Connect discovery: the issuer is the discovery URL without the well-known suffix.
+  return { discoveryUrl: url, issuer: url.slice(0, -DISCOVERY_SUFFIX.length), clientIds: clients };
+}
 
 export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -37,7 +69,20 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
       type: "String",
       description: "The Hydrolix table name (format: database.table)",
       default: "database.table",
+      // The only table the model may read, so the same rule as the runtime's HYDROLIX_TABLE
+      // setting: database.table, neither part starting with "_", and never a metadata
+      // database (system, information_schema, in any case). Character classes, not an
+      // inline (?i), so CloudFormation's Java regex and the jest test's JavaScript agree.
+      allowedPattern:
+        "^(?!(?:[Ss][Yy][Ss][Tt][Ee][Mm]|[Ii][Nn][Ff][Oo][Rr][Mm][Aa][Tt][Ii][Oo][Nn]_[Ss][Cc][Hh][Ee][Mm][Aa])\\.)" +
+        "[A-Za-z0-9-][A-Za-z0-9_-]*\\.[A-Za-z0-9-][A-Za-z0-9_-]*$",
+      constraintDescription:
+        "database.table: letters, digits, _ or -, neither part starting with _, not in system or information_schema",
     });
+    const jwt = readJwtSettings(
+      this.node.tryGetContext('jwtDiscoveryUrl'),
+      this.node.tryGetContext('jwtClientIds'),
+    );
     const uniqueSuffix = cdk.Names.uniqueId(this).slice(-8).toLowerCase().replace(/[^a-z0-9]/g, '');
     const runtimeName = `HydrolixRuntime_${uniqueSuffix}`;
 
@@ -191,7 +236,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
               ],
               resources: [
                 'arn:aws:bedrock:*::foundation-model/*',
-                'arn:aws:bedrock:*:*:inference-profile/*'
+                `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*`
               ]
             }),
           ]
@@ -282,16 +327,23 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
       },
       roleArn: agentCoreRole.roleArn,
       description: 'Container runtime for Hydrolix CDN analytics data analyst assistant',
+      // JWT mode forwards only the verified token; IAM mode forwards no caller header at all.
+      requestHeaderConfiguration: jwt ? { requestHeaderAllowlist: [AUTHORIZATION_HEADER] } : undefined,
+      authorizerConfiguration: jwt
+        ? { customJwtAuthorizer: { discoveryUrl: jwt.discoveryUrl, allowedClients: jwt.clientIds } }
+        : undefined,
       environmentVariables: {
         MEMORY_ID: agentMemory.attrMemoryId,
         AGENT_MODEL_ID: bedrockModelId.valueAsString,
         HYDROLIX_SECRET_ARN: hydrolixSecret.secretArn,
         HYDROLIX_TABLE: hydrolixTable.valueAsString,
         QUESTION_ANSWERS_TABLE: rawQueryResults.tableName,
+        ...(jwt
+          ? { HYDROLIX_JWT_ISSUER: jwt.issuer, HYDROLIX_JWT_ALLOWED_CLIENTS: jwt.clientIds.join(',') }
+          : {}),
       },
     });
     
-    agentRuntime.addDependency(agentMemory);
     agentRuntime.node.addDependency(memoryPolicy);
 
     // ================================
@@ -305,8 +357,6 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
       description: 'Endpoint for invoking the Hydrolix CDN analytics data analyst assistant',
     });
 
-    // Endpoint depends on runtime being created first
-    runtimeEndpoint.addDependency(agentRuntime);
 
     // ================================
     // CLOUDFORMATION OUTPUTS
@@ -340,6 +390,11 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     new cdk.CfnOutput(this, "HydrolixSecretArn", {
       value: hydrolixSecret.secretArn,
       description: "The ARN of the Hydrolix credentials secret (update values in Secrets Manager)",
+    });
+
+    new cdk.CfnOutput(this, "InboundAuth", {
+      value: jwt ? "jwt" : "iam",
+      description: "jwt: Cognito access tokens, actor = token sub; iam: IAM callers, memory off",
     });
 
     new cdk.CfnOutput(this, "HydrolixTableName", {

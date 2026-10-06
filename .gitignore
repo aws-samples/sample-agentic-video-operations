@@ -1,24 +1,40 @@
-.kiro/*
-
-# Agent IDE — instructions tracked intentionally; user-specific artifacts ignored
-.claude/plans/
-.claude/steering/
+# Every generated file is listed here explicitly; nothing relies on a tool's own
+# .gitignore. `just clean` removes them, and CI fails if a gate run leaves the
+# working tree dirty.
 
 # Secrets
 .env
 *.env.local
-!.env.example
-!**/.env.example
+!/.env.example
+
+# Tool caches and run output (ruff, mypy, pytest and the eval write under .cache/)
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Python
+.venv/
 __pycache__/
-*.pyc
-.pytest_cache/
-eval-results.json
+*.py[cod]
+*.egg-info/
+build/
+dist/
 
-# Migration reference — superseded by samples/medialive/
-mcp-eml-reference/
-**/cdk.out/
+# Node and CDK
 node_modules/
-# Builder process notes stay local (docs/ holds the public design docs).
+**/cdk.out/
+
+# Operating system and editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Agent IDE: instructions are tracked; user-specific artifacts stay local
+.kiro/*
+.claude/plans/
+.claude/steering/
 .claude/contracts/collaboration-contract.md

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
+from .is_missing_cmcd_metric import is_missing_cmcd_metric
 from .quote_flux_string import quote_flux_string
 
 _TIME_RANGE = re.compile(r"^-\d+[smhdw]$")
@@ -55,16 +56,30 @@ def get_session_details(
         )
 
     metrics: dict[str, list[MetricPoint]] = {}
+    timestamps: list[datetime] = []
     for record in records:
         field = record.get("_field")
         timestamp = record.get("_time")
-        if isinstance(field, str) and timestamp is not None:
-            metrics.setdefault(field, []).append(
-                MetricPoint(at=timestamp, value=record.get("_value"))
-            )
+        value = record.get("_value")
+        if (
+            isinstance(field, str)
+            and timestamp is not None
+            and not is_missing_cmcd_metric(field, value)
+        ):
+            point = MetricPoint(at=timestamp, value=value)
+            metrics.setdefault(field, []).append(point)
+            timestamps.append(point.at)
+    if not timestamps:
+        raise ToolFailure(
+            FailureKind.RESOURCE_NOT_FOUND,
+            f"No usable CMCD metrics were found for session {cmcd_sid}.",
+            "List the available session ids and retry.",
+        )
+    for points in metrics.values():
+        points.sort(key=lambda point: point.at)
     return SessionDetails(
         session_id=cmcd_sid,
-        start_time=records[0]["_time"],
-        end_time=records[-1]["_time"],
+        start_time=min(timestamps),
+        end_time=max(timestamps),
         metrics=metrics,
     )

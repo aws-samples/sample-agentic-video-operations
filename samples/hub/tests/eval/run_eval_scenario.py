@@ -3,10 +3,11 @@
 import functools
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Protocol
 from unittest.mock import patch
 
 from scenario_models import ActionVerification, EvalResult, EvalScenario
@@ -23,7 +24,13 @@ from mediaconnect_mcp.domain_pack import create_domain_pack as create_mediaconne
 from medialive_mcp.domain_pack import create_domain_pack as create_medialive_pack
 
 ROOT = Path(__file__).resolve().parents[4]
-FACTORIES: dict[str, Callable[[], DomainPack]] = {
+
+
+class PackFactory(Protocol):
+    def __call__(self, *, clock: Callable[[], datetime]) -> DomainPack: ...
+
+
+FACTORIES: dict[str, PackFactory] = {
     "medialive": create_medialive_pack,
     "mediaconnect": create_mediaconnect_pack,
 }
@@ -50,11 +57,11 @@ class ObservedPack:
         return self.source.name
 
     @property
-    def skill_paths(self) -> list[Path]:
+    def skill_paths(self) -> Sequence[Path]:
         return self.source.skill_paths
 
     @property
-    def fixture_scenarios(self) -> list[str]:
+    def fixture_scenarios(self) -> Sequence[str]:
         return self.source.fixture_scenarios
 
     def read_tools(self) -> list[ReadTool]:
@@ -96,7 +103,11 @@ def run_scenario(scenario: EvalScenario, sessions: Path) -> EvalResult:
         "MEMORY_ID": "",
     }
     with patch.dict(os.environ, environment):
-        packs = [observe_writes(FACTORIES[name](), write_count) for name in scenario.media_domains]
+        clock = EvalClock()
+        packs = [
+            observe_writes(FACTORIES[name](clock=clock), write_count)
+            for name in scenario.media_domains
+        ]
         scripted = ScriptedEvalModel(scenario.turns)
         settings = HubSettings(
             media_domains=",".join(scenario.media_domains),
@@ -105,7 +116,6 @@ def run_scenario(scenario: EvalScenario, sessions: Path) -> EvalResult:
             session_dir=sessions / scenario.name,
         )
         hub = create_hub(settings, packs=packs, model=None if model_name == "bedrock" else scripted)
-        clock = EvalClock()
         events = list(
             stream_hub_turn(
                 hub,

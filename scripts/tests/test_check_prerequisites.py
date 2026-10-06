@@ -52,6 +52,40 @@ def test_aws_doctor_makes_deployment_checks_strict(monkeypatch, capsys):
     assert "FAIL cdk bootstrap" in capsys.readouterr().out
 
 
+def test_aws_doctor_runs_live_read_probe_after_prerequisites_pass(monkeypatch, capsys):
+    monkeypatch.setattr(
+        doctor,
+        "collect_results",
+        lambda: [
+            result(doctor.CheckGroup.OFFLINE, "python", True),
+            result(doctor.CheckGroup.AWS, "credentials", True),
+        ],
+    )
+    monkeypatch.setattr(
+        doctor,
+        "check_aws_read_paths",
+        lambda: result(doctor.CheckGroup.AWS, "sample read paths", True),
+    )
+
+    assert doctor.main(["aws"]) == 0
+    assert "ok   sample read paths" in capsys.readouterr().out
+
+
+def test_aws_doctor_skips_live_probe_when_a_prerequisite_fails(monkeypatch):
+    monkeypatch.setattr(
+        doctor,
+        "collect_results",
+        lambda: [result(doctor.CheckGroup.AWS, "credentials", False)],
+    )
+    monkeypatch.setattr(
+        doctor,
+        "check_aws_read_paths",
+        lambda: (_ for _ in ()).throw(AssertionError("probe must not run")),
+    )
+
+    assert doctor.main(["aws"]) == 1
+
+
 def test_aws_group_checks_npx_instead_of_a_global_cdk(monkeypatch):
     monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
     monkeypatch.delenv("AWS_REGION", raising=False)
@@ -106,3 +140,23 @@ def test_command_timeout_becomes_a_failed_check_result(monkeypatch):
 
     assert result.returncode == 124
     assert result.stderr == "timed out"
+
+
+def test_aws_doctor_names_each_failed_probe_line(monkeypatch):
+    import subprocess
+
+    import check_prerequisites
+
+    stdout = (
+        "ok   cmcd           a -> b\nFAIL medialive      list_channels   ToolCallFailed: denied\n"
+    )
+    monkeypatch.setattr(
+        check_prerequisites,
+        "run_command",
+        lambda *command, timeout=30: subprocess.CompletedProcess(command, 1, stdout, ""),
+    )
+
+    result = check_prerequisites.check_aws_read_paths()
+
+    assert not result.passed
+    assert result.detail == "FAIL medialive list_channels ToolCallFailed: denied"

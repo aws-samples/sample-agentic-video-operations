@@ -1,11 +1,10 @@
 {
   "name": "amplify-hydrolix-data-assistant-agentcore-strands",
   "version": "0.1.1",
-  "author": "Uriel Ramirez https://github.com/aurbac",
   "private": true,
+  "license": "MIT-0",
   "dependencies": {
     "@aws-amplify/ui-react": "^6.12.0",
-    "@aws-sdk/client-bedrock-agentcore": "^3.847.0",
     "@aws-sdk/client-bedrock-runtime": "^3.846.0",
     "@aws-sdk/client-dynamodb": "^3.846.0",
     "@aws-sdk/credential-providers": "^3.846.0",
@@ -26,6 +25,7 @@
     "react-markdown": "^10.1.0",
     "react-scripts": "^5.0.1",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "uuid": "^11.1.0",
     "web-vitals": "^2.1.4"
@@ -40,7 +40,12 @@
     "extends": [
       "react-app",
       "react-app/jest"
-    ]
+    ],
+    "rules": {
+      "no-eval": "error",
+      "no-new-func": "error",
+      "no-implied-eval": "error"
+    }
   },
   "browserslist": {
     "production": [
