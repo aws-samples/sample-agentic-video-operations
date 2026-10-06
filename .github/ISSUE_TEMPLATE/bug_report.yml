@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in a sample is broken or behaves unexpectedly
+labels: [bug]
+body:
+  - type: dropdown
+    id: sample
+    attributes:
+      label: Sample
+      options:
+        - medialive
+        - mediaconnect
+        - cmcd
+        - hub
+        - hydrolix
+        - repository / tooling
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: Include the exact command or tool call and the error output.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: How are you running the sample?
+      placeholder: |
+        - Local (fixtures / demo mode) or deployed (AgentCore)?
+        - OS and Python version
+        - AWS region
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed all credentials, account IDs, and resource IDs from this report
+          required: true

@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a new capability or improvement for a sample
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: sample
+    attributes:
+      label: Sample
+      options:
+        - medialive
+        - mediaconnect
+        - cmcd
+        - hub
+        - hydrolix
+        - new sample
+        - repository / tooling
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >
+        Describe the operational scenario, not just the feature. The most valuable
+        proposals add domain logic (diagnosis, correlation, measurement) rather than
+        wrapping more APIs.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Sketch how it could work. Optional, but it speeds up triage.
+    validations:
+      required: false

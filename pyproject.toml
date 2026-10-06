@@ -56,7 +56,14 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM"]
+select = ["E", "F", "I", "B", "UP", "SIM", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may assert and may construct fake credentials.
+"**/tests/**" = ["S101", "S105", "S106"]
+# Operator scripts run fixed-argv subprocesses (aws/cdk/git) and open the
+# InfluxDB tunnel URL from validated settings; nothing user-supplied.
+"scripts/*.py" = ["S310", "S603", "S607"]
 
 [tool.pytest.ini_options]
 # Add each converted sample's tests/ directory here.
@@ -71,6 +78,9 @@ testpaths = [
 ]
 pythonpath = ["scripts"]
 addopts = "--strict-markers --tb=short -m 'not eval and not integration'"
+filterwarnings = [
+  "ignore::DeprecationWarning:botocore.*",
+]
 markers = [
   "eval: fixture-replay scenario evaluations (run with `just eval`)",
   "integration: needs a deployed stack and AWS credentials",
