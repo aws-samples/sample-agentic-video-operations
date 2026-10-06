@@ -22,8 +22,10 @@ class TimestampAnalysis(BaseModel):
 
 def analyze_timestamps(probe: SegmentProbe) -> TimestampAnalysis:
     analysis = TimestampAnalysis(url=probe.url)
-    if any(packet.dts_time is None for packet in probe.packets):
-        analysis.clock = "pts"  # no decode clock recorded; fall back to presentation
+    if all(packet.dts_time is None for packet in probe.packets):
+        analysis.clock = "pts"  # no decode clock recorded at all; fall back to presentation
+    # Packets without the chosen clock are skipped below, so a stray DTS-less
+    # packet cannot flip the whole segment onto the B-frame-unsafe PTS clock.
     previous: float | None = None
     for packet in probe.packets:
         value = packet.dts_time if analysis.clock == "dts" else packet.pts_time

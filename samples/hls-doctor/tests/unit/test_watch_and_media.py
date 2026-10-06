@@ -86,6 +86,14 @@ def test_bframe_reordering_is_not_a_regression() -> None:
     assert detect_media_defects([bframe_probe("u")]) == []
 
 
+def test_a_stray_dts_less_packet_does_not_flip_to_the_pts_clock() -> None:
+    mixed = bframe_probe("u")
+    mixed.packets[1].dts_time = None  # one packet without DTS mid-segment
+    analysis = analyze_timestamps(mixed)
+    assert analysis.clock == "dts" and analysis.regressions == []
+    assert detect_media_defects([mixed]) == []
+
+
 def test_a_dts_regression_is_an_error_even_with_bframes() -> None:
     broken = bframe_probe("u")
     broken.packets[3].dts_time = 0.01
