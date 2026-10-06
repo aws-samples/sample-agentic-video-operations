@@ -11,6 +11,7 @@
 **/__pycache__
 **/.pytest_cache
 **/.cache
+**/.hub-sessions
 **/.mypy_cache
 **/.ruff_cache
 **/eval-results.json

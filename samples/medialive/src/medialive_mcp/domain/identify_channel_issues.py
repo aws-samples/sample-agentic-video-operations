@@ -10,6 +10,8 @@
   add up to seconds lost. MQCS portions are scores where 100 means no problem.
 - A metric with no datapoints is not emitted, which is unknown, never healthy. A category
   none of whose rated metrics emitted is NOT_EMITTED and has no score.
+- Region-wide metrics (DroppedFrames, SvqTime: no ChannelId dimension) are every channel in
+  the Region combined. They are reported in `region_wide` as context and never scored.
 """
 
 from collections.abc import Callable
@@ -18,7 +20,7 @@ from enum import IntEnum, StrEnum
 
 from pydantic import BaseModel
 
-from medialive_mcp.domain.metric_catalog import CATEGORY_METRICS
+from medialive_mcp.domain.metric_catalog import CATEGORY_METRICS, REGION_WIDE_METRICS
 from medialive_mcp.domain.metric_series import MetricSeries
 
 PERIOD_SECONDS = 300
@@ -67,7 +69,6 @@ class Rule:
 
 RULES = (
     Rule("channel_health", "ActiveAlerts", lambda v: v > 0, "> 0", 30),
-    Rule("channel_health", "DroppedFrames", lambda v: v > 0, "> 0", 20),
     Rule("channel_health", "PipelinesLocked", lambda v: v < 1, "< 1", 10,
          applies=lambda context: context.uses_pipeline_locking),
     Rule("input_health", "InputLossSeconds", lambda v: v > 0, "> 0", 30),
@@ -79,6 +80,9 @@ RULES = (
     Rule("content_quality", "MqcsBlackFrameDetected", lambda v: v < 100, "below 100", 25),
     Rule("content_quality", "MqcsFreezeFrameDetected", lambda v: v < 100, "below 100", 25),
     Rule("content_quality", "MqcsContinuityCounterErrors", lambda v: v < 100, "below 100", 15),
+    Rule("content_quality", "MqcsFillFrameInsertion", lambda v: v < 100, "below 100", 15),
+    Rule("content_quality", "MqcsSvq", lambda v: v < 100, "below 100", 20),
+    Rule("content_quality", "MqcsVideoFrameDrops", lambda v: v < 100, "below 100", 25),
 )  # fmt: skip
 
 
@@ -96,6 +100,16 @@ class CategoryHealth(BaseModel):
     status: Status
 
 
+class RegionWideReading(BaseModel):
+    """A region-wide metric shown next to the channel's health, not part of it."""
+
+    metric: str
+    pipeline: str
+    region: str
+    worst: float
+    description: str
+
+
 class ChannelHealthReport(BaseModel):
     channel_id: str
     overall_score: int | None
@@ -103,12 +117,15 @@ class ChannelHealthReport(BaseModel):
     categories: dict[str, CategoryHealth]
     issues: list[ChannelIssue]
     not_emitted: list[str]  # metrics queried that returned no datapoints at all
+    region_wide: list[RegionWideReading] = []  # context only: never scored
 
 
 def identify_channel_issues(
     channel_id: str, series: list[MetricSeries], context: ChannelContext | None = None
 ) -> ChannelHealthReport:
     context = context or ChannelContext()
+    region_wide = [measured for measured in series if measured.metric in REGION_WIDE_METRICS]
+    series = [measured for measured in series if measured.metric not in REGION_WIDE_METRICS]
     found = [
         (rule, measured, rate_severity(rule, measured))
         for rule in RULES
@@ -143,7 +160,10 @@ def identify_channel_issues(
         status=status,
         categories=categories,
         issues=issues,
-        not_emitted=sorted({measured.metric for measured in series} - emitted),
+        not_emitted=sorted(
+            {measured.metric for measured in [*series, *region_wide] if not measured.emitted}
+        ),
+        region_wide=[describe_region_wide(measured) for measured in region_wide if measured.values],
     )
 
 
@@ -176,14 +196,26 @@ def rate_category(category: str, found: list, emitted: set[str]) -> CategoryHeal
     )
 
 
+def describe_region_wide(measured: MetricSeries) -> RegionWideReading:
+    region = measured.dimensions.get("Region", "this Region")
+    worst = max(measured.values)
+    return RegionWideReading(
+        metric=measured.metric,
+        pipeline=measured.pipeline,
+        region=region,
+        worst=worst,
+        description=(
+            f"{measured.metric} worst {worst:g} on pipeline {measured.pipeline}: all channels in "
+            f"{region} combined, context only and not scored against this channel"
+        ),
+    )
+
+
 def describe_issue(rule: Rule, measured: MetricSeries) -> str:
     where = f"on pipeline {measured.pipeline}"
     labels = {"OutputGroupName": "output group", "AudioDescriptionName": "audio"}
     for name, value in measured.dimensions.items():
-        if name == "Region":
-            where += f" (region-wide metric: all channels in {value} combined, not only this one)"
-        else:
-            where += f", {labels.get(name, name)} {value}"
+        where += f", {labels.get(name, name)} {value}"
     now = "still failing in the latest period" if rule.fails(measured.values[-1]) else "recovered"
     if rule.metric == "InputLossSeconds" and measured.total is not None:
         share = f"{loss_ratio(measured):.0%} of the window"

@@ -4,6 +4,8 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
+from botocore.exceptions import ClientError
+
 from media_ops_contracts.load_fixture import load_fixture
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
@@ -13,7 +15,9 @@ class ReplayFixtureClient:
 
     A fixture is one response, or {"sequence": [r1, r2, ...]} consumed in order with the
     last response repeating, so a describe call can return the state before and after a write.
-    Every call is recorded in `calls` so tests can assert what would have reached AWS.
+    A response of the form {"error": {"Code": ..., "Message": ...}} is a recorded AWS error:
+    it raises the botocore ClientError AWS would have raised, so adapters classify it the same
+    way. Every call is recorded in `calls` so tests can assert what would have reached AWS.
     """
 
     def __init__(self, service: str, *, scenario: str, fixtures_dir: Path) -> None:
@@ -35,7 +39,7 @@ class ReplayFixtureClient:
         self.calls.append((operation, kwargs))
         recorded = load_fixture(self.fixtures_dir, self.scenario, f"{self.service}.{operation}")
         if not (isinstance(recorded, dict) and "sequence" in recorded):
-            return recorded
+            return self._replay(operation, recorded)
         sequence = recorded["sequence"]
         if not isinstance(sequence, list) or not sequence:
             raise ToolFailure(
@@ -46,7 +50,22 @@ class ReplayFixtureClient:
             )
         position = self._positions.get(operation, 0)
         self._positions[operation] = position + 1
-        return sequence[min(position, len(sequence) - 1)]
+        return self._replay(operation, sequence[min(position, len(sequence) - 1)])
+
+    def _replay(self, operation: str, response: Any) -> Any:
+        """Return a recorded response, or raise the ClientError a recorded error stands for."""
+        if not (isinstance(response, dict) and set(response) == {"error"}):
+            return response
+        error = response["error"]
+        if not (isinstance(error, dict) and isinstance(error.get("Code"), str) and error["Code"]):
+            raise ToolFailure(
+                FailureKind.INVALID_REQUEST,
+                f"Fixture {self.service}.{operation} in scenario {self.scenario} has an error "
+                "without a Code",
+                'Record errors as {"error": {"Code": "<AWS error code>", "Message": "..."}}.',
+            )
+        body = {"Error": {"Code": error["Code"], "Message": str(error.get("Message", ""))}}
+        raise ClientError(body, "".join(part.title() for part in operation.split("_")))
 
 
 class _ReplayPaginator:

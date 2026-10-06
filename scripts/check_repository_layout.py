@@ -35,10 +35,11 @@ RETIRED_PATHS = frozenset(
     }
 )
 RETIRED_PATH_PREFIXES = (
-    "samples/hub/coordinator/",
-    "samples/hub/eml/",
-    "samples/hub/emx/",
-    "samples/hub/shared/",
+    "samples/hub/",  # renamed to samples/agentic-iops-streaming/ (REN1)
+    "samples/agentic-iops-streaming/coordinator/",
+    "samples/agentic-iops-streaming/eml/",
+    "samples/agentic-iops-streaming/emx/",
+    "samples/agentic-iops-streaming/shared/",
     "samples/medialive/cdk/",
     "samples/medialive/src/medialive_mcp/code_interpreter/",
     "samples/medialive/src/medialive_mcp/strands_agent/",

@@ -136,16 +136,16 @@ cd sample-agentic-video-operations
 ### Deploy to AWS
 
 This sample has no standalone deployment. It runs in AWS as a domain pack of the
-`hub` sample:
+`agentic-iops-streaming` sample:
 
 ```bash
-just deploy hub
+just deploy agentic-iops-streaming
 ```
 
 Raw command:
 
 ```bash
-uv run python scripts/manage_hub_stack.py deploy
+uv run python scripts/manage_agentic_iops_streaming_stack.py deploy
 ```
 
 > [!WARNING]
@@ -154,10 +154,10 @@ uv run python scripts/manage_hub_stack.py deploy
 
 ### Verify the Deployment
 
-Invoke the deployed hub with a known-good request:
+Invoke the deployed agent with a known-good request:
 
 ```bash
-uv run python scripts/invoke_hub.py \
+uv run python scripts/invoke_agentic_iops_streaming.py \
   --actor example-operator \
   "List all MediaConnect flows"
 ```
@@ -165,7 +165,7 @@ uv run python scripts/invoke_hub.py \
 Expected result:
 
 ```text
-The hub calls the MediaConnect domain pack and returns the available flows with
+The agent calls the MediaConnect domain pack and returns the available flows with
 their names and current states.
 ```
 
@@ -185,13 +185,13 @@ Stop the local MCP process with `Ctrl+C`.
 Destroy the AWS deployment:
 
 ```bash
-just destroy hub
+just destroy agentic-iops-streaming
 ```
 
 Raw command:
 
 ```bash
-uv run python scripts/manage_hub_stack.py destroy
+uv run python scripts/manage_agentic_iops_streaming_stack.py destroy
 ```
 
 Teardown checklist:

@@ -8,7 +8,7 @@ import re
 import subprocess
 
 MISSING_ERROR_CODE = re.compile(
-    r"An error occurred \((ResourceNotFoundException|NoSuchBucket|NotFound|404)\)"
+    r"An error occurred \((ResourceNotFoundException|ParameterNotFound|NoSuchBucket|NotFound|404)\)"
 )
 MISSING_STACK = re.compile(r"Stack with id \S+ does not exist")
 

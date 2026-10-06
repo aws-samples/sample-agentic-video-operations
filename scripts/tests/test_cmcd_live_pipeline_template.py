@@ -134,6 +134,13 @@ def test_token_provisioner_bounds_retries_and_always_uses_a_stable_identity():
     assert 'secret_dict.pop("writeToken", None)' in provisioner
 
 
+def test_template_outputs_the_configured_influxdb_bucket_name():
+    outputs = template_text().split("Outputs:", 1)[1]
+
+    assert "InfluxDBBucketName:" in outputs
+    assert "Value: !Ref TableName" in outputs
+
+
 def test_token_custom_resource_keeps_an_s3_response_path_until_delete_finishes():
     template = template_text()
     endpoint = template.split("  S3GatewayEndpoint:", 1)[1].split(

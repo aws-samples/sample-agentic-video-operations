@@ -12,6 +12,143 @@ the top.
 Work merged after the latest release candidate. It moves into a candidate
 section when the next candidate is cut.
 
+### Added
+- **Workflow discovery contract (F3):** `docs/extend_agentic_iops_streaming.md` §8 defines the
+  coordinator's four workflow tools (discover, save, list, get), their records, the
+  signal-map calls and fixture shapes, the versioned workflow store, and the tag-scoped
+  IAM. `save_workflow` is a §4 write and returns an `ActionResult`. The tools are built
+  against it. `ReplayFixtureClient` replays a recorded AWS error,
+  `{"error": {"Code": ..., "Message": ...}}`, as the `ClientError` AWS would raise.
+
+## [media-ops-samples-2026-10-06] — release candidate, update 4 (live-deploy fixes and hardening)
+
+Branch: `release-candidate/media-ops-samples-2026-10-06`. Fixes the hub deploy race found by
+the first live deploy, adds a single pre-build deploy confirmation, and narrows model and
+metric scope across the samples. It also renames the coordinator sample to
+`agentic-iops-streaming`.
+
+### Changed
+- **The hub sample is now agentic-iops-streaming (REN1):** the folder
+  (`samples/agentic-iops-streaming`), package (`agentic_iops_streaming`), distribution,
+  console scripts (`serve-agentic-iops-streaming`, `demo-agentic-iops-streaming`), recipes
+  (`just run|test|deploy|destroy agentic-iops-streaming`), deploy and invoke scripts, design
+  doc (`docs/extend_agentic_iops_streaming.md`) and CDK stack (`AgenticIopsStreamingStack`)
+  are renamed, and every `HUB_*` setting is now `AGENTIC_IOPS_*`. The old names are not
+  read: `just doctor` warns about any still set, and says so plainly for `HUB_WRITE_TAG`,
+  without which writes are no longer tag-scoped. **Deployed stacks:** the new stack is a
+  new deployment; delete the old one yourself with
+  `aws cloudformation delete-stack --stack-name MediaOpsHubStack` (see the sample README).
+  Its AgentCore Memory, and the sessions in it, go with it.
+- **Documentation claim gate:** validates documented `just` routes and
+  forwarded script arguments, Python script subcommands and flags, uv package
+  scripts, dotenv settings, MCP tools in tables/skills/expected results,
+  repository paths/templates, Markdown anchors, and CloudFormation output and
+  parameter names. Planning language is refused in published docs and
+  justfile messages.
+- **Deploys confirm once, before anything is built (T59):** `just deploy hub` asked twice,
+  the repository's prompt and then CDK's IAM approval, which without a terminal aborted
+  after the image build and push. The hub and Hydrolix deploys now check the CDK bootstrap
+  (the CDKToolkit stack, a Qualifier matching the app's, and
+  `/cdk-bootstrap/<qualifier>/version` at 6 or later, or the command to run), print
+  `cdk diff --security-only` from templates (only CDK's own result for the stack backs
+  the approval: a failed diff, no output, or only a warning stops the deploy; "no
+  security-related changes" shows as none), ask once, and deploy with
+  `--require-approval never`; the plan says when `--yes` gave that approval. Without a
+  terminal and without `--yes`, every deploy and destroy (CMCD included) stops at its
+  first prompt instead.
+
+### Fixed
+- **Model ids are checked before a deploy starts (T72):** a bad `AGENT_MODEL_ID` failed at
+  CloudFormation's parameter check, after `npm ci`, the security diff and the image build.
+  `just deploy hub` and `just deploy hydrolix` now refuse it (and the hub's
+  `THUMBNAIL_MODEL_ID`) first, with the rule both CDK stacks read from
+  `scripts/model_id_rule.json`, so the three can't drift.
+- **Raw script commands read the root `.env` (T61):** the READMEs show each recipe's
+  `uv run python scripts/...` command, but only `just` loaded the root `.env`, so
+  `scripts/invoke_hub.py` reported `AWS_REGION` missing while it was set there. Every
+  script a doc runs directly now loads the root `.env` at entry (the environment still
+  wins, as with `just`), and a missing setting names the file that was read. A test
+  derives the scripts from the docs, so a new one can't skip it.
+- **Hub session files under `.cache/` (T65):** without `MEMORY_ID` the hub wrote its
+  per-actor session files to `.hub-sessions`, which was neither git-ignored nor kept out of
+  image build contexts. The default is now `.cache/hub-sessions`; `.hub-sessions` is
+  git-ignored, excluded from every build context and the hub image asset, and refused by
+  the build-context check. A `SESSION_DIR` inside the repository but outside `.cache/` is
+  refused at startup. Move or delete an existing `.hub-sessions` folder by hand.
+
+- **The hub runtime waits for its role's policy (RB14):** a live `just deploy hub` failed
+  with "Access denied while validating ECR URI" and rolled back. The runtime referenced
+  only its role, so CloudFormation created it in the same second as the role's
+  DefaultPolicy, which holds the ECR pull. HubRuntime now depends on that policy, and so
+  does the Hydrolix runtime, which had the same latent race. A new CI gate,
+  `scripts/check_runtime_dependencies.py`, fails any synth (default, allowWrites, JWT)
+  where an AgentCore runtime can be created before a policy attached to its role,
+  including a role imported with `Role.fromRoleArn(..., {mutable: true})`, whose grants
+  are matched by role name.
+  `just destroy hub` shows the stack's status and clears a `ROLLBACK_COMPLETE` stack.
+- **Start and stop skip a channel already there (T62):** `start_channel` and
+  `stop_channel` set `idempotentHint` but always called MediaLive, so starting a RUNNING
+  channel or stopping an IDLE one still reached AWS. They now return a verified no-op
+  without the call, as `start_flow` and `stop_flow` already did; tests pin all four.
+- **MediaLive retries wait instead of repeating writes (T69):** starting a channel already
+  `STARTING` and stopping one already `STOPPING` now poll for the target state without
+  sending a conflicting second call. Immediate input-switch retries also skip the write
+  when every pipeline is already on the target or the same named immediate switch is
+  pending; a reused action name for another operation is refused before mutation.
+- **Region-wide MediaLive metrics no longer score a channel (T64):** `DroppedFrames` and
+  `SvqTime` are published per pipeline and Region only, so they combine every channel in
+  the Region, but the channel health check scored `DroppedFrames` against the one
+  channel (penalty 20). They are now reported as `region_wide` context and never change a
+  channel's issues, score or status. The MQCS and region-wide dimension sets were checked
+  against the MediaLive user guide, which `metric_catalog.py` now cites; they matched.
+- **Complete MediaLive MQCS coverage (T70):** content-quality checks now query and score
+  `MqcsFillFrameInsertion`, `MqcsSvq`, and `MqcsVideoFrameDrops` with the documented
+  ChannelId/Pipeline dimensions and Minimum statistic. Each emits an issue only when its
+  MQCS portion falls below the documented healthy value of 100.
+
+- **Safer doctor output:** successful AWS credential checks show only the last
+  four account digits, and a stopped Docker daemon points to Docker Desktop,
+  Colima, or another Docker Engine service.
+- **CMCD custom table names:** every Flux query, token check, and generated
+  local setting uses the deployed stack's `InfluxDBBucketName` output instead
+  of assuming the template default.
+
+### Security
+- **Hydrolix Bedrock invoke is scoped to the configured model (T71):** the runtime role
+  could invoke every foundation model, every inference profile, and every Bedrock resource
+  in the account and region. It now names only `AGENT_MODEL_ID`: the profile here plus the
+  foundation model behind it in any region, or a bare model alone. The template derives
+  the model from the one `BedrockModelId` parameter, whose pattern admits only model and
+  profile ids, and whose default `just deploy hydrolix` sets from `AGENT_MODEL_ID` through
+  `-c agentModelId` for the security diff and the deploy alike (`--no-previous-parameters`,
+  so an update never keeps an older model). The unused second model grant (the memory has no
+  strategies) is gone.
+- **Hub Bedrock invoke is scoped to the configured models (T60):** the hub runtime role
+  could invoke every foundation model and inference profile, and both packs'
+  `iam_permissions.json` granted the same. The role now names only `AGENT_MODEL_ID`, and
+  packs get only `THUMBNAIL_MODEL_ID` through the new `{vision_model}` placeholder: each
+  as its inference profile in this account and region plus the foundation model behind it
+  in any region, as cross-Region inference requires. The hub stack takes the models as CDK
+  context (`-c agentModelId`, `-c thumbnailModelId`) instead of the `BedrockModelId` and
+  `ThumbnailModelId` parameters, so the security diff shown before approval names the same
+  models as the deploy; it derives each foundation model from the id, and an id that
+  could widen the grant fails synth.
+- **Hydrolix query records are per user (T41):** the web app read the results table by a
+  client-chosen `prompt_uuid` with a role every signed-in user shares, so any user could
+  read any other's SQL. The runtime now streams each request's own query records back at
+  the end of its response, the web app reads no table (its DynamoDB packages are gone), and
+  the runtime role can only `PutItem`. Records are written after the query ran, with its
+  status, under the verified `sub` and a millisecond-plus-unique sort key, so two in one
+  second no longer overwrite each other. Text is capped, with explicit `truncated` and
+  `omitted_characters` metadata, and a `prompt_uuid` that isn't a UUID is replaced, so an
+  item always fits; a failed write is logged by class. The query records are the stream's
+  last record on every path, failures and the deadline included, so the web app keeps the
+  queries that ran. Nothing is written in IAM mode. **Upgrading deletes
+  nothing:** the new per-user table is separate, and the earlier `prompt_uuid` table stays
+  in the stack unchanged with a `Retain` policy and no grants, so a later release can drop it
+  without deleting it. `just destroy hydrolix` leaves it too; the README's Teardown section
+  gives its name and the `aws dynamodb delete-table` command to remove it by hand.
+
 ## [media-ops-samples-2026-10-06] — release candidate, update 3 (audit fixes and visual quality)
 
 Branch: `release-candidate/media-ops-samples-2026-10-06`. Adds the picture-quality

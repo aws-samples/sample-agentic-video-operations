@@ -19,6 +19,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ecr_assets from 'aws-cdk-lib/aws-ecr-assets';
+import * as fs from 'fs';
 import * as path from 'path';
 import { aws_bedrockagentcore as bedrockagentcore } from 'aws-cdk-lib';
 
@@ -58,11 +59,23 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     // ================================
 
     // Bedrock model ID for the agent
+    // The default comes from `-c agentModelId`, which the deploy script passes to the security
+    // diff and the deploy alike (cdk diff takes no --parameters), so the two synthesize the same
+    // template. The deploy then uses this default (--no-previous-parameters).
+    const agentModelId = `${this.node.tryGetContext("agentModelId") ?? ""}`.trim() || "us.anthropic.claude-sonnet-4-6";
+    if (!new RegExp(MODEL_ID_PATTERN).test(agentModelId)) {
+      throw new Error(`agentModelId must be a Bedrock model or cross-Region profile id; got '${agentModelId}'.`);
+    }
     const bedrockModelId = new cdk.CfnParameter(this, "BedrockModelId", {
       type: "String",
-      description: "The Bedrock model ID for the agent",
-      default: "us.anthropic.claude-sonnet-4-6",
+      description: "The Bedrock model or cross-Region inference-profile id for the agent (AGENT_MODEL_ID)",
+      default: agentModelId,
+      // An optional profile prefix, then exactly provider.model: no '*', '/' or ARN can widen
+      // the grant, and the base model below can be read off the id's dot-separated parts.
+      allowedPattern: MODEL_ID_PATTERN,
+      constraintDescription: "a Bedrock model id (provider.model) or a cross-Region profile id (us.provider.model)",
     });
+    const bedrockModelGrant = invokeModelResources(this, bedrockModelId);
 
     // Hydrolix table name for time-series data queries
     const hydrolixTable = new cdk.CfnParameter(this, "HydrolixTable", {
@@ -90,8 +103,30 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     // DYNAMODB TABLES
     // ================================
 
-    // DynamoDB table containing SQL query results from the agent
-    const rawQueryResults = new dynamodb.Table(this, "RawQueryResults", {
+    // The SQL each request ran, per verified user (T41): the partition key is the caller's
+    // token `sub`, the sort key a millisecond timestamp with a unique suffix. Only the
+    // runtime writes it; the web app gets its own records in the response stream.
+    const rawQueryResults = new dynamodb.Table(this, "QueryRecords", {
+      partitionKey: {
+        name: "actor_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "recorded_at",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+
+    // The results table of earlier versions, keyed by the client's prompt_uuid. Upgrading
+    // must not delete it: CloudFormation applies the *deployed* template's DeletionPolicy to
+    // a resource a template drops, and that was Delete. So this release keeps it exactly as
+    // it was (same construct id and properties, so no replacement) with RETAIN and no
+    // grants; a later release can drop it and CloudFormation will leave it in the account.
+    // Delete it by hand (README, Teardown) once its history isn't needed.
+    const retiredQueryResults = new dynamodb.Table(this, "RawQueryResults", {
       partitionKey: {
         name: "id",
         type: dynamodb.AttributeType.STRING,
@@ -102,7 +137,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       encryption: dynamodb.TableEncryption.AWS_MANAGED,
-      removalPolicy: cdk.RemovalPolicy.DESTROY
+      removalPolicy: cdk.RemovalPolicy.RETAIN
     });
 
     // ================================
@@ -196,10 +231,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
                 'bedrock:InvokeModel',
                 'bedrock:InvokeModelWithResponseStream'
               ],
-              resources: [
-                'arn:aws:bedrock:*::foundation-model/*',
-                `arn:aws:bedrock:${this.region}:${this.account}:*`
-              ]
+              resources: bedrockModelGrant,
             }),
             // Permissions for Secrets Manager
             new iam.PolicyStatement({
@@ -212,31 +244,13 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
                 hydrolixSecret.secretArn
               ]
             }),
-            // Permissions for DynamoDB
+            // The runtime only records queries; nothing reads the table back through it.
             new iam.PolicyStatement({
               sid: 'DynamoDBTableAccess',
               effect: iam.Effect.ALLOW,
-              actions: [
-                'dynamodb:Query',
-                'dynamodb:Scan',
-                'dynamodb:GetItem',
-                'dynamodb:PutItem',
-                'dynamodb:UpdateItem'
-              ],
+              actions: ['dynamodb:PutItem'],
               resources: [
                 rawQueryResults.tableArn
-              ]
-            }),
-            new iam.PolicyStatement({
-              sid: 'BedrockModelInvocationMemory',
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'bedrock:InvokeModel',
-                'bedrock:InvokeModelWithResponseStream'
-              ],
-              resources: [
-                'arn:aws:bedrock:*::foundation-model/*',
-                `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*`
               ]
             }),
           ]
@@ -345,6 +359,9 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     });
     
     agentRuntime.node.addDependency(memoryPolicy);
+    // grantPull puts the ECR pull in the role's DefaultPolicy, which AgentCore needs when it
+    // creates the runtime; RoleArn alone doesn't order the two (RB14).
+    agentRuntime.node.addDependency(agentCoreRole.node.findChild('DefaultPolicy'));
 
     // ================================
     // BEDROCK AGENTCORE RUNTIME ENDPOINT
@@ -362,9 +379,14 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     // CLOUDFORMATION OUTPUTS
     // ================================
 
+    new cdk.CfnOutput(this, "RetiredQueryResultsTableName", {
+      value: retiredQueryResults.tableName,
+      description: "The results table of earlier versions, retained (not deleted) by upgrade and destroy",
+    });
+
     new cdk.CfnOutput(this, "QuestionAnswersTableName", {
       value: rawQueryResults.tableName,
-      description: "The name of the DynamoDB table for storing query results",
+      description: "The DynamoDB table of executed SQL, per verified user (written by the runtime only)",
     });
 
     new cdk.CfnOutput(this, "QuestionAnswersTableArn", {
@@ -403,4 +425,37 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     });
 
   }
+}
+
+// The repository's one model-id rule (T72), shared with the deploy scripts and the agentic-iops-streaming stack.
+// A profile id is <prefix>.<provider>.<model> and routes to the foundation model
+// <provider>.<model> in each Region of its geography; a bare id can't start with a prefix.
+// The pattern's lookahead works the same in CloudFormation's Java regex and in JavaScript.
+const MODEL_ID_RULE = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "..", "..", "..", "scripts", "model_id_rule.json"), "utf8"),
+) as { profile_prefixes: string[]; pattern: string };
+const PROFILE_PREFIXES = MODEL_ID_RULE.profile_prefixes;
+export const MODEL_ID_PATTERN = MODEL_ID_RULE.pattern;
+
+/**
+ * What invoking the configured model needs (T71, agentic-iops-streaming's T60 rule): for a profile id, the
+ * profile in this account and Region plus the foundation model behind it in any Region; for
+ * a bare model id, that foundation model only. The base model is derived here, in the
+ * template, from the one parameter, so it can never name another model.
+ */
+export function invokeModelResources(stack: cdk.Stack, modelId: cdk.CfnParameter): string[] {
+  const parts = cdk.Fn.split(".", modelId.valueAsString);
+  const isProfile = new cdk.CfnCondition(stack, "BedrockModelIdIsInferenceProfile", {
+    expression: cdk.Fn.conditionOr(
+      ...PROFILE_PREFIXES.map((prefix) => cdk.Fn.conditionEquals(cdk.Fn.select(0, parts), prefix)),
+    ),
+  });
+  const profile = `arn:aws:bedrock:${stack.region}:${stack.account}:inference-profile/${modelId.valueAsString}`;
+  // Only evaluated for a profile id, which the pattern guarantees has three parts.
+  const baseOfProfile = cdk.Fn.join(".", [cdk.Fn.select(1, parts), cdk.Fn.select(2, parts)]);
+  return cdk.Token.asList(cdk.Fn.conditionIf(
+    isProfile.logicalId,
+    [profile, `arn:aws:bedrock:*::foundation-model/${baseOfProfile}`],
+    [`arn:aws:bedrock:*::foundation-model/${modelId.valueAsString}`],
+  ));
 }

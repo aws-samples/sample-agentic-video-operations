@@ -25,6 +25,7 @@ def get_average_bitrate(
     cmcd_sid: str | None = None,
     cmcd_cid: str | None = None,
     *,
+    bucket: str,
     query_influxdb: Callable[[str], list[dict[str, Any]]],
 ) -> AverageBitrate:
     """Return mean CMCD bitrate, optionally filtered by session or content."""
@@ -40,7 +41,7 @@ def get_average_bitrate(
         filters.append(f'r["cmcd_cid"] == {quote_flux_string(cmcd_cid)}')
     predicate = " and ".join(filters)
     flux = (
-        'from(bucket: "cmcd-metrics")\n'
+        f"from(bucket: {quote_flux_string(bucket)})\n"
         f"  |> range(start: {time_range})\n"
         f"  |> filter(fn: (r) => {predicate})\n"
         "  |> group()\n"

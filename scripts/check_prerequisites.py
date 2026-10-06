@@ -11,9 +11,12 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+
+from read_root_env import load_root_env
 
 MINIMUM_NODE_MAJOR = 20
 # The probe bounds itself at 180 s (smoke_aws_servers.TIMEOUT_SECONDS); allow it to report.
@@ -78,7 +81,7 @@ def check_docker() -> CheckResult:
         "docker daemon",
         running,
         "running" if running else "not running",
-        "Start Docker Desktop, or start the Docker Engine service",
+        "Start Docker Desktop, run `colima start`, or start another Docker Engine daemon/service",
     )
 
 
@@ -123,12 +126,35 @@ def check_session_manager_plugin() -> CheckResult:
     )
 
 
+# REN1 renamed every HUB_* setting to AGENTIC_IOPS_*. An old name is ignored without a
+# word, so the doctor names each one; HUB_WRITE_TAG matters most (`just doctor aws` fails).
+OLD_SETTING_PREFIX = "HUB_"
+NEW_SETTING_PREFIX = "AGENTIC_IOPS_"
+
+
+def check_renamed_settings(environ: Mapping[str, str] = os.environ) -> CheckResult:
+    """Settings still set under their old HUB_* names, from the root .env or the shell."""
+    stale = sorted(name for name in environ if name.startswith(OLD_SETTING_PREFIX))
+    if not stale:
+        return CheckResult(CheckGroup.AWS, "renamed settings", True, "no HUB_* settings")
+    detail = f"{', '.join(stale)} set but ignored: renamed to {NEW_SETTING_PREFIX}*"
+    if "HUB_WRITE_TAG" in stale:
+        detail += "; until renamed, writes are no longer tag-scoped"
+    renames = ", ".join(
+        f"{name} -> {NEW_SETTING_PREFIX}{name.removeprefix(OLD_SETTING_PREFIX)}" for name in stale
+    )
+    return CheckResult(
+        CheckGroup.AWS, "renamed settings", False, detail, f"rename in .env: {renames}"
+    )
+
+
 def check_aws_credentials() -> CheckResult:
     result = run_command(
         "aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"
     )
     passed = result.returncode == 0
-    detail = f"account {result.stdout.strip()}" if passed else "no valid credentials"
+    account_id = result.stdout.strip()
+    detail = f"account ending {account_id[-4:]}" if passed else "no valid credentials"
     return CheckResult(
         CheckGroup.AWS,
         "aws credentials",
@@ -242,6 +268,7 @@ def collect_aws_results() -> list[CheckResult]:
     )
     region = check_region()
     results = [
+        check_renamed_settings(),
         aws_cli,
         check_session_manager_plugin(),
         check_docker(),
@@ -324,4 +351,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    load_root_env(os.environ)
     raise SystemExit(main(sys.argv[1:]))

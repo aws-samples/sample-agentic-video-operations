@@ -34,6 +34,8 @@ from destroy_cmcd_stack import (
     failure_detail,
     is_missing_resource,
 )
+from read_root_env import load_root_env
+from write_root_env_values import write_root_env_values
 
 TEMPLATE = "samples/cmcd/cloudfront-cmcd-kinesis.yaml"
 DEPLOY_ACTION = "deploy (billable: CloudFront, Kinesis, InfluxDB, VPC endpoints, EC2)"
@@ -182,6 +184,7 @@ def deploy_stack(
     influxdb_instance_type: str = DEFAULT_INFLUXDB_INSTANCE_TYPE,
     bastion_instance_type: str = DEFAULT_BASTION_INSTANCE_TYPE,
     clock: Clock = time.monotonic,
+    interactive: bool = True,
 ) -> int:
     account = read_account_id(runner)
     if account is None:
@@ -198,7 +201,7 @@ def deploy_stack(
             "private AWS path": "2-AZ Secrets Manager endpoint; no NAT gateway",
         },
     )
-    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask):
+    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask, interactive=interactive):
         return 1
     origin = environ.get("CMCD_ORIGIN_DOMAIN") or "example.com"
     bucket = environ.get("CMCD_S3_BUCKET_NAME") or f"cmcd-content-{account}"
@@ -226,7 +229,25 @@ def deploy_stack(
     if result.returncode != 0:
         return result.returncode
     print("smoke write/read: passed")
-    return show_next_steps(runner)
+    return 0
+
+
+def write_influxdb_bucket_to_env(
+    runner: Runner,
+    env_path: Path,
+    env_example_path: Path,
+) -> int:
+    """Persist the deployed CMCD bucket so local queries use the same table."""
+    bucket = read_stack_output(runner, "InfluxDBBucketName")
+    if bucket is None:
+        print(f"Stack {STACK} has no InfluxDBBucketName output in {REGION}.")
+        return 1
+    write_root_env_values(
+        env_path,
+        env_example_path,
+        {"INFLUXDB_BUCKET": bucket},
+    )
+    return 0
 
 
 def show_next_steps(runner: Runner) -> int:
@@ -269,6 +290,7 @@ def main(
     env_path: Path = Path(".env"),
     env_example_path: Path = Path(".env.example"),
     clock: Clock = time.monotonic,
+    interactive: bool | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -287,8 +309,9 @@ def main(
         help="EC2 class for the SSM port-forwarding bastion (default: t3.nano)",
     )
     arguments = parser.parse_args(argv)
+    terminal = sys.stdin.isatty() if interactive is None else interactive
     if arguments.command == "deploy":
-        return deploy_stack(
+        status = deploy_stack(
             runner,
             assume_yes=arguments.yes,
             environ=os.environ,
@@ -296,9 +319,14 @@ def main(
             influxdb_instance_type=arguments.influxdb_instance_type,
             bastion_instance_type=arguments.bastion_instance_type,
             clock=clock,
+            interactive=terminal,
         )
+        if status != 0:
+            return status
+        status = write_influxdb_bucket_to_env(runner, env_path, env_example_path)
+        return status if status != 0 else show_next_steps(runner)
     if arguments.command == "destroy":
-        return destroy_cmcd_stack(runner, assume_yes=arguments.yes, ask=ask)
+        return destroy_cmcd_stack(runner, assume_yes=arguments.yes, ask=ask, interactive=terminal)
     if arguments.command == "create-read-token":
         return create_cmcd_read_token(
             CreateReadTokenRequest(
@@ -319,4 +347,5 @@ def main(
 
 
 if __name__ == "__main__":
+    load_root_env(os.environ)
     sys.exit(main(sys.argv[1:]))

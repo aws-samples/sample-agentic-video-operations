@@ -1757,6 +1757,12 @@ Outputs:
     Value: cmcd-org
     Export:
       Name: !Sub '${AWS::StackName}-InfluxDBOrg'
+
+  InfluxDBBucketName:
+    Description: InfluxDB bucket that stores processed CMCD records
+    Value: !Ref TableName
+    Export:
+      Name: !Sub '${AWS::StackName}-InfluxDBBucketName'
   
   BastionHostInstanceId:
     Description: Instance ID of the Bastion Host

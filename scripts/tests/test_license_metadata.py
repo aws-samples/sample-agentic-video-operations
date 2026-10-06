@@ -9,17 +9,17 @@ PYTHON_MANIFESTS = (
     "packages/media_ops_contracts/pyproject.toml",
     "packages/media_ops_video_quality/pyproject.toml",
     "samples/cmcd/pyproject.toml",
-    "samples/hub/pyproject.toml",
+    "samples/agentic-iops-streaming/pyproject.toml",
     "samples/mediaconnect/pyproject.toml",
     "samples/medialive/pyproject.toml",
 )
 JAVASCRIPT_MANIFESTS = (
-    "samples/hub/cdk/package.json",
+    "samples/agentic-iops-streaming/cdk/package.json",
     "samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/package.json",
     "samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/package.json",
 )
 CDK_LOCKFILES = (
-    "samples/hub/cdk/package-lock.json",
+    "samples/agentic-iops-streaming/cdk/package-lock.json",
     "samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/package-lock.json",
 )
 

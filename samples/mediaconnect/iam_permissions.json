@@ -12,10 +12,7 @@
     {"actions": ["cloudwatch:GetMetricData"], "resources": ["*"]},
     {
       "actions": ["bedrock:InvokeModel"],
-      "resources": [
-        "arn:aws:bedrock:*::foundation-model/*",
-        "arn:aws:bedrock:{region}:{account}:inference-profile/*"
-      ]
+      "resources": ["{vision_model}"]
     }
   ],
   "write": [

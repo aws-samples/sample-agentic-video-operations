@@ -16,7 +16,10 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from check_cdk_deploy_plan import approval_line, check_cdk_bootstrap, show_security_diff
 from confirm_aws_action import NO_CREDENTIALS_FIX, ConfirmationPrompt, ask_to_continue
+from model_id_rule import find_invalid_model_ids
+from read_root_env import describe_root_env, load_root_env
 
 STACK = "CdkHydrolixDataAssistantAgentcoreStrandsStack"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +41,7 @@ MISSING_ERROR = re.compile(r"An error occurred \((NotFoundException|ResourceNotF
 class StackResources:
     status: str
     secret_arn: str | None
+    retired_table: str | None = None  # the pre-T41 results table, retained by design
 
 
 @dataclass(frozen=True)
@@ -103,7 +107,11 @@ def read_stack_resources(runner: Runner, region: str) -> StackResources | None:
         raise RuntimeError(f"Could not read stack {STACK}: {failure_detail(result)}")
     stack = json.loads(result.stdout)["Stacks"][0]
     outputs = {item["OutputKey"]: item["OutputValue"] for item in stack.get("Outputs", [])}
-    return StackResources(stack["StackStatus"], outputs.get("HydrolixSecretArn"))
+    return StackResources(
+        stack["StackStatus"],
+        outputs.get("HydrolixSecretArn"),
+        outputs.get("RetiredQueryResultsTableName"),
+    )
 
 
 def read_amplify_app(runner: Runner, region: str, app_id: str) -> AmplifyApp | None:
@@ -138,7 +146,11 @@ def read_required_settings(environ: Mapping[str, str]) -> dict[str, str] | None:
     missing = [name for name, value in values.items() if not value]
     if missing:
         print(f"Missing required setting(s): {', '.join(missing)}")
-        print("Add them to the root .env, then re-run the command.")
+        print(f"They are not set in the environment or in {describe_root_env()}.")
+        print("Add them there, then re-run the command.")
+        return None
+    if invalid := find_invalid_model_ids(values, ("AGENT_MODEL_ID",)):
+        print("\n".join(invalid))
         return None
     for name in ("HYDROLIX_JWT_DISCOVERY_URL", "HYDROLIX_JWT_CLIENT_IDS"):
         values[name] = environ.get(name, "").strip()
@@ -195,6 +207,18 @@ def install_cdk_dependencies(runner: Runner) -> int:
     return result.returncode
 
 
+def cdk_context(settings: Mapping[str, str]) -> list[str]:
+    """The -c options both the security diff and the deploy synthesize with. The model is
+    context: it sets BedrockModelId's default, so both synthesize the same template (T71)."""
+    context = ["-c", f"agentModelId={settings['AGENT_MODEL_ID']}"]
+    if settings.get("HYDROLIX_JWT_DISCOVERY_URL"):
+        context += [
+            "-c", f"jwtDiscoveryUrl={settings['HYDROLIX_JWT_DISCOVERY_URL']}",
+            "-c", f"jwtClientIds={settings['HYDROLIX_JWT_CLIENT_IDS']}",
+        ]  # fmt: skip
+    return context
+
+
 def run_cdk(
     runner: Runner,
     action: str,
@@ -207,18 +231,14 @@ def run_cdk(
         arguments.extend(
             [
                 "--parameters",
-                f"BedrockModelId={settings['AGENT_MODEL_ID']}",
-                "--parameters",
                 f"HydrolixTable={settings['HYDROLIX_TABLE']}",
+                # BedrockModelId takes the default the context set, not the stack's last value.
+                "--no-previous-parameters",
                 "--require-approval",
-                "never" if assume_yes else "broadening",
+                "never",  # approved by the repository's one confirmation, with the diff
             ]
         )
-        if settings.get("HYDROLIX_JWT_DISCOVERY_URL"):
-            arguments += [
-                "-c", f"jwtDiscoveryUrl={settings['HYDROLIX_JWT_DISCOVERY_URL']}",
-                "-c", f"jwtClientIds={settings['HYDROLIX_JWT_CLIENT_IDS']}",
-            ]  # fmt: skip
+        arguments += cdk_context(settings)
     else:
         arguments.append("--force")
     return runner(arguments, CDK_DIRECTORY, False).returncode
@@ -230,7 +250,10 @@ def deploy_stack(
     assume_yes: bool,
     environ: Mapping[str, str],
     ask: Callable[[str], str],
+    interactive: bool = True,
 ) -> int:
+    """One confirmation, after the bootstrap check and the security diff and before the MCP
+    source is fetched or the image built: CDK then deploys with --require-approval never."""
     settings = read_required_settings(environ)
     if settings is None:
         return 1
@@ -238,6 +261,18 @@ def deploy_stack(
     if account is None:
         print(NO_CREDENTIALS_FIX)
         return 1
+    bootstrap = check_cdk_bootstrap(runner, settings["AWS_REGION"], account, CDK_DIRECTORY)
+    if bootstrap is None:
+        return 1
+    status = install_cdk_dependencies(runner)
+    if status != 0:
+        return status
+    security = show_security_diff(
+        runner, CDK_EXECUTABLE, STACK, cdk_context(settings), CDK_DIRECTORY
+    )
+    if security is None:
+        return 1
+    print(f"CDK bootstrap: {bootstrap}")
     prompt = ConfirmationPrompt(
         "deploy (billable: AgentCore Runtime and Memory, DynamoDB, ECR, Secrets Manager)",
         STACK,
@@ -245,16 +280,20 @@ def deploy_stack(
         account,
         {
             "Hydrolix table": settings["HYDROLIX_TABLE"],
+            # The security diff shows the grant as a Ref to BedrockModelId; this is its value.
+            "Bedrock model granted": f"{settings['AGENT_MODEL_ID']} (its profile and model only)",
             "may invoke": describe_callers(settings),
             "Amplify app": "not created by this command",
+            "CDK bootstrap": bootstrap,
+            "security changes": security,
+            "IAM approval": approval_line(assume_yes),
         },
     )
-    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask):
+    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask, interactive=interactive):
         return 1
-    for prepare in (install_pinned_mcp_server, install_cdk_dependencies):
-        status = prepare(runner)
-        if status != 0:
-            return status
+    status = install_pinned_mcp_server(runner)
+    if status != 0:
+        return status
     status = run_cdk(runner, "deploy", settings, assume_yes=assume_yes)
     if status != 0:
         return status
@@ -275,6 +314,7 @@ def destroy_stack(
     assume_yes: bool,
     environ: Mapping[str, str],
     ask: Callable[[str], str],
+    interactive: bool = True,
 ) -> int:
     region = environ.get("AWS_REGION", "").strip()
     if not region:
@@ -315,9 +355,14 @@ def destroy_stack(
             "Amplify app": (
                 f"{amplify_app.name} ({amplify_app.app_id})" if amplify_app else "none found"
             ),
+            **(
+                {"Earlier results table": f"{stack.retired_table} (left in place by design)"}
+                if stack and stack.retired_table
+                else {}
+            ),
         },
     )
-    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask):
+    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask, interactive=interactive):
         return 1
     amplify_failed = False
     if amplify_app:
@@ -363,6 +408,13 @@ def destroy_stack(
         print("Fix the reported error(s), then re-run `just destroy hydrolix`.")
         return 1
     print("Teardown complete: the Hydrolix backend and configured Amplify app are absent.")
+    if stack and stack.retired_table:
+        # Printed, never run: only the operator decides when that history can go.
+        print(
+            f"The earlier results table {stack.retired_table} is left in place by design. "
+            "Delete it when you no longer need its history:\n"
+            f"  aws dynamodb delete-table --region {region} --table-name {stack.retired_table}"
+        )
     print("The CDK bootstrap ECR repository may retain the backend asset image.")
     if not configured_app:
         print("No Amplify app was deleted because HYDROLIX_AMPLIFY_APP_ID was empty.")
@@ -373,15 +425,19 @@ def main(
     argv: Sequence[str],
     runner: Runner = run_command,
     ask: Callable[[str], str] = input,
+    interactive: bool | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["deploy", "destroy"])
     parser.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     arguments = parser.parse_args(argv)
-    if arguments.command == "deploy":
-        return deploy_stack(runner, assume_yes=arguments.yes, environ=os.environ, ask=ask)
-    return destroy_stack(runner, assume_yes=arguments.yes, environ=os.environ, ask=ask)
+    action = deploy_stack if arguments.command == "deploy" else destroy_stack
+    terminal = sys.stdin.isatty() if interactive is None else interactive
+    return action(
+        runner, assume_yes=arguments.yes, environ=os.environ, ask=ask, interactive=terminal
+    )
 
 
 if __name__ == "__main__":
+    load_root_env(os.environ)
     sys.exit(main(sys.argv[1:]))

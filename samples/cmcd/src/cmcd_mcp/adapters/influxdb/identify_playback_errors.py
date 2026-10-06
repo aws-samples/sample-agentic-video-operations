@@ -42,6 +42,7 @@ def identify_playback_errors(
     time_range: str = "-24h",
     cmcd_sid: str | None = None,
     *,
+    bucket: str,
     query_influxdb: Callable[[str], list[dict[str, Any]]],
 ) -> PlaybackErrorAnalysis:
     """Return starvation signals and sudden buffer drops with startup context."""
@@ -53,7 +54,7 @@ def identify_playback_errors(
         )
     sid_filter = f' and r["cmcd_sid"] == {quote_flux_string(cmcd_sid)}' if cmcd_sid else ""
     base = (
-        'from(bucket: "cmcd-metrics")\n'
+        f"from(bucket: {quote_flux_string(bucket)})\n"
         f"  |> range(start: {time_range})\n"
         '  |> filter(fn: (r) => r["_measurement"] == "cloudfront_logs" '
     )

@@ -22,7 +22,7 @@ pipeline 0 has lost its SRT input, and `check_channel_issues` finds that.
 ```mermaid
 flowchart LR
     Client[MCP client] --> Server[serve-medialive]
-    Hub[Media operations hub] --> Pack[MediaLive domain pack]
+    Agent[agentic-iops-streaming] --> Pack[MediaLive domain pack]
     Server --> Adapters[adapters: one action per file]
     Pack --> Adapters
     Adapters --> EML[AWS Elemental MediaLive]
@@ -33,11 +33,12 @@ flowchart LR
 ```
 
 - **Entrypoints** handle transport only: `serve_mcp.py` serves MCP over stdio.
-- **AgentCore deployment** comes from the media operations hub, which loads this
+- **AgentCore deployment** comes from agentic-iops-streaming, which loads this
   sample as an in-process domain pack.
 - **Adapters** (`src/medialive_mcp/adapters/`) make one AWS call each and return typed results.
   - `read_channel_metrics` reads every metric for both pipelines in one `GetMetricData` call.
-- **Domain rules** (`domain/identify_channel_issues.py`) score the five categories:
+- **Domain rules** (`src/medialive_mcp/domain/identify_channel_issues.py`) score the five
+  categories:
   - channel health;
   - input health;
   - output health;
@@ -48,7 +49,7 @@ flowchart LR
   - Before any change, the server asks your MCP client's user, through MCP elicitation, to type the exact channel id, and shows the action and every parameter. The model's arguments can't answer: another id, a decline or a cancel changes nothing, and a client without elicitation support can't write at all.
   - **It assumes a trusted client.** The server can check only that the client returned the exact id, not that a person typed it: a client that answers elicitations by itself (or with a model) defeats this step. Keep `ALLOW_WRITES=false` unless you trust the client to show the question to a person.
   - The adapter rejects an unsigned or expired approval, sends the change once, then polls until the channel reaches the target state.
-- **The hub registers writes only when enabled,** and uses its signed approval
+- **The coordinator registers writes only when enabled,** and uses its signed approval
   flow before calling the same verified write adapters.
 
 ## Prerequisites
@@ -143,21 +144,21 @@ just doctor
 
 ### Deploy to AWS
 
-MediaLive deploys as a domain pack of the media ops hub (`samples/hub/`): one AgentCore
+MediaLive deploys as a domain pack of agentic-iops-streaming (`samples/agentic-iops-streaming/`): one AgentCore
 runtime that loads the packs named in `MEDIA_DOMAINS`. To deploy MediaLive alone, set
 `MEDIA_DOMAINS=medialive` in the root `.env`, then:
 
 ```bash
-just deploy hub
+just deploy agentic-iops-streaming
 ```
 
 Raw command:
 
 ```bash
-uv run python scripts/manage_hub_stack.py deploy
+uv run python scripts/manage_agentic_iops_streaming_stack.py deploy
 ```
 
-- **What it deploys:** the hub on AgentCore Runtime, its AgentCore Memory, one Secrets
+- **What it deploys:** agentic-iops-streaming on AgentCore Runtime, its AgentCore Memory, one Secrets
   Manager secret (the approval signing key) and an IAM role.
 - **Billing:** AgentCore Runtime, Memory, Secrets Manager and Bedrock usage are billable.
 - **Permissions** come from [`iam_permissions.json`](iam_permissions.json): every `read`
@@ -167,11 +168,11 @@ uv run python scripts/manage_hub_stack.py deploy
 
 ### Verify the Deployment
 
-Ask the deployed hub a known-good question. The hub refuses a request without an actor,
+Ask the deployed agent a known-good question. The runtime refuses a request without an actor,
 which this script sends for you:
 
 ```bash
-uv run python scripts/invoke_hub.py --actor <your-operator-id> "List my MediaLive channels"
+uv run python scripts/invoke_agentic_iops_streaming.py --actor <your-operator-id> "List my MediaLive channels"
 ```
 
 Expected result: `task_started` and `tool_called` (`list_channels`) events, then a
@@ -189,7 +190,7 @@ Expected result: `task_started` and `tool_called` (`list_channels`) events, then
 | `read_metrics_table` | Read | Key metrics as rows for charts |
 | `describe_schedule` | Read | Scheduled input switches, SCTE-35, pauses |
 | `describe_channel_thumbnail` | Read | Vision-model description of a pipeline's thumbnail |
-| `analyze_channel_visual_quality` | Read | Samples thumbnails over a window (10 frames in 30 s; the hub uses 8 in 20 s) and scores each pipeline: freeze, black, slate, blur and a blockiness **estimate**, plus one vision-model rubric, then checks each finding against the encoder's MQCS freeze and black, fill-frame and input-loss signals. Every pipeline is scored and the channel status is the worst one's; `pipeline_id` only narrows the list returned. Without thumbnails or a vision verdict a pipeline is `UNVERIFIED`, never healthy; no `THUMBNAIL_MODEL_ID` reads `not_requested`. `frames` 2–20 and `window_seconds` 1–120. Blocks for the whole window |
+| `analyze_channel_visual_quality` | Read | Samples thumbnails over a window (10 frames in 30 s; agentic-iops-streaming uses 8 in 20 s) and scores each pipeline: freeze, black, slate, blur and a blockiness **estimate**, plus one vision-model rubric, then checks each finding against the encoder's MQCS freeze and black, fill-frame and input-loss signals. Every pipeline is scored and the channel status is the worst one's; `pipeline_id` only narrows the list returned. Without thumbnails or a vision verdict a pipeline is `UNVERIFIED`, never healthy; no `THUMBNAIL_MODEL_ID` reads `not_requested`. `frames` 2–20 and `window_seconds` 1–120. Blocks for the whole window |
 | `start_channel`, `stop_channel` | Write | Change channel state, then verify RUNNING / IDLE |
 | `switch_channel_input` | Write | Switch now, then verify every pipeline's active input |
 | `create_input_switch_action`, `create_scte35_action`, `create_pause_action`, `create_unpause_action` | Write | Add a timed action, then verify it is scheduled |
@@ -197,26 +198,28 @@ Expected result: `task_started` and `tool_called` (`list_channels`) events, then
 
 ## Teardown
 
-Stop a local MCP server with `Ctrl+C`. Remove the hub deployment:
+Stop a local MCP server with `Ctrl+C`. Remove the agentic-iops-streaming deployment:
 
 ```bash
-just destroy hub
+just destroy agentic-iops-streaming
 ```
 
 Raw command:
 
 ```bash
-uv run python scripts/manage_hub_stack.py destroy
+uv run python scripts/manage_agentic_iops_streaming_stack.py destroy
 ```
 
-It deletes the stack and the hub's runtime log groups, and prints exactly what remains if
-a step fails. The CDK bootstrap ECR repository may keep the hub image; remove it there if
+It deletes the stack and its runtime log groups, and prints exactly what remains if
+a step fails. The CDK bootstrap ECR repository may keep the agentic-iops-streaming image; remove it there if
 unused. Orphaned resources can keep incurring cost.
 
 ## Known Limitations
 
 - The responses in `fixtures/input_loss` are synthetic, shaped like the AWS responses. They are not recordings.
-- `DroppedFrames` and `SvqTime` use other dimensions in CloudWatch, so they may show no data.
+- `DroppedFrames` and `SvqTime` are published per pipeline and Region only, so they combine
+  every channel in the Region. The health check lists them under `region_wide` as context
+  and never scores them against one channel.
 - Model output is nondeterministic. Safety comes from the write adapters, not from the prompt.
 
 ## Development
@@ -227,8 +230,9 @@ just lint
 ```
 
 Add a tool as one adapter file under `src/medialive_mcp/adapters/<system>/`, returning a
-typed result. Expose a read tool in `tool_surface/create_read_tools.py`, which serves both
-MCP and the hub domain pack. Write tools take an `ApprovedAction` and verify the result
+typed result. Expose a read tool in
+`src/medialive_mcp/tool_surface/create_read_tools.py`, which serves both MCP and the coordinator
+domain pack. Write tools take an `ApprovedAction` and verify the result
 (see `docs/write_safe_tools.md`).
 
 ## Contributing

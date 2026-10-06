@@ -47,8 +47,8 @@ def test_image_files_outside_docs_images_fail_by_extension(image):
 
 
 def test_a_cdk_app_is_not_a_web_app_so_its_images_fail():
-    image = "samples/hub/cdk/assets/icon.png"
-    assert problems("samples/hub/cdk/package.json", image) == [
+    image = "samples/agentic-iops-streaming/cdk/assets/icon.png"
+    assert problems("samples/agentic-iops-streaming/cdk/package.json", image) == [
         f"image outside docs/images/ or a web app: {image}"
     ]
 
@@ -67,14 +67,15 @@ def test_a_sample_environment_file_fails(name):
 @pytest.mark.parametrize(
     "path",
     [
-        "samples/hub/coordinator/main.py",
-        "samples/hub/eml/Dockerfile",
-        "samples/hub/emx/main.py",
-        "samples/hub/shared/runtime_client.py",
+        "samples/agentic-iops-streaming/coordinator/main.py",
+        "samples/agentic-iops-streaming/eml/Dockerfile",
+        "samples/agentic-iops-streaming/emx/main.py",
+        "samples/agentic-iops-streaming/shared/runtime_client.py",
         "samples/medialive/cdk/lib/medialive-agentcore-stack.ts",
         "samples/medialive/Dockerfile",
         "samples/medialive/src/medialive_mcp/code_interpreter/executor.py",
         "samples/medialive/src/medialive_mcp/strands_agent/create_composite_tools.py",
+        "samples/hub/README.md",  # the folder before REN1
     ],
 )
 def test_a_retired_runtime_path_fails(path):

@@ -12,14 +12,14 @@ When guidance conflicts:
 2. Security and operational-safety rules.
 3. [`build_a_sample.md`](../docs/build_a_sample.md),
    [`write_safe_tools.md`](../docs/write_safe_tools.md) and
-   [`extend_the_hub.md`](../docs/extend_the_hub.md).
+   [`extend_agentic_iops_streaming.md`](../docs/extend_agentic_iops_streaming.md).
 4. [`follow_development_guidelines.md`](../docs/follow_development_guidelines.md).
 5. Existing repository conventions.
 
 ## Layout
 
 - `samples/<key>/`: one folder per sample, named by its key (`cmcd`,
-  `mediaconnect`, `medialive`, `hub`, `hydrolix`).
+  `mediaconnect`, `medialive`, `agentic-iops-streaming`, `hydrolix`).
 - `packages/media_ops_contracts`: typed tool failures, approved actions, stream
   events, fixture replay and the domain-pack contract.
 - `packages/media_ops_video_quality`: frame measurements, the vision rubric and
@@ -37,12 +37,12 @@ not cryptic, names for branches, folders and files.
   `ALLOW_WRITES=true`. Each write asks the operator, through MCP form
   elicitation, to type the exact resource id, and is refused when the client
   can't ask. This assumes a trusted client that shows the question to a person.
-- **Media ops hub** (`samples/hub`): one Strands agent on Amazon Bedrock
+- **agentic-iops-streaming** (`samples/agentic-iops-streaming`): one Strands agent on Amazon Bedrock
   AgentCore, created per request, over domain packs selected by
   `MEDIA_DOMAINS`. The MediaLive and MediaConnect packs share their tools with
   the MCP servers. A write is an interrupt, then a signed `ApprovedAction`, then
   a verified result. Agent instructions live in
-  `samples/hub/src/media_ops_hub/prompts/hub_instructions.md`, and packaged
+  `samples/agentic-iops-streaming/src/agentic_iops_streaming/prompts/agentic_iops_instructions.md`, and packaged
   skills are `SKILL.md` files loaded on demand.
 - **Hydrolix** (`samples/hydrolix`): an orchestrator and three subagents on
   AgentCore, with a CDK backend and an Amplify web app. Memory belongs to the

@@ -12,6 +12,8 @@
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+# Agent session files: now under .cache/agentic-iops-sessions; .hub-sessions is the old default
+.hub-sessions/
 .coverage
 htmlcov/
 

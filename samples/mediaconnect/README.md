@@ -24,8 +24,8 @@ flowchart LR
     Operator --> Client[MCP-compatible client]
     Client --> Server[MediaConnect MCP server]
     Server -->|demo| Fixtures[Recorded AWS responses]
-    Operator --> Hub[Media Ops hub on AgentCore]
-    Hub --> Pack[MediaConnect domain pack]
+    Operator --> Agent[agentic-iops-streaming on AgentCore]
+    Agent --> Pack[MediaConnect domain pack]
     Server --> MC[AWS Elemental MediaConnect]
     Server --> CW[Amazon CloudWatch]
     Server --> BR[Amazon Bedrock]
@@ -39,7 +39,7 @@ flowchart LR
     Verify --> MC
 ```
 
-The stdio entrypoint and the hub domain pack expose the same typed,
+The stdio entrypoint and the coordinator's domain pack expose the same typed,
 action-named adapters for MediaConnect, CloudWatch, and Bedrock. Workflows
 combine their results for issue detection, metric tables, and thumbnail
 descriptions.
@@ -72,7 +72,7 @@ For live AWS reads, also provide:
 - IAM permission for `mediaconnect:ListFlows`, `mediaconnect:DescribeFlow`,
   `mediaconnect:DescribeFlowSourceMetadata`,
   `mediaconnect:DescribeFlowSourceThumbnail`, `cloudwatch:GetMetricData`, and
-  `bedrock:InvokeModel`.
+  `bedrock:InvokeModel` on the `THUMBNAIL_MODEL_ID` model.
 - Access to the model named by `THUMBNAIL_MODEL_ID` when using thumbnail
   analysis.
 
@@ -203,7 +203,7 @@ itself.
 ### Deploy to AWS
 
 This sample can run locally over MCP stdio or in AWS as a domain pack of the
-[hub](../hub/README.md).
+[agentic-iops-streaming](../agentic-iops-streaming/README.md).
 
 1. Set these values in the root `.env`. Use `MEDIA_DOMAINS=mediaconnect` to
    deploy only this pack, or keep the default to deploy it with MediaLive:
@@ -225,35 +225,35 @@ This sample can run locally over MCP stdio or in AWS as a domain pack of the
      --query "Flows[].{Name:Name,State:Status,Arn:FlowArn}"
    ```
 
-3. Deploy the hub:
+3. Deploy agentic-iops-streaming:
 
    ```bash
-   just deploy hub
+   just deploy agentic-iops-streaming
    ```
 
    Raw command:
 
    ```bash
-   uv run python scripts/manage_hub_stack.py deploy
+   uv run python scripts/manage_agentic_iops_streaming_stack.py deploy
    ```
 
 Keep `ALLOW_WRITES=false` for diagnosis. To opt into start/stop tools, set it
-to `true` before deployment. The hub pauses every write for an operator
+to `true` before deployment. The coordinator pauses every write for an operator
 decision and verifies the resulting flow state.
 
 ### Verify the Deployment
 
-Ask the deployed hub a known-good question:
+Ask the deployed agent a known-good question:
 
 ```bash
-uv run python scripts/invoke_hub.py --actor <your-operator-id> \
+uv run python scripts/invoke_agentic_iops_streaming.py --actor <your-operator-id> \
   "List MediaConnect flows and check source health for one ACTIVE flow over the last hour"
 ```
 
 Expected result:
 
 ```text
-The hub emits task_started and tool_called events for list_flows and the source
+The agent emits task_started and tool_called events for list_flows and the source
 health tools, then usage_reported and a final_answer with connection, loss,
 recovery, bitrate and round-trip evidence. With ALLOW_WRITES=false, start_flow
 and stop_flow are not available.
@@ -267,7 +267,7 @@ and stop_flow are not available.
 | `describe_flow` | Read | Returns state, source, outputs, and AWS errors for one flow |
 | `describe_flow_source_metadata` | Read | Returns transport-stream and NDI source metadata |
 | `describe_flow_thumbnail` | Read | Describes the current source thumbnail with Bedrock |
-| `analyze_flow_visual_quality` | Read | Samples the source thumbnail over a window (10 frames in 30 s; the hub uses 8 in 20 s) and scores it: freeze, black, slate, blur and a blockiness **estimate**, plus one vision-model rubric, checked against the flow's content-quality (frozen and black frames) and source-connection metrics. Without thumbnails or a vision verdict the flow is `UNVERIFIED`, never healthy, with the reason; no `THUMBNAIL_MODEL_ID` reads `not_requested`. `frames` 2–20 and `window_seconds` 1–120. Blocks for the whole window |
+| `analyze_flow_visual_quality` | Read | Samples the source thumbnail over a window (10 frames in 30 s; agentic-iops-streaming uses 8 in 20 s) and scores it: freeze, black, slate, blur and a blockiness **estimate**, plus one vision-model rubric, checked against the flow's content-quality (frozen and black frames) and source-connection metrics. Without thumbnails or a vision verdict the flow is `UNVERIFIED`, never healthy, with the reason; no `THUMBNAIL_MODEL_ID` reads `not_requested`. `frames` 2–20 and `window_seconds` 1–120. Blocks for the whole window |
 | `get_flow_health_metrics` | Read | Reads flow transport and TR 101 290 metrics |
 | `get_source_health_metrics` | Read | Reads source connection, packet loss, recovery, and merge metrics |
 | `get_output_health_metrics` | Read | Reads output connection, packet, and payload metrics |
@@ -283,16 +283,16 @@ and stop_flow are not available.
 
 Stop the MCP process with `Ctrl+C`.
 
-The local server creates no AWS infrastructure. Remove the hub deployment with:
+The local server creates no AWS infrastructure. Remove the agentic-iops-streaming deployment with:
 
 ```bash
-just destroy hub
+just destroy agentic-iops-streaming
 ```
 
 Raw command:
 
 ```bash
-uv run python scripts/manage_hub_stack.py destroy
+uv run python scripts/manage_agentic_iops_streaming_stack.py destroy
 ```
 
 Do not delete MediaConnect flows merely to clean up this sample; they are
@@ -303,15 +303,15 @@ restore the intended state through another separately approved `start_flow` or
 `stop_flow` call. Remove the local `.env` when it is no longer needed because
 it may contain the approval signing key.
 
-The hub teardown removes its stack and runtime log groups. The CDK bootstrap
+The agentic-iops-streaming teardown removes its stack and runtime log groups. The CDK bootstrap
 ECR repository may retain the image; remove it there if unused. Orphaned AWS
 resources can continue to incur cost.
 
 ## Known Limitations
 
 - This is an educational sample, not a production-ready operations service.
-- The MCP server uses stdio locally; cloud operation uses the shared AgentCore
-  hub rather than a dedicated MediaConnect runtime.
+- The MCP server uses stdio locally; cloud operation uses the shared
+  agentic-iops-streaming runtime on AgentCore rather than a dedicated MediaConnect runtime.
 - The sample inspects existing MediaConnect resources and does not provision a
   test flow.
 - IAM, tenant isolation, audit retention, rate limiting, retries, and

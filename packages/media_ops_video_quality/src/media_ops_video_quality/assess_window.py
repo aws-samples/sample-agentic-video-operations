@@ -11,7 +11,8 @@
   So if any frame is a detectable graphic (a card, slate or caption screen: a concentrated
   palette), a clean window stays UNVERIFIED whatever the verdict says. This withholds
   HEALTHY only and never lowers the score. It does not prove the other frames natural: a
-  card with a broad palette passes it (see extend_the_hub.md §8 for what this covers).
+  card with a broad palette passes it (see extend_agentic_iops_streaming.md §7 for what this
+  covers).
 """
 
 from datetime import datetime

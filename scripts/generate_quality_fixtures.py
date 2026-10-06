@@ -90,7 +90,8 @@ def text_card_frame(index: int) -> Image.Image:
 
 def broad_text_card_frame(index: int) -> Image.Image:
     """A card whose background spreads luma over every bin, with large injected text: the
-    documented residual palette_concentration does not detect (extend_the_hub.md §8)."""
+    documented residual palette_concentration does not detect
+    (extend_agentic_iops_streaming.md §7)."""
     width, height = SIZE
     image = Image.new("RGB", SIZE)
     draw = ImageDraw.Draw(image)

@@ -21,8 +21,8 @@ class RuntimeSettings(BaseSettings):
     demo_scenario: str = DEFAULT_DEMO_SCENARIO
     fixtures_dir: Path = Path("fixtures")
     approval_signing_key: SecretStr = SecretStr("")
-    # analyze_flow_visual_quality defaults (the hub sets 8 and 20); the tool blocks for the
-    # whole window.
+    # analyze_flow_visual_quality defaults (agentic-iops-streaming sets 8 and 20); the tool blocks
+    # for the whole window.
     visual_quality_frames: int = Field(default=10, ge=2, le=20)
     visual_quality_window_seconds: int = Field(default=30, ge=1, le=120)
 

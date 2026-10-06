@@ -2,9 +2,6 @@
 // CUSTOMIZABLE CONFIGURATION VALUES
 // ================================
 
-// Amazon DynamoDB
-const QUESTION_ANSWERS_TABLE_NAME = ""; // Your DynamoDB table name
-
 // Amazon Bedrock AgentCore Configuration
 const AGENT_RUNTIME_ARN = "";
 const AGENT_ENDPOINT_NAME = "DEFAULT";
@@ -24,9 +21,6 @@ const CHART_MODEL_ID = process.env.REACT_APP_CHART_MODEL_ID;
 
 
 export {
-  // Amazon DynamoDB
-  QUESTION_ANSWERS_TABLE_NAME,
-  
   // Amazon Bedrock AgentCore
   AGENT_RUNTIME_ARN,
   AGENT_ENDPOINT_NAME,

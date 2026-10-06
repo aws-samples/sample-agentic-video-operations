@@ -31,6 +31,7 @@ def get_session_details(
     cmcd_sid: str,
     time_range: str = "-24h",
     *,
+    bucket: str,
     query_influxdb: Callable[[str], list[dict[str, Any]]],
 ) -> SessionDetails:
     """Return chronologically grouped metrics for one CMCD session."""
@@ -41,7 +42,7 @@ def get_session_details(
             "Use a negative Flux duration with s, m, h, d, or w.",
         )
     flux = (
-        'from(bucket: "cmcd-metrics")\n'
+        f"from(bucket: {quote_flux_string(bucket)})\n"
         f"  |> range(start: {time_range})\n"
         '  |> filter(fn: (r) => r["_measurement"] == "cloudfront_logs")\n'
         f'  |> filter(fn: (r) => r["cmcd_sid"] == {quote_flux_string(cmcd_sid)})\n'

@@ -1,4 +1,4 @@
-"""Typed events every agent runtime streams (extend_the_hub.md §1).
+"""Typed events every agent runtime streams (extend_agentic_iops_streaming.md §1).
 
 Same discriminated-union pattern as sample-agentic-platform's streaming_models.py:
 parse any event with `STREAM_EVENT_ADAPTER.validate_json(line)`.

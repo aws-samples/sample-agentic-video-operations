@@ -1,6 +1,7 @@
 """Release gate: the default synth grants no write action and no `Resource: "*"` beyond need.
 
-uv run python scripts/check_synth_iam.py samples/hub/cdk/cdk.out/MediaOpsHubStack.template.json
+uv run python scripts/check_synth_iam.py
+samples/agentic-iops-streaming/cdk/cdk.out/AgenticIopsStreamingStack.template.json
 
 - A write is an action whose verb mutates (Create, Delete, Update, Put, Start, Stop, ...).
   Only the runtime's own telemetry and memory writes below are allowed, each with a reason,
@@ -29,8 +30,8 @@ ALLOWED_WRITES = {
     "xray:PutTraceSegments": "the runtime's traces",
     "xray:PutTelemetryRecords": "the runtime's traces",
     "cloudwatch:PutMetricData": "runtime metrics, conditioned on the bedrock-agentcore namespace",
-    "bedrock-agentcore:CreateEvent": "the hub's own session memory",
-    "bedrock-agentcore:DeleteMemoryRecord": "the hub's own session memory",
+    "bedrock-agentcore:CreateEvent": "the agent's own session memory",
+    "bedrock-agentcore:DeleteMemoryRecord": "the agent's own session memory",
     "dynamodb:PutItem": "the app's own table",
     "dynamodb:UpdateItem": "the app's own table",
 }

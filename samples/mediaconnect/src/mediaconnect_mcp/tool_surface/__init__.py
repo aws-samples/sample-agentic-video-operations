@@ -1,1 +1,1 @@
-"""Typed MediaConnect tools shared by MCP and the hub."""
+"""Typed MediaConnect tools shared by MCP and the coordinator."""

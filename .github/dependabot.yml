@@ -10,7 +10,7 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: npm
-    directory: /samples/hub/cdk
+    directory: /samples/agentic-iops-streaming/cdk
     schedule:
       interval: weekly
     groups:

@@ -27,6 +27,13 @@ class FakeRunner:
         amplify_app_name="Hydrolix dashboard",
     ):
         self.account = account
+        self.bootstrap = (0, '{"status": "UPDATE_COMPLETE", "qualifier": "hnb659fds"}', "")
+        self.bootstrap_version = (0, "21\n", "")
+        # What `cdk diff --security-only` prints (to stderr) when nothing security-related changes
+        self.security_diff = (
+            0, "", f"Stack {manage_hydrolix_stack.STACK}\nThere were no security-related changes\n"
+        )  # fmt: skip
+        self.retired_table = None
         self.failing = failing
         self.missing = missing
         self.stack_exists = stack_exists
@@ -48,6 +55,12 @@ class FakeRunner:
                 f"An error occurred (NotFoundException) when calling the {operation} operation"
             )
             return subprocess.CompletedProcess(arguments, 254, "", message)
+        if "--stack-name CDKToolkit" in joined:
+            return subprocess.CompletedProcess(arguments, *self.bootstrap)
+        if "/cdk-bootstrap/" in joined:
+            return subprocess.CompletedProcess(arguments, *self.bootstrap_version)
+        if "--security-only" in joined:
+            return subprocess.CompletedProcess(arguments, *self.security_diff)
         if "get-caller-identity" in joined:
             status = 0 if self.account else 1
             return subprocess.CompletedProcess(arguments, status, f"{self.account or ''}\n", "")
@@ -58,10 +71,11 @@ class FakeRunner:
                     f"Stack with id {manage_hydrolix_stack.STACK} does not exist"
                 )
                 return subprocess.CompletedProcess(arguments, 255, "", message)
-            stack = {
-                "StackStatus": "CREATE_COMPLETE",
-                "Outputs": [{"OutputKey": "HydrolixSecretArn", "OutputValue": self.secret_arn}],
-            }
+            outputs = [{"OutputKey": "HydrolixSecretArn", "OutputValue": self.secret_arn}]
+            if self.retired_table:
+                retired = {"OutputKey": "RetiredQueryResultsTableName"}
+                outputs.append(retired | {"OutputValue": self.retired_table})
+            stack = {"StackStatus": "CREATE_COMPLETE", "Outputs": outputs}
             return subprocess.CompletedProcess(arguments, 0, json.dumps({"Stacks": [stack]}), "")
         if "amplify get-app" in joined:
             app_id = arguments[arguments.index("--app-id") + 1]
@@ -226,9 +240,10 @@ def test_deploy_pins_mcp_source_and_passes_env_parameters(monkeypatch, tmp_path)
     [checkout] = runner.matching("git checkout")
     assert manage_hydrolix_stack.MCP_COMMIT in checkout
     [deploy] = runner.matching("cdk deploy")
-    assert "BedrockModelId=us.anthropic.claude-sonnet-4-6" in deploy
+    assert "agentModelId=us.anthropic.claude-sonnet-4-6" in deploy
+    assert not any(argument.startswith("BedrockModelId=") for argument in deploy)
     assert "HydrolixTable=video.cmcd" in deploy
-    assert deploy[-2:] == ["--require-approval", "never"]
+    assert deploy[deploy.index("--require-approval") + 1] == "never"
     assert runner.matching("npm ci")
     assert (destination / "__init__.py").exists()
     assert (destination / "LICENSE").read_text() == "Apache License 2.0"
@@ -303,7 +318,7 @@ def test_half_a_jwt_setting_stops_before_any_aws_call(name, capsys):
     assert "HYDROLIX_JWT_DISCOVERY_URL" in capsys.readouterr().out
 
 
-def test_interactive_deploy_keeps_cdks_broadening_approval(monkeypatch, tmp_path):
+def test_an_interactive_deploy_confirms_once_and_cdk_never_asks_again(monkeypatch, tmp_path):
     isolate_paths(monkeypatch, tmp_path)
     runner = FakeRunner()
 
@@ -316,7 +331,75 @@ def test_interactive_deploy_keeps_cdks_broadening_approval(monkeypatch, tmp_path
 
     assert status == 0
     [deploy] = runner.matching("cdk deploy")
-    assert deploy[-2:] == ["--require-approval", "broadening"]
+    assert deploy[deploy.index("--require-approval") + 1] == "never"
+
+
+# --- T59: one confirmation, before anything is fetched or built --------------------------
+
+
+def test_the_security_diff_comes_before_the_prompt_and_the_mcp_checkout_after(
+    monkeypatch, tmp_path
+):
+    isolate_paths(monkeypatch, tmp_path)
+    runner, before_prompt = FakeRunner(), []
+
+    def ask(_):
+        before_prompt.extend(" ".join(call[0]) for call in runner.calls)
+        return "y"
+
+    status = manage_hydrolix_stack.deploy_stack(runner, assume_yes=False, environ=SETTINGS, ask=ask)
+
+    assert status == 0
+    [diff] = [call for call in before_prompt if " diff " in call]
+    assert "--security-only" in diff and "--method template" in diff
+    assert not any("git clone" in call or " deploy " in call for call in before_prompt)
+    assert runner.matching("git clone") and runner.matching("cdk deploy")
+
+
+def test_without_a_terminal_it_stops_at_the_prompt_before_fetching_or_building(
+    monkeypatch, tmp_path, capsys
+):
+    isolate_paths(monkeypatch, tmp_path)
+    runner = FakeRunner()
+
+    status = manage_hydrolix_stack.deploy_stack(
+        runner, assume_yes=False, environ=SETTINGS, ask=lambda _: "y", interactive=False
+    )
+
+    assert status == 1
+    assert runner.matching("git clone") == [] and runner.matching("cdk deploy") == []
+    assert "no terminal: re-run with --yes" in capsys.readouterr().out.lower()
+
+
+def test_yes_says_that_cdk_will_not_ask_and_deploys(monkeypatch, tmp_path, capsys):
+    isolate_paths(monkeypatch, tmp_path)
+    runner = FakeRunner()
+
+    status = manage_hydrolix_stack.deploy_stack(
+        runner, assume_yes=True, environ=SETTINGS, ask=lambda _: "n", interactive=False
+    )
+
+    assert status == 0
+    output = capsys.readouterr().out
+    assert "--yes (no prompt): CDK deploys with --require-approval never" in output
+    assert "CDK bootstrap: found (CDKToolkit, qualifier hnb659fds, version 21)" in output
+
+
+def test_a_missing_bootstrap_stops_before_anything_is_fetched(monkeypatch, tmp_path, capsys):
+    isolate_paths(monkeypatch, tmp_path)
+    runner = FakeRunner()
+    runner.bootstrap = (
+        254, "", "An error occurred (ValidationError) when calling DescribeStacks: "
+        "Stack with id CDKToolkit does not exist",
+    )  # fmt: skip
+
+    status = manage_hydrolix_stack.deploy_stack(
+        runner, assume_yes=True, environ=SETTINGS, ask=lambda _: "y"
+    )
+
+    assert status == 1
+    assert runner.matching("npm ci") == [] and runner.matching("git clone") == []
+    assert "CDK bootstrap: missing in aws://111122223333/us-west-2" in capsys.readouterr().out
 
 
 def test_deploy_stops_before_aws_when_a_setting_is_missing(capsys):
@@ -345,8 +428,8 @@ def test_declined_deploy_does_not_clone_install_or_deploy():
     )
 
     assert status == 1
+    # Only the plan ran (npm ci for the CDK CLI, a template-only diff): nothing fetched or built.
     assert runner.matching("git clone") == []
-    assert runner.matching("npm ci") == []
     assert runner.matching("cdk deploy") == []
 
 
@@ -362,7 +445,6 @@ def test_deploy_stops_when_the_pinned_checkout_fails(monkeypatch, tmp_path):
     )
 
     assert status == 9
-    assert runner.matching("npm ci") == []
     assert runner.matching("cdk deploy") == []
 
 
@@ -597,3 +679,83 @@ def test_the_runtime_refuses_half_a_jwt_setting(half, monkeypatch):
 
     with pytest.raises(ValidationError, match="or neither"):
         settings.RuntimeSettings()
+
+
+def test_an_empty_security_diff_fetches_and_deploys_nothing(monkeypatch, tmp_path, capsys):
+    isolate_paths(monkeypatch, tmp_path)
+    runner = FakeRunner()
+    runner.security_diff = (0, "", "")
+
+    status = manage_hydrolix_stack.deploy_stack(
+        runner, assume_yes=True, environ=SETTINGS, ask=lambda _: "y"
+    )
+
+    assert status == 1
+    assert runner.matching("git clone") == [] and runner.matching(" deploy ") == []
+    assert "printed nothing" in capsys.readouterr().out
+
+
+def test_a_bootstrap_with_another_qualifier_stops_before_the_checkout(monkeypatch, tmp_path):
+    isolate_paths(monkeypatch, tmp_path)
+    runner = FakeRunner()
+    runner.bootstrap = (0, '{"status": "UPDATE_COMPLETE", "qualifier": "custom1"}', "")
+
+    status = manage_hydrolix_stack.deploy_stack(
+        runner, assume_yes=True, environ=SETTINGS, ask=lambda _: "y"
+    )
+
+    assert status == 1
+    assert runner.matching("npm ci") == [] and runner.matching("git clone") == []
+
+
+def test_destroy_leaves_the_earlier_results_table_and_only_prints_how_to_delete_it(
+    monkeypatch, tmp_path, capsys
+):
+    isolate_paths(monkeypatch, tmp_path)
+    runner = FakeRunner()
+    runner.retired_table = (
+        "CdkHydrolixDataAssistantAgentcoreStrandsStack-RawQueryResults82B00746-EXAMPLE"
+    )
+
+    status = manage_hydrolix_stack.destroy_stack(
+        runner, assume_yes=False, environ=SETTINGS, ask=lambda _: "y"
+    )
+
+    assert status == 0
+    output = capsys.readouterr().out
+    assert f"{runner.retired_table} (left in place by design)" in output
+    assert (
+        f"aws dynamodb delete-table --region us-west-2 --table-name {runner.retired_table}"
+        in output
+    )
+    assert runner.matching("delete-table") == []  # printed for the operator, never run
+
+
+def test_the_security_diff_and_the_deploy_get_the_same_model(monkeypatch, tmp_path):
+    """T71 review: the model reaches both syntheses as context (cdk diff takes no --parameters),
+    and the deploy uses the template default it sets, never a previous stack value."""
+    isolate_paths(monkeypatch, tmp_path)
+    runner = FakeRunner()
+    eu_model = ".".join(["eu", "anthropic.claude-sonnet-4-6"])
+
+    status = manage_hydrolix_stack.deploy_stack(
+        runner, assume_yes=True, environ=SETTINGS | {"AGENT_MODEL_ID": eu_model}, ask=lambda _: "y"
+    )
+
+    assert status == 0
+    [diff] = runner.matching("--security-only")
+    [deploy] = [call for call in runner.matching(" deploy ") if "--require-approval" in call]
+
+    def model_inputs(call):
+        return [a for a in call if "agentModelId=" in a or "BedrockModelId" in a]
+
+    assert model_inputs(diff) == model_inputs(deploy) == [f"agentModelId={eu_model}"]
+    assert "--no-previous-parameters" in deploy
+
+
+def test_the_plan_names_the_model_the_deploy_grants(monkeypatch, tmp_path, capsys):
+    isolate_paths(monkeypatch, tmp_path)
+    manage_hydrolix_stack.deploy_stack(
+        FakeRunner(), assume_yes=True, environ=SETTINGS, ask=lambda _: "y"
+    )
+    assert "Bedrock model granted: us.anthropic.claude-sonnet-4-6" in capsys.readouterr().out

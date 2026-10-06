@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from media_ops_contracts.resolve_demo_scenario import resolve_demo_scenario
 
 DEFAULT_DEMO_SCENARIO = "cmcd_rebuffering"
+DEFAULT_INFLUXDB_BUCKET = "cmcd-metrics"
 
 
 class RuntimeSettings(BaseSettings):
@@ -16,6 +17,7 @@ class RuntimeSettings(BaseSettings):
     influxdb_url: str | None = None
     influxdb_token: str | None = None
     influxdb_org: str | None = None
+    influxdb_bucket: str = DEFAULT_INFLUXDB_BUCKET
     verify_ssl: bool = True
     demo: bool = False
     demo_scenario: str = DEFAULT_DEMO_SCENARIO
@@ -25,6 +27,11 @@ class RuntimeSettings(BaseSettings):
     @classmethod
     def default_empty_scenario(cls, value: str | None) -> str:
         return resolve_demo_scenario(value, DEFAULT_DEMO_SCENARIO)
+
+    @field_validator("influxdb_bucket", mode="before")
+    @classmethod
+    def default_empty_bucket(cls, value: str | None) -> str:
+        return value or DEFAULT_INFLUXDB_BUCKET
 
     @property
     def missing_live_settings(self) -> list[str]:

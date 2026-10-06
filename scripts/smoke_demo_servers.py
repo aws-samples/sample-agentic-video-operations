@@ -9,6 +9,7 @@ from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from read_root_env import load_root_env
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SMOKE_GUARD = Path(__file__).resolve().parent / "smoke_guard"
@@ -107,4 +108,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    load_root_env(os.environ)
     raise SystemExit(main())

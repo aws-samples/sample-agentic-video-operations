@@ -8,7 +8,7 @@ something real.
 |---|---|---|---|
 | [0 — Prove it works](#stage-0--prove-it-works) | Every MCP server, on recorded incidents | Not needed | $0 |
 | [1 — Investigate with your AI client](#stage-1--investigate-an-incident-with-your-ai-client) | One sample in your MCP client, on fixtures | Not needed | Your client's model usage |
-| [2 — Run the hub agent locally](#stage-2--run-the-hub-agent-locally) | The Strands hub on your machine; media data stays fixtures | Bedrock only | Cents per question |
+| [2 — Run the agent locally](#stage-2--run-the-agent-locally) | The Strands agent on your machine; media data stays fixtures | Bedrock only | Cents per question |
 | [3 — Deploy](#stage-3--deploy) | A sample's full stack in your account | Yes | Real, per sample README |
 
 ## Stage 0 — Prove it works
@@ -72,19 +72,19 @@ diagnosis loop with zero AWS footprint. Swap `medialive` for `mediaconnect`
 The thumbnail tools are the one exception at this stage: vision analysis needs
 a Bedrock model, so they return a clear error in demo mode without one.
 
-## Stage 2 — Run the hub agent locally
+## Stage 2 — Run the agent locally
 
 *Bedrock is the only AWS service touched; media data is still fixtures.
 A diagnosis question costs cents (token usage of one agent turn).*
 
-The hub is one Strands agent that loads the samples as domain packs and pauses
+The agentic-iops-streaming sample is one Strands agent that loads the samples as domain packs and pauses
 every write for operator approval. Give it a model and credentials, keep the
 media side in demo mode:
 
 ```bash
 cp .env.example .env          # defaults: DEMO=false, writes disabled
 just doctor aws               # credentials, Bedrock access
-DEMO=1 just run hub           # local mode on port 8080
+DEMO=1 just run agentic-iops-streaming           # local mode on port 8080
 ```
 
 In another terminal:
@@ -97,7 +97,7 @@ curl -N -X POST http://localhost:8080/invocations \
 
 The response streams one JSON event per SSE `data:` line — `task_started`,
 `tool_called` per tool, then `final_answer` — the same `StreamEvent` contract a
-deployed hub emits ([`extend_the_hub.md`](extend_the_hub.md)). Writes stay off unless you
+deployed agent emits ([`extend_agentic_iops_streaming.md`](extend_agentic_iops_streaming.md)). Writes stay off unless you
 set `ALLOW_WRITES=true`, and even then every write pauses for an explicit
 approval decision.
 

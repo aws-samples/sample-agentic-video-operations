@@ -32,6 +32,7 @@ from strands_tools import calculator, current_time
 from src.settings.runtime_settings import load_runtime_settings
 from src.utils import get_request_context, process_agent_stream
 from src.utils.bound_hydrolix_tools import BoundHydrolixTools, expose_bounded_tools
+from src.utils.record_executed_queries import RecordExecutedQueries
 from src.utils.request_context import REQUEST_TIMEOUT_SECONDS
 
 
@@ -225,7 +226,11 @@ def _run_subagent(agent_name: str, system_prompt: str, question: str, run: Subag
                 model=BedrockModel(model_id=settings.agent_model_id),
                 system_prompt=system_prompt,
                 tools=[*hydrolix_tools, current_time, calculator],
-                hooks=[budget, BoundHydrolixTools(settings.hydrolix_table)],
+                hooks=[
+                    budget,
+                    BoundHydrolixTools(settings.hydrolix_table),
+                    RecordExecutedQueries(agent_name, question),
+                ],
                 callback_handler=None,
             )
             answer = asyncio.run(process_agent_stream(agent, question, agent_name=agent_name))

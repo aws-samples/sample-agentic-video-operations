@@ -3,7 +3,7 @@
 MediaConnect pictures one source per flow (DescribeFlowSourceThumbnail), so the flow gets
 one window and one finding. The flow is never HEALTHY without thumbnails and a trusted
 vision verdict, and an independent transport or content-quality signal that contradicts
-the picture caps it at UNVERIFIED (fuse_with_telemetry, extend_the_hub.md §8).
+the picture caps it at UNVERIFIED (fuse_with_telemetry, extend_agentic_iops_streaming.md §7).
 """
 
 from collections.abc import Callable

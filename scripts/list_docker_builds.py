@@ -14,7 +14,7 @@ FETCH_HYDROLIX_MCP = (
 )
 
 DOCKER_BUILDS: list[dict[str, str]] = [
-    {"dockerfile": "samples/hub/Dockerfile", "context": "."},
+    {"dockerfile": "samples/agentic-iops-streaming/Dockerfile", "context": "."},
     {
         "dockerfile": f"{HYDROLIX}/hydrolix-data-assistant-agentcore-strands/Dockerfile",
         "context": f"{HYDROLIX}/hydrolix-data-assistant-agentcore-strands",

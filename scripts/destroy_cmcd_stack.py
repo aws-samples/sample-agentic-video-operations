@@ -472,6 +472,7 @@ def destroy_cmcd_stack(
     ask: Callable[[str], str],
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
+    interactive: bool = True,
 ) -> int:
     """Delete InfluxDB before the stack so its ENIs cannot block VPC deletion."""
     account = read_account_id(runner)
@@ -514,7 +515,7 @@ def destroy_cmcd_stack(
         "deployment artifact bucket (deleted)": artifacts if artifacts_exist else "already absent",
     }
     prompt = ConfirmationPrompt(DESTROY_ACTION, STACK, REGION, account, details)
-    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask):
+    if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask, interactive=interactive):
         return 1
     teardown_started = monotonic()
     phase_timings: list[tuple[str, float]] = []

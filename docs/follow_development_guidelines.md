@@ -1,6 +1,6 @@
 # Agentic IOPS Development Guidelines
 
-These guidelines define the target engineering standard for Agentic Intelligent Media Operations, with special focus on the media operations hub.
+These guidelines define the target engineering standard for Agentic Intelligent Media Operations, with special focus on agentic-iops-streaming.
 
 The objective is not merely clean code. The objective is a codebase that makes the correct change obvious, keeps every change small, protects operational safety, and lets a new contributor understand the system without reconstructing it mentally.
 
@@ -237,8 +237,8 @@ Example:
 ```text
 AgentCore request
   → handle_agentcore_invocation.py
-  → run_hub_turn.py
-  → create_hub.py
+  → run_agentic_iops_turn.py
+  → create_agentic_iops.py
   → selected domain pack
   → AWS adapter
 ```
@@ -397,10 +397,10 @@ Forbidden dependency directions:
 
 ### No cross-domain reach-through
 
-The hub loads domain packs through the shared `DomainPack` contract.
+The coordinator loads domain packs through the shared `DomainPack` contract.
 
 MediaLive and MediaConnect packs MUST NOT import each other. Cross-service
-reasoning belongs in the hub workflow.
+reasoning belongs in the coordinator workflow.
 
 ---
 
@@ -411,26 +411,26 @@ This section is the layout *inside* one sample. Where samples, shared packages, 
 The target layout organizes the same service by responsibility and by the external system each adapter talks to.
 
 ```text
-samples/hub/
+samples/agentic-iops-streaming/
 ├── pyproject.toml
 ├── README.md
 ├── Dockerfile
-├── src/media_ops_hub/
+├── src/agentic_iops_streaming/
 │   ├── bootstrap/
-│   │   ├── create_hub.py
+│   │   ├── create_agentic_iops.py
 │   │   ├── create_load_skill_tool.py
 │   │   ├── create_session_manager.py
 │   │   ├── export_approval_signing_key.py
 │   │   └── wrap_pack_tools.py
 │   ├── domain/
-│   │   ├── hub_request.py
+│   │   ├── agentic_iops_request.py
 │   │   ├── pending_approval.py
 │   │   └── propose_write_action.py
 │   ├── entrypoints/
 │   │   └── handle_agentcore_invocation.py
 │   ├── prompts/
 │   │   ├── build_system_prompt.py
-│   │   └── hub_instructions.md
+│   │   └── agentic_iops_instructions.md
 │   ├── settings/
 │   │   └── runtime_settings.py
 │   ├── skills/
@@ -439,7 +439,7 @@ samples/hub/
 │       ├── approve_write_calls.py
 │       ├── limit_tool_calls.py
 │       ├── record_stream_events.py
-│       └── run_hub_turn.py
+│       └── run_agentic_iops_turn.py
 ├── tests/
 │   ├── contract/
 │   ├── eval/
@@ -454,9 +454,9 @@ samples/hub/
 
 - `domain/` owns requests and approval state.
 - `workflows/` performs one user-visible turn and enforces tool policy.
-- `prompts/` contains the hub instructions and their builder.
+- `prompts/` contains the agent instructions and their builder.
 - `entrypoints/` translate incoming transport requests.
-- `bootstrap/` constructs the hub and connects selected domain packs.
+- `bootstrap/` constructs the agent and connects selected domain packs.
 - `settings/` validates configuration.
 - `tests/` mirror production boundaries.
 - root `fixtures/` makes offline incident replay possible.
@@ -473,12 +473,12 @@ same task group that moves the last caller.
 Example:
 
 ```python
-# legacy_hub_turn.py
+# legacy_agentic_iops_turn.py
 """Compatibility shim. Remove after all callers migrate."""
 
-from media_ops_hub.workflows.run_hub_turn import run_hub_turn
+from agentic_iops_streaming.workflows.run_agentic_iops_turn import run_agentic_iops_turn
 
-__all__ = ["run_hub_turn"]
+__all__ = ["run_agentic_iops_turn"]
 ```
 
 Compatibility shims MUST:
@@ -949,14 +949,14 @@ Example:
 
 ```mermaid
 flowchart LR
-    User[Operator] --> Hub[Media Operations Hub]
-    Hub --> MediaLive[MediaLive Domain Pack]
-    Hub --> MediaConnect[MediaConnect Domain Pack]
+    User[Operator] --> Agent[agentic-iops-streaming coordinator]
+    Agent --> MediaLive[MediaLive Domain Pack]
+    Agent --> MediaConnect[MediaConnect Domain Pack]
     MediaLive --> CW[CloudWatch]
     MediaLive --> EML[AWS Elemental MediaLive]
     MediaConnect --> CW
     MediaConnect --> EMX[AWS Elemental MediaConnect]
-    Hub --> Approval[Approval Boundary]
+    Agent --> Approval[Approval Boundary]
     Approval --> Verify[Execute and Verify]
 ```
 
@@ -1040,7 +1040,7 @@ Teardown documentation MUST:
 Example:
 
 ```bash
-just destroy hub
+just destroy agentic-iops-streaming
 ```
 
 Also document cleanup for:
@@ -1236,7 +1236,7 @@ A change reaches the expected standard when:
 - Operational writes cannot bypass approval policy.
 - Every action has observable start, result, and verification events.
 - File and function names reveal intent without reading their contents.
-- Adding a domain pack does not require rewriting hub routing branches.
+- Adding a domain pack does not require rewriting coordinator routing branches.
 - Tests describe customer and operational behavior.
 - The README path to first success is shorter than the architecture explanation.
 - A newcomer finds every sample at `samples/<key>/`, and nothing at the root that isn't on the §20 allowlist.
@@ -1317,7 +1317,7 @@ Stop and redesign before continuing when:
 - a mutation has no verification step;
 - an internal boundary returns JSON text instead of typed data;
 - a unit test requires AWS credentials;
-- adding a domain pack requires another hub `if/elif`;
+- adding a domain pack requires another coordinator `if/elif`;
 - a refactor cannot be explained as one responsibility moving behind one boundary.
 - a runnable sample cannot be started by following its README;
 - a deployment creates resources without complete teardown instructions;
@@ -1342,7 +1342,7 @@ justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
 
 | Folder | Holds |
 |---|---|
-| `samples/<key>/` | One runnable sample per folder. The folder name is the sample key used by every `just` recipe (`samples/cmcd`, `samples/mediaconnect`, `samples/medialive`, `samples/hub`, `samples/hydrolix`). Inside it, §5 and build_a_sample.md §2 apply. |
+| `samples/<key>/` | One runnable sample per folder. The folder name is the sample key used by every `just` recipe (`samples/cmcd`, `samples/mediaconnect`, `samples/medialive`, `samples/agentic-iops-streaming`, `samples/hydrolix`). Inside it, §5 and build_a_sample.md §2 apply. |
 | `packages/<name>/` | Shared code that several samples import (`packages/media_ops_contracts`). No sample-specific behavior. |
 | `fixtures/<scenario>/` | The only home of recorded responses. Scenarios are shared across samples. |
 | `docs/` | Repo-level documentation; repo-level images in `docs/images/`. |
@@ -1353,7 +1353,7 @@ justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
 
 - A new top-level entry needs a guideline change first. Don't add it and explain later.
 - Images live in `docs/images/` (repo) or `samples/<key>/docs/images/` (sample). A web app's own assets stay inside the app, in `public/` or `src/`. The check finds images by file extension, not only by a folder called `images/`.
-- The folder name is the key. Package and distribution names may differ (`samples/hub` ships `media-ops-hub`), but the folder never does.
+- The folder name is the key. Package and distribution names may differ (`samples/agentic-iops-streaming` ships `agentic-iops-streaming`), but the folder never does.
 - Move with `git mv` in one dedicated change, then fix every path in the same change: `pyproject.toml`, `justfile`, CI, `scripts/`, READMEs, `AGENTS.md` and `mcp.json`. Merge in-flight branches with rename detection; never rebase them.
 
 ---

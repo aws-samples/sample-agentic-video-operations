@@ -182,8 +182,6 @@ def test_logs_carry_no_prompt_answer_user_or_session(app, monkeypatch, capsys):
 
 def test_the_subagent_stream_logs_no_question_sql_or_answer(app, monkeypatch, capsys):
     stream = importlib.import_module("src.utils.stream_processor")
-    saved = []
-    monkeypatch.setattr(stream, "save_raw_query_result", lambda **item: saved.append(item))
     sql = "SELECT secret_column FROM video.cmcd WHERE viewer = 'SQL-THAT-MUST-NOT-BE-LOGGED'"
     tool_use = {"toolUseId": "tool-1", "name": "run_select_query"}
 
@@ -198,7 +196,7 @@ def test_the_subagent_stream_logs_no_question_sql_or_answer(app, monkeypatch, ca
     answer = asyncio.run(stream.process_agent_stream(Subagent(), SECRET_PROMPT, "qoe_agent"))
 
     logged = capsys.readouterr().out
-    assert answer == SECRET_ANSWER and saved[0]["sql_query"] == sql
+    assert answer == SECRET_ANSWER
     assert "query length=" in logged
     for secret in (SECRET_PROMPT, SECRET_ANSWER, "SQL-THAT-MUST-NOT-BE-LOGGED"):
         assert secret not in logged

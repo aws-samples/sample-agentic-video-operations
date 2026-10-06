@@ -1,6 +1,6 @@
 """List the files a `docker build` would send, using the same .dockerignore rules.
 
-uv run python scripts/list_docker_context.py samples/hub/Dockerfile .
+uv run python scripts/list_docker_context.py samples/agentic-iops-streaming/Dockerfile .
 
 Rules, as in Docker: patterns are relative to the context root; `*` and `?` stay within one
 path segment and `**` spans any number of segments; a path is excluded when it or a parent
@@ -69,7 +69,7 @@ def list_context(dockerfile: Path, context: Path) -> Iterator[str]:
 
 FORBIDDEN = re.compile(
     r"(^|/)(\.env(?!\.example$)[^/]*|\.claude|\.git|cdk\.out|\.venv|node_modules|__pycache__"
-    r"|\.cache|\.mypy_cache|\.ruff_cache|\.pytest_cache|eval-results\.json)(/|$)"
+    r"|\.cache|\.mypy_cache|\.ruff_cache|\.pytest_cache|\.hub-sessions|eval-results\.json)(/|$)"
 )
 
 

@@ -1,5 +1,6 @@
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 
 import destroy_cmcd_stack
@@ -10,6 +11,7 @@ OUTPUTS = {
     "BastionHostInstanceId": "i-0demo",
     "InfluxDBEndpoint": "demo.timestream-influxdb.us-east-1.on.aws",
     "InfluxDBSecretArn": "arn:aws:secretsmanager:us-east-1:111122223333:secret:demo",
+    "InfluxDBBucketName": "cmcd-metrics",
     "VideoPlayerURL": "https://d111.cloudfront.net/index.html",
     "S3BucketName": "cmcd-content-111122223333",
     "InfluxDBInstanceId": "influx-demo",
@@ -203,23 +205,24 @@ def run(
     *argv,
     answer="n",
     token_creator=manage_cmcd_stack.create_influxdb_read_token,
-    env_path=Path(".env"),
-    env_example_path=Path(".env.example"),
+    env_path=None,
+    env_example_path=None,
     clock=stopped_clock,
 ):
     ask = FakeAsk(fake_aws, answer)
-    return (
-        manage_cmcd_stack.main(
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        status = manage_cmcd_stack.main(
             list(argv),
             runner=fake_aws,
             ask=ask,
             token_creator=token_creator,
-            env_path=env_path,
-            env_example_path=env_example_path,
+            env_path=env_path or root / ".env",
+            env_example_path=env_example_path or root / ".env.example",
             clock=clock,
-        ),
-        ask,
-    )
+            interactive=True,  # FakeAsk answers like a person at a terminal
+        )
+    return status, ask
 
 
 def test_deploy_with_yes_deploys_the_template_in_us_east_1_and_prints_next_steps(capsys):
@@ -268,6 +271,22 @@ def test_deploy_accepts_cost_bearing_instance_overrides():
     [deploy] = fake_aws.commands("cloudformation deploy")
     assert "InfluxDBInstanceType=db.influx.large" in deploy
     assert "BastionInstanceType=t3.micro" in deploy
+
+
+def test_deploy_writes_the_stack_bucket_output_to_root_env(tmp_path):
+    fake_aws = FakeAws(outputs={**OUTPUTS, "InfluxDBBucketName": "event-specific-cmcd"})
+    env_path = tmp_path / ".env"
+
+    status, _ = run(
+        fake_aws,
+        "deploy",
+        "--yes",
+        env_path=env_path,
+        env_example_path=tmp_path / ".env.example",
+    )
+
+    assert status == 0
+    assert "INFLUXDB_BUCKET=event-specific-cmcd" in env_path.read_text()
 
 
 def test_deploy_prints_the_measured_cloudformation_duration(capsys):
@@ -816,7 +835,7 @@ def test_declined_read_token_creation_does_not_read_secret_or_write_env(tmp_path
 
 
 def test_read_token_creation_updates_root_env_without_echoing_secrets(tmp_path, capsys):
-    fake_aws = FakeAws()
+    fake_aws = FakeAws(outputs={**OUTPUTS, "InfluxDBBucketName": "event-specific-cmcd"})
     env_path = tmp_path / ".env"
     env_path.write_text(
         "AWS_REGION=us-west-2\nINFLUXDB_TOKEN=old-token\nINFLUXDB_TOKEN=older-token\n"
@@ -838,11 +857,12 @@ def test_read_token_creation_updates_root_env_without_echoing_secrets(tmp_path, 
 
     assert status == 0
     assert received[0][0] == "https://localhost:8086"
-    assert received[0][1].bucket == "cmcd-metrics"
+    assert received[0][1].bucket == "event-specific-cmcd"
     content = env_path.read_text()
     assert "AWS_REGION=us-west-2" in content
     assert "INFLUXDB_URL=https://localhost:8086" in content
     assert "INFLUXDB_ORG=cmcd-org" in content
+    assert "INFLUXDB_BUCKET=event-specific-cmcd" in content
     assert "INFLUXDB_TOKEN=read-token-secret" in content
     assert content.count("INFLUXDB_TOKEN=read-token-secret") == 1
     assert "old-token" not in content
@@ -871,3 +891,17 @@ def test_invalid_influxdb_secret_does_not_call_api_or_write_env(tmp_path, capsys
     assert status == 1
     assert not env_path.exists()
     assert "missing required fields" in capsys.readouterr().out
+
+
+def test_without_a_terminal_a_deploy_stops_at_the_prompt_before_any_aws_change(capsys):
+    """T59: nobody can answer, so it refuses at once instead of failing halfway through."""
+    runner = FakeAws()
+
+    status = manage_cmcd_stack.deploy_stack(
+        runner, assume_yes=False, environ={}, ask=lambda _: "y", interactive=False
+    )
+
+    assert status == 1
+    joined = [" ".join(call) for call in runner.calls]
+    assert not any("cloudformation deploy" in call or "s3 " in call for call in joined)
+    assert "no terminal: re-run with --yes" in capsys.readouterr().out.lower()

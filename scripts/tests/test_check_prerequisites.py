@@ -1,3 +1,5 @@
+import subprocess
+
 import check_prerequisites as doctor
 
 
@@ -105,6 +107,39 @@ def test_aws_group_checks_npx_instead_of_a_global_cdk(monkeypatch):
     assert all(item.fix for item in results if not item.passed)
 
 
+def test_aws_credentials_show_only_the_last_four_account_digits(monkeypatch):
+    account_id = "111122223333"
+    monkeypatch.setattr(
+        doctor,
+        "run_command",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            ("aws", "sts"), 0, f"{account_id}\n", ""
+        ),
+    )
+
+    checked = doctor.check_aws_credentials()
+
+    assert checked.passed
+    assert checked.detail == "account ending 3333"
+    assert account_id not in checked.detail
+
+
+def test_docker_daemon_hint_covers_desktop_colima_and_other_services(monkeypatch):
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        doctor,
+        "run_command",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(("docker", "info"), 1, "", ""),
+    )
+
+    checked = doctor.check_docker()
+
+    assert not checked.passed
+    assert "Docker Desktop" in checked.fix
+    assert "colima start" in checked.fix
+    assert "Docker Engine daemon/service" in checked.fix
+
+
 def test_unset_model_is_reported_without_an_aws_call(monkeypatch):
     monkeypatch.delenv("AGENT_MODEL_ID", raising=False)
 
@@ -143,8 +178,6 @@ def test_command_timeout_becomes_a_failed_check_result(monkeypatch):
 
 
 def test_aws_doctor_names_each_failed_probe_line(monkeypatch):
-    import subprocess
-
     import check_prerequisites
 
     stdout = (
@@ -160,3 +193,32 @@ def test_aws_doctor_names_each_failed_probe_line(monkeypatch):
 
     assert not result.passed
     assert result.detail == "FAIL medialive list_channels ToolCallFailed: denied"
+
+
+def test_settings_still_named_hub_are_a_warning_that_names_each_one():
+    """REN1: HUB_* became AGENTIC_IOPS_*; an old name is ignored, silently, without this."""
+    result = doctor.check_renamed_settings({"HUB_TOOL_BUDGET": "8", "AWS_REGION": "us-west-2"})
+
+    assert result.group is doctor.CheckGroup.AWS and not result.passed
+    assert "HUB_TOOL_BUDGET" in result.detail
+    assert "AGENTIC_IOPS_TOOL_BUDGET" in result.fix
+
+
+def test_a_stale_hub_write_tag_says_writes_are_no_longer_tag_scoped():
+    result = doctor.check_renamed_settings({"HUB_WRITE_TAG": "MediaOpsManaged=true"})
+
+    assert not result.passed
+    assert "writes are no longer tag-scoped" in result.detail
+    assert "AGENTIC_IOPS_WRITE_TAG" in result.fix
+
+
+def test_no_old_names_passes():
+    assert doctor.check_renamed_settings({"AGENTIC_IOPS_WRITE_TAG": "k=v"}).passed
+
+
+def test_the_renamed_settings_check_runs_with_the_aws_group(monkeypatch):
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)  # nothing reaches AWS
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.setenv("HUB_LOCAL_MODE", "true")
+    names = [result.name for result in doctor.collect_aws_results()]
+    assert "renamed settings" in names

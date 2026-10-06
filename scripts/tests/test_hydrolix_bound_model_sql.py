@@ -166,11 +166,15 @@ def runtime(monkeypatch):
         budget=importlib.import_module("src.utils.limit_tool_calls"),
         stream=importlib.import_module("src.utils.stream_processor"),
         mcp=FakeHydrolixMcp(),
-        saved=[],
+        writes=[],
     )
     module.real_create_client = module.runner.create_hydrolix_mcp_client
     monkeypatch.setattr(module.runner, "create_hydrolix_mcp_client", lambda *_: module.mcp)
-    monkeypatch.setattr(module.stream, "save_raw_query_result", lambda **i: module.saved.append(i))
+    recorder = importlib.import_module("src.utils.record_executed_queries")
+    monkeypatch.setattr(
+        recorder, "save_query_record", lambda *write: module.writes.append(write) or True
+    )
+    module.records = lambda: module.context.get_request_context().query_records
 
     def ask(subagent: str, model: ScriptedModel, question: str = "How many requests?") -> str:
         monkeypatch.setattr(module.runner, "BedrockModel", lambda **_: model)
@@ -355,7 +359,7 @@ def test_an_injected_query_never_reaches_hydrolix_and_is_not_saved(runtime, sql)
     runtime.ask("hydrolix_agent", model)
 
     assert runtime.mcp.calls == []
-    assert runtime.saved == []
+    assert runtime.records() == [] and runtime.writes == []
     [result] = tool_results(model)
     assert result.startswith("Refused") and TABLE in result
 
@@ -369,7 +373,7 @@ def test_an_allowed_query_runs_and_is_saved(runtime):
 
     assert runtime.ask("hydrolix_agent", model) == "42 requests"
     assert runtime.mcp.calls == [("run_select_query", {"query": ALLOWED_SQL})]
-    assert [item["sql_query"] for item in runtime.saved] == [ALLOWED_SQL]
+    assert [(r.sql, r.status) for r in runtime.records()] == [(ALLOWED_SQL, "success")]
 
 
 def test_table_info_for_another_table_never_reaches_hydrolix(runtime):
@@ -394,7 +398,7 @@ def test_the_tool_call_budget_is_per_request_and_shared_by_the_subagents(runtime
 
     runtime.ask("hydrolix_agent", ScriptedModel(*many_queries))
     assert len(runtime.mcp.calls) == budget
-    assert len(runtime.saved) == budget  # the cancelled calls never show as executed
+    assert len(runtime.records()) == budget  # the cancelled calls never show as executed
 
     # The same request: the next subagent's first call is already over the budget.
     model = ScriptedModel(
@@ -550,14 +554,21 @@ def test_two_requests_served_at_once_each_keep_their_own_context(entrypoint):
 
     async def both():
         return await asyncio.gather(
-            invoke(entrypoint, {"prompt": "a", "prompt_uuid": "uuid-a"}),
-            invoke(entrypoint, {"prompt": "b", "prompt_uuid": "uuid-b"}),
+            invoke(
+                entrypoint, {"prompt": "a", "prompt_uuid": "0b9a0c2e-6a7b-4f2e-9d7e-00000000000a"}
+            ),
+            invoke(
+                entrypoint, {"prompt": "b", "prompt_uuid": "0b9a0c2e-6a7b-4f2e-9d7e-00000000000b"}
+            ),
         )
 
     asyncio.run(both())
 
     first, second = RecordingAgent.built
-    assert (first.seen["prompt_uuid"], second.seen["prompt_uuid"]) == ("uuid-a", "uuid-b")
+    assert (first.seen["prompt_uuid"], second.seen["prompt_uuid"]) == (
+        "0b9a0c2e-6a7b-4f2e-9d7e-00000000000a",
+        "0b9a0c2e-6a7b-4f2e-9d7e-00000000000b",
+    )
     assert first.seen["budget"] is not second.seen["budget"]
     # The orchestrator counts against the same budget its subagents use.
     assert first.seen["budget"] in first.hooks
@@ -596,7 +607,8 @@ def test_the_orchestrator_stream_stops_at_the_request_deadline(entrypoint, monke
 
     assert time.monotonic() - started < 1
     assert "LATE-ANSWER-AFTER-THE-DEADLINE" not in repr(chunks)
-    assert "stopped" in chunks[-1]["error"]
+    # The stopped error, then the request's query records as the last record (T41).
+    assert "stopped" in chunks[-2]["error"] and "query_results" in chunks[-1]
 
 
 # Answers initialize, never answers tools/list, and ignores the end of its stdin, as a

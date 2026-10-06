@@ -1,6 +1,6 @@
-"""The medialive write tools of the domain pack (extend_the_hub.md §2, §4).
+"""The medialive write tools of the domain pack (extend_agentic_iops_streaming.md §2, §4).
 
-Each function takes the inputs the model proposes plus `approved_action`, which the hub's
+Each function takes the inputs the model proposes plus `approved_action`, which the coordinator's
 approval hook injects after the operator approves. The function refuses an approval for
 other inputs, then the adapter checks signature and expiry, acts once and verifies.
 """

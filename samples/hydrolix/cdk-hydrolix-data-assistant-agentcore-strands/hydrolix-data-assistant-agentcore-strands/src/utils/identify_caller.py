@@ -4,8 +4,8 @@ JWT mode (HYDROLIX_JWT_ISSUER, set by the CDK): AgentCore Runtime accepts only b
 tokens from the configured Cognito user pool and app clients. It verifies their signature,
 issuer, expiry and client, and forwards only the Authorization header. The actor is the
 token's `sub`; a `user_id` or `session_id` in the payload is ignored. read_token_actor
-(the hub's rule) re-checks the claims it relies on, so a container whose settings disagree
-with the stack's authorizer fails closed. The signature is AgentCore's to verify: only the
+(agentic-iops-streaming's rule) re-checks the claims it relies on, so a container whose settings
+disagree with the stack's authorizer fails closed. The signature is AgentCore's to verify: only the
 CDK sets HYDROLIX_JWT_ISSUER, and only on a runtime with that authorizer in front.
 
 IAM mode (the default): any IAM principal allowed to invoke is a caller, and nothing names

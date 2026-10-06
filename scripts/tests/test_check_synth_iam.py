@@ -53,8 +53,8 @@ def test_deny_statements_are_ignored():
     assert gate.find_iam_problems(template(deny)) == []
 
 
-LOG_GROUP = "arn:aws:logs:us-west-2:111122223333:log-group:/aws/bedrock-agentcore/runtimes/MediaOpsHubRuntime-*"  # noqa: E501
-MEMORY = {"Fn::GetAtt": ["HubMemory", "MemoryArn"]}
+LOG_GROUP = "arn:aws:logs:us-west-2:111122223333:log-group:/aws/bedrock-agentcore/runtimes/AgenticIopsStreamingRuntime-*"  # noqa: E501
+MEMORY = {"Fn::GetAtt": ["AgenticIopsMemory", "MemoryArn"]}
 
 
 def test_runtime_telemetry_and_memory_writes_on_their_own_resources_pass():
@@ -171,7 +171,7 @@ def test_partial_wildcards_including_question_mark_fail(action):
 
 
 def test_case_variants_of_allowed_actions_keep_their_allowance():
-    log_group = "arn:aws:logs:us-west-2:111122223333:log-group:/aws/bedrock-agentcore/runtimes/MediaOpsHubRuntime-*"  # noqa: E501
+    log_group = "arn:aws:logs:us-west-2:111122223333:log-group:/aws/bedrock-agentcore/runtimes/AgenticIopsStreamingRuntime-*"  # noqa: E501
     statements = (
         allow(["LOGS:PutLogEvents"], [log_group]),
         allow(["CloudWatch:putmetricdata"], "*"),

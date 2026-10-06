@@ -14,14 +14,48 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "agentic-iops-streaming",
     "cmcd-mcp-server",
     "media-ops-contracts",
-    "media-ops-hub",
     "media-ops-video-quality",
     "mediaconnect-mcp-server",
     "medialive-mcp-server",
     "sample-agentic-video-operations",
 ]
+
+[[package]]
+name = "agentic-iops-streaming"
+version = "0.1.0"
+source = { editable = "samples/agentic-iops-streaming" }
+dependencies = [
+    { name = "bedrock-agentcore" },
+    { name = "media-ops-contracts" },
+    { name = "mediaconnect-mcp-server" },
+    { name = "medialive-mcp-server" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "strands-agents" },
+]
+
+[package.optional-dependencies]
+runtime = [
+    { name = "aws-opentelemetry-distro" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aws-opentelemetry-distro", marker = "extra == 'runtime'", specifier = ">=0.10.1,<1" },
+    { name = "bedrock-agentcore", specifier = ">=1.0,<2" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
+    { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
+    { name = "medialive-mcp-server", editable = "samples/medialive" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pydantic-settings", specifier = ">=2.5,<3" },
+    { name = "pyjwt", specifier = ">=2.10,<3" },
+    { name = "strands-agents", specifier = ">=1.0,<2" },
+]
+provides-extras = ["runtime"]
 
 [[package]]
 name = "aiofile"
@@ -1156,40 +1190,6 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.35,<2" },
     { name = "pydantic", specifier = ">=2.9,<3" },
 ]
-
-[[package]]
-name = "media-ops-hub"
-version = "0.1.0"
-source = { editable = "samples/hub" }
-dependencies = [
-    { name = "bedrock-agentcore" },
-    { name = "media-ops-contracts" },
-    { name = "mediaconnect-mcp-server" },
-    { name = "medialive-mcp-server" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyjwt" },
-    { name = "strands-agents" },
-]
-
-[package.optional-dependencies]
-runtime = [
-    { name = "aws-opentelemetry-distro" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aws-opentelemetry-distro", marker = "extra == 'runtime'", specifier = ">=0.10.1,<1" },
-    { name = "bedrock-agentcore", specifier = ">=1.0,<2" },
-    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
-    { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
-    { name = "medialive-mcp-server", editable = "samples/medialive" },
-    { name = "pydantic", specifier = ">=2.9,<3" },
-    { name = "pydantic-settings", specifier = ">=2.5,<3" },
-    { name = "pyjwt", specifier = ">=2.10,<3" },
-    { name = "strands-agents", specifier = ">=1.0,<2" },
-]
-provides-extras = ["runtime"]
 
 [[package]]
 name = "media-ops-video-quality"
@@ -2856,9 +2856,9 @@ name = "sample-agentic-video-operations"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "agentic-iops-streaming" },
     { name = "cmcd-mcp-server" },
     { name = "media-ops-contracts" },
-    { name = "media-ops-hub" },
     { name = "media-ops-video-quality" },
     { name = "mediaconnect-mcp-server" },
     { name = "medialive-mcp-server" },
@@ -2875,9 +2875,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agentic-iops-streaming", editable = "samples/agentic-iops-streaming" },
     { name = "cmcd-mcp-server", editable = "samples/cmcd" },
     { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
-    { name = "media-ops-hub", editable = "samples/hub" },
     { name = "media-ops-video-quality", editable = "packages/media_ops_video_quality" },
     { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
     { name = "medialive-mcp-server", editable = "samples/medialive" },

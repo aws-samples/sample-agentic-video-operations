@@ -1,0 +1,24 @@
+# Used by `docker build -f samples/agentic-iops-streaming/Dockerfile .` (context = repository root).
+# Secrets and local state never enter the context (scripts/list_docker_context.py checks it).
+.env
+**/.env*
+!**/.env.example
+.claude
+**/.claude
+.git
+**/.git
+**/cdk.out
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.cache
+**/.hub-sessions
+**/.mypy_cache
+**/.ruff_cache
+**/eval-results.json
+.kiro
+docs/images
+samples/hydrolix
+samples/agentic-iops-streaming/cdk
+samples/*/tests

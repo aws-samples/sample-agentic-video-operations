@@ -34,6 +34,7 @@ def analyze_buffer_events(
     cmcd_sid: str | None = None,
     threshold_ms: int = 500,
     *,
+    bucket: str,
     query_influxdb: Callable[[str], list[dict[str, Any]]],
 ) -> BufferAnalysis:
     """Return buffer events below the requested threshold."""
@@ -45,7 +46,7 @@ def analyze_buffer_events(
         )
     sid_filter = f' and r["cmcd_sid"] == {quote_flux_string(cmcd_sid)}' if cmcd_sid else ""
     flux = (
-        'from(bucket: "cmcd-metrics")\n'
+        f"from(bucket: {quote_flux_string(bucket)})\n"
         f"  |> range(start: {time_range})\n"
         '  |> filter(fn: (r) => r["_measurement"] == "cloudfront_logs" '
         f'and r["_field"] == "cmcd_bl"{sid_filter})\n'

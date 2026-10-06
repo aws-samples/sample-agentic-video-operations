@@ -9,24 +9,6 @@ import json
 
 from strands import Agent
 
-from src.settings.runtime_settings import load_runtime_settings
-
-from .check_hydrolix_query import QueryRefused, check_select_query
-from .request_context import get_request_context
-from .utils import save_raw_query_result
-
-
-def _would_run(sql_query: str) -> bool:
-    """The model has written the call; save it only if the hooks will let it run."""
-    budget = get_request_context().tool_budget
-    if budget.calls >= budget.limit or budget.seconds_left() <= 0:
-        return False
-    try:
-        check_select_query(sql_query, load_runtime_settings().hydrolix_table)
-    except QueryRefused:
-        return False
-    return True
-
 
 async def process_agent_stream(agent: Agent, query: str, agent_name: str | None = None) -> str:
     """
@@ -36,8 +18,8 @@ async def process_agent_stream(agent: Agent, query: str, agent_name: str | None 
     tool use events and collecting text output. Logs carry metadata only (tool names,
     counts and lengths), never the question, the SQL or the answer (RB10).
 
-    When the run_select_query tool completes, its query is saved to DynamoDB for the
-    browser to show, unless the runtime refuses it (it then never ran).
+    The queries themselves are recorded after they run, with their status, by
+    RecordExecutedQueries (T41), not here when the model writes them.
 
     Args:
         agent: The Strands Agent instance to stream from
@@ -49,11 +31,7 @@ async def process_agent_stream(agent: Agent, query: str, agent_name: str | None 
     """
     collected_text = []
     tool_active = False
-    current_tool_info = {}
-
-    # Get request context for UUID
-    ctx = get_request_context()
-    prompt_uuid = ctx.prompt_uuid
+    current_tool_info: dict[str, str] = {}
 
     async for item in agent.stream_async(query):
         if "event" in item:
@@ -64,54 +42,23 @@ async def process_agent_stream(agent: Agent, query: str, agent_name: str | None 
             ):
                 tool_active = True
                 tool_use = event["contentBlockStart"]["start"]["toolUse"]
-                # Initialize tracking for this tool use
-                current_tool_info = {
-                    "toolUseId": tool_use.get("toolUseId"),
-                    "name": tool_use.get("name"),
-                    "input": "",
-                }
+                current_tool_info = {"name": tool_use.get("name", ""), "input": ""}
                 print(f"🔧 Tool started: {tool_use.get('name')} (agent={agent_name})")
 
             elif "contentBlockStop" in event and tool_active:
                 tool_active = False
-
-                # When tool completes, check if it's run_select_query and print complete info
                 if current_tool_info.get("name") == "run_select_query" and current_tool_info.get(
                     "input"
                 ):
                     try:
-                        # Parse the accumulated input JSON string
-                        input_dict = json.loads(current_tool_info["input"])
-                        complete_tool_info = {
-                            "toolUseId": current_tool_info["toolUseId"],
-                            "name": current_tool_info["name"],
-                            "input": input_dict,
-                        }
-
-                        sql_query = complete_tool_info["input"].get("query", "")
-
+                        sql_query = json.loads(current_tool_info["input"]).get("query", "")
                         print(
-                            f"🔍 run_select_query completed (agent={agent_name}, "
+                            f"🔍 run_select_query written (agent={agent_name}, "
                             f"query length={len(sql_query)})"
                         )
-
-                        # Save query to DynamoDB
-                        if prompt_uuid and sql_query and _would_run(sql_query):
-                            save_raw_query_result(
-                                user_prompt_uuid=prompt_uuid,
-                                user_prompt=query,
-                                sql_query=sql_query,
-                                sql_query_description=f"Query executed by {agent_name or 'agent'}",
-                                result={"toolUseId": complete_tool_info["toolUseId"]},
-                                message="Query captured from stream",
-                                agent_name=agent_name,
-                            )
-
                     except json.JSONDecodeError:
                         length = len(current_tool_info["input"])
                         print(f"⚠️ Could not parse run_select_query input (length={length})")
-
-                # Reset tool info
                 current_tool_info = {}
 
         elif "current_tool_use" in item and tool_active:

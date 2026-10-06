@@ -13,6 +13,7 @@ PLANTED = (
     ".git/HEAD", "app/cdk.out/template.json",
     ".cache/ruff/x", ".mypy_cache/3.13/x.json", ".ruff_cache/x", ".pytest_cache/v/x",
     "eval-results.json", "deep/__pycache__/m.pyc", ".venv/bin/python",
+    ".hub-sessions/actor_x/session.json", ".cache/agentic-iops-sessions/actor_x/session.json",
 )  # fmt: skip
 BUILD_IDS = [build["dockerfile"] for build in DOCKER_BUILDS]
 
@@ -70,3 +71,9 @@ def test_the_matcher_follows_dockerignore_rules():
     assert not context.is_excluded("a/.env.example", rules)
     assert context.is_excluded("cdk.out/x", [(False, context.compile_pattern("cdk.out"))])
     assert not context.is_excluded("a/cdk.out/x", [(False, context.compile_pattern("cdk.out"))])
+
+
+def test_every_planted_path_is_forbidden():
+    """The planted paths are the forbidden list: a planted path the matcher allows proves
+    nothing about the ignore files (T65: session files hold operators' conversations)."""
+    assert context.find_forbidden(list(PLANTED)) == list(PLANTED)

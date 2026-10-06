@@ -1,4 +1,4 @@
-"""The MediaConnect domain pack for the media operations hub."""
+"""The MediaConnect domain pack for agentic-iops-streaming."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
