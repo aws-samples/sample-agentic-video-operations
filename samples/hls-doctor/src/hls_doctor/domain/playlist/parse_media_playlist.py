@@ -155,6 +155,7 @@ def apply_header_tag(
         playlist.skip = SkipTag(
             line_number=line.number,
             skipped_segments=parse_integer(attributes.get("SKIPPED-SEGMENTS")),
+            recently_removed_dateranges="RECENTLY-REMOVED-DATERANGES" in attributes,
         )
     elif line.name == "EXT-X-DATERANGE":
         playlist.dateranges.append(build_daterange(line, attributes))

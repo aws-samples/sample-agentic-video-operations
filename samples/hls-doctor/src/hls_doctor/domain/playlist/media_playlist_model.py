@@ -63,6 +63,7 @@ class ServerControlTag(BaseModel):
 class SkipTag(BaseModel):
     line_number: int
     skipped_segments: int | None = None
+    recently_removed_dateranges: bool = False
 
 
 class MediaSegment(BaseModel):

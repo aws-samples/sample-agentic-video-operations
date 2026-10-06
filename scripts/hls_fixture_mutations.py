@@ -70,7 +70,7 @@ def missing_variant(files: ScenarioFiles) -> ScenarioFiles:
 
 
 def wrong_version(files: ScenarioFiles) -> ScenarioFiles:
-    """The 1080p playlist declares EXT-X-VERSION:3 while using v7 DATERANGE syntax."""
+    """The 1080p playlist declares EXT-X-VERSION:3 while using v6 EXT-X-MAP syntax."""
     mutated = copy.deepcopy(files)
     url = next(url for url in _playlists(mutated) if "/v1080/" in url)
     _edit_body(_exchanges(mutated)[url], "#EXT-X-VERSION:7", "#EXT-X-VERSION:3")

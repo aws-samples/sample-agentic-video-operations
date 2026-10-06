@@ -223,7 +223,7 @@ the incident:
 | `hls_steering_pathway_failure` | VOD: steering pathway B fails while pathway A serves |
 | `hls_clean_vod` | Healthy encrypted VOD; zero errors |
 | `hls_missing_variant` | One ABR variant playlist returns 404 |
-| `hls_wrong_version` | EXT-X-VERSION:3 declared while v7 syntax is in use |
+| `hls_wrong_version` | EXT-X-VERSION:3 declared while v6 EXT-X-MAP syntax is in use |
 | `hls_targetduration_exceeded` | A segment advertises 8.5 s against TARGETDURATION 6 |
 | `hls_broken_map` | The initialization section returns 404 |
 | `hls_expired_key` | The AES-128 key URL returns 403 with an expiry-shaped body |
