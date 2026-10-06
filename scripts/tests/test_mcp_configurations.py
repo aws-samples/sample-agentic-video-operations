@@ -14,7 +14,7 @@ SAMPLES = {
         "srt_packet_loss",
     ),
     "medialive": ("medialive-mcp-server", "serve-medialive", "input_loss"),
-    "hls-doctor": ("hls-doctor", "serve-hls-doctor", "hls_clean_vod"),
+    "hls-doctor": ("hls-doctor", "serve-hls-doctor", "hls_segment_race"),
 }
 
 

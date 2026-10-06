@@ -4,31 +4,38 @@ from pathlib import Path
 from hls_fixture_mutations import MUTATIONS, apply_mutation
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-BASE = json.loads((REPOSITORY_ROOT / "fixtures/hls_clean_vod/http.exchanges.json").read_text())
+FIXTURES = REPOSITORY_ROOT / "fixtures"
+
+
+def load_scenario_files(scenario: str) -> dict:
+    return {
+        path.name.removesuffix(".json"): json.loads(path.read_text())
+        for path in sorted((FIXTURES / scenario).glob("*.json"))
+    }
 
 
 def test_every_mutation_has_a_committed_scenario() -> None:
     for name in MUTATIONS:
-        path = REPOSITORY_ROOT / "fixtures" / name / "http.exchanges.json"
+        path = FIXTURES / name / "http.exchanges.json"
         assert path.is_file(), f"fixtures/{name} is missing; regenerate with mutate_hls_fixtures"
 
 
 def test_mutations_are_deterministic_and_leave_the_base_untouched() -> None:
-    snapshot = json.dumps(BASE, sort_keys=True)
-    for name in MUTATIONS:
-        first = apply_mutation(BASE, name)
-        second = apply_mutation(BASE, name)
+    for name, (base_name, _) in MUTATIONS.items():
+        base = load_scenario_files(base_name)
+        snapshot = json.dumps(base, sort_keys=True)
+        first = apply_mutation(base, name)
+        second = apply_mutation(base, name)
         assert first == second, name
-        assert first != BASE, name
-    assert json.dumps(BASE, sort_keys=True) == snapshot
+        assert first != base, name
+        assert json.dumps(base, sort_keys=True) == snapshot, name
 
 
 def test_committed_scenarios_match_their_mutation() -> None:
-    for name in MUTATIONS:
-        committed = json.loads(
-            (REPOSITORY_ROOT / "fixtures" / name / "http.exchanges.json").read_text()
-        )
-        assert committed == apply_mutation(BASE, name), (
+    for name, (base_name, _) in MUTATIONS.items():
+        committed = load_scenario_files(name)
+        expected = apply_mutation(load_scenario_files(base_name), name)
+        assert committed == expected, (
             f"fixtures/{name} drifted from mutation {name!r};"
             " regenerate with scripts/mutate_hls_fixtures.py"
         )

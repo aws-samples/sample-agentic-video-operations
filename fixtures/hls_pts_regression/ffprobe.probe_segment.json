@@ -1,0 +1,184 @@
+{
+ "https://demo.example/vod/v1080/seg0.m4s": {
+  "streams": [
+   {
+    "index": 0,
+    "codec_type": "video",
+    "codec_name": "h264",
+    "profile": "High",
+    "width": 1920,
+    "height": 1080,
+    "avg_frame_rate": "30000/1001"
+   }
+  ],
+  "packets": [
+   {
+    "codec_type": "video",
+    "pts_time": "0.0000",
+    "dts_time": "0.0000",
+    "flags": "K__"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0333",
+    "dts_time": "0.0333",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0666",
+    "dts_time": "0.0666",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0999",
+    "dts_time": "0.0999",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1332",
+    "dts_time": "0.1332",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1665",
+    "dts_time": "0.1665",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1998",
+    "dts_time": "0.1998",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.2331",
+    "dts_time": "0.2331",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.2664",
+    "dts_time": "0.2664",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.2997",
+    "dts_time": "0.2997",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.3330",
+    "dts_time": "0.3330",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.3663",
+    "dts_time": "0.3663",
+    "flags": "___"
+   }
+  ],
+  "format": {
+   "format_name": "mov,mp4,m4a",
+   "duration": "6.0"
+  }
+ },
+ "https://demo.example/vod/v1080/seg5.m4s": {
+  "streams": [
+   {
+    "index": 0,
+    "codec_type": "video",
+    "codec_name": "h264",
+    "profile": "High",
+    "width": 1920,
+    "height": 1080,
+    "avg_frame_rate": "30000/1001"
+   }
+  ],
+  "packets": [
+   {
+    "codec_type": "video",
+    "pts_time": "0.0000",
+    "dts_time": "0.0000",
+    "flags": "K__"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0333",
+    "dts_time": "0.0333",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0666",
+    "dts_time": "0.0666",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0999",
+    "dts_time": "0.0999",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1332",
+    "dts_time": "0.1332",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1665",
+    "dts_time": "0.1665",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0000",
+    "dts_time": "0.1998",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0333",
+    "dts_time": "0.2331",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0666",
+    "dts_time": "0.2664",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.0999",
+    "dts_time": "0.2997",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1332",
+    "dts_time": "0.3330",
+    "flags": "___"
+   },
+   {
+    "codec_type": "video",
+    "pts_time": "0.1665",
+    "dts_time": "0.3663",
+    "flags": "___"
+   }
+  ],
+  "format": {
+   "format_name": "mov,mp4,m4a",
+   "duration": "6.0"
+  }
+ }
+}

@@ -25,7 +25,7 @@
       ],
       "env": {
         "DEMO": "1",
-        "DEMO_SCENARIO": "hls_clean_vod",
+        "DEMO_SCENARIO": "hls_segment_race",
         "ALLOW_WRITES": "false"
       }
     }

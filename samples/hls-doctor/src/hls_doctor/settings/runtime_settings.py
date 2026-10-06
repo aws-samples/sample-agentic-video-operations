@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from media_ops_contracts.resolve_demo_scenario import resolve_demo_scenario
 
-DEFAULT_DEMO_SCENARIO = "hls_clean_vod"
+DEFAULT_DEMO_SCENARIO = "hls_segment_race"
 
 
 class HlsDoctorSettings(BaseSettings):

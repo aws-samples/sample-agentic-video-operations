@@ -117,7 +117,7 @@ replacing the placeholder path with your clone:
       ],
       "env": {
         "DEMO": "1",
-        "DEMO_SCENARIO": "hls_clean_vod",
+        "DEMO_SCENARIO": "hls_segment_race",
         "ALLOW_WRITES": "false"
       }
     }
@@ -127,13 +127,14 @@ replacing the placeholder path with your clone:
 
 Known-good request, using the `hls-doctor-demo` entry:
 
-> Inspect https://demo.example/vod/master.m3u8 and summarize the findings.
+> Watch https://demo.example/live/master.m3u8 for a few seconds and explain any
+> delivery problems.
 
-Expected result: the agent calls `inspect_stream` and reports a healthy VOD
-presentation with 4 variant playlists, alternate audio, subtitles and
-AES-128 encryption, and zero errors. Switch `DEMO_SCENARIO` to
-`hls_broken_map` and the same request reports an unreachable initialization
-section with the 404 evidence.
+Expected result: the agent calls `watch_playlist` and reports a publication
+race: newly advertised segments returned 404 twice and became available about
+1.3 s later, reproduced on two renditions, with the per-request evidence
+timeline. Switch `DEMO_SCENARIO` to `hls_clean_vod` and ask for an inspection
+instead: a healthy encrypted VOD presentation with zero errors.
 
 ### Deploy to AWS
 
@@ -163,6 +164,12 @@ the incident:
 
 | Scenario | What the inspection finds |
 |---|---|
+| `hls_segment_race` | Live: new segments 404 before becoming available (publication race) |
+| `hls_clean_live` | Healthy live presentation; zero errors |
+| `hls_frozen_playlist` | Live: the 1080p playlist stops advancing |
+| `hls_stale_cdn_manifest` | Live: the CDN serves one stale generation with growing Age |
+| `hls_signaled_gap` | Live: a missing segment correctly declared with EXT-X-GAP |
+| `hls_pts_regression` | VOD: ffprobe shows PTS going backwards mid-segment |
 | `hls_clean_vod` | Healthy encrypted VOD; zero errors |
 | `hls_missing_variant` | One ABR variant playlist returns 404 |
 | `hls_wrong_version` | EXT-X-VERSION:3 declared while v7 syntax is in use |

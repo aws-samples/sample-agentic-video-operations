@@ -8,6 +8,7 @@ from hls_doctor.settings.runtime_settings import (
     load_hls_doctor_settings,
 )
 from hls_doctor.tool_surface.create_inspection_tools import create_inspection_tools
+from hls_doctor.tool_surface.create_probe_tools import create_probe_tools
 
 READ_ONLY = {"readOnlyHint": True}
 
@@ -22,7 +23,7 @@ def build_hls_doctor_server(settings: HlsDoctorSettings | None = None) -> FastMC
             " use the narrower tools to follow a specific lead."
         ),
     )
-    for tool in create_inspection_tools(runtime):
+    for tool in [*create_inspection_tools(runtime), *create_probe_tools(runtime)]:
         server.tool(report_tool_failure(tool), annotations=READ_ONLY)
     return server
 

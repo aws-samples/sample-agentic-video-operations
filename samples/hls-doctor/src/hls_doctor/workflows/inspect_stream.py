@@ -30,15 +30,22 @@ from hls_doctor.domain.versioning.compute_required_version import (
     required_multivariant_version,
 )
 from hls_doctor.workflows.build_probe_context import ProbeContext
+from hls_doctor.workflows.probe_media_samples import media_findings
 from hls_doctor.workflows.probe_segment_samples import (
     SamplePlan,
     plan_default_samples,
     probe_samples,
 )
+from hls_doctor.workflows.run_validator_crosscheck import run_validator_crosscheck
+from hls_doctor.workflows.watch_stream import watch_media_playlists
 
 
 def inspect_stream(
-    entry_url: str, context: ProbeContext, *, redact_all_query: bool = False
+    entry_url: str,
+    context: ProbeContext,
+    *,
+    redact_all_query: bool = False,
+    watch_seconds: float | None = None,
 ) -> InspectionReport:
     require_usable_entry_url(entry_url)
     evidence = EvidenceStore(redact_all_query=redact_all_query)
@@ -51,6 +58,9 @@ def inspect_stream(
             validate_playlists(graph),
             version_findings(graph),
             delivery_findings(evidence, graph, plan),
+            media_findings(graph, context, evidence),
+            run_validator_crosscheck(entry_url, context.validator),
+            *watch_findings(graph, context, evidence, watch_seconds),
         ]
     )
     profile = classify_presentation(graph)
@@ -60,6 +70,19 @@ def inspect_stream(
         findings=findings,
         evidence=evidence,
     )
+
+
+def watch_findings(
+    graph: PresentationGraph,
+    context: ProbeContext,
+    evidence: EvidenceStore,
+    watch_seconds: float | None,
+) -> list[list[Finding]]:
+    if not watch_seconds:
+        return []
+    window = min(watch_seconds, float(context.settings.hls_max_watch_seconds))
+    _, findings = watch_media_playlists(graph, context, evidence, window)
+    return findings
 
 
 def raise_when_entry_transport_failed(

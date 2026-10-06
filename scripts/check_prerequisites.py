@@ -29,6 +29,8 @@ SESSION_MANAGER_INSTALL = (
 class CheckGroup(StrEnum):
     OFFLINE = "offline"
     AWS = "aws"
+    # Optional media tooling: reported, never required, never blocking.
+    MEDIA = "media"
 
 
 @dataclass(frozen=True)
@@ -230,6 +232,16 @@ def collect_offline_results() -> list[CheckResult]:
             CheckGroup.OFFLINE,
         ),
         check_tool("just", "uv tool install rust-just", CheckGroup.OFFLINE),
+        check_tool(
+            "ffprobe",
+            "Install FFmpeg (https://ffmpeg.org/download.html) for HLS Doctor media probes",
+            CheckGroup.MEDIA,
+        ),
+        check_tool(
+            "mediastreamvalidator",
+            "Apple HLS Tools (macOS, optional) add the HLS Doctor conformance crosscheck",
+            CheckGroup.MEDIA,
+        ),
         check_python_version(),
     ]
 
@@ -279,7 +291,9 @@ def print_results(results: list[CheckResult], *, strict_aws: bool) -> None:
     for group in CheckGroup:
         print(f"{group.value.upper()} prerequisites")
         for result in (item for item in results if item.group is group):
-            failed_strictly = group is CheckGroup.OFFLINE or strict_aws
+            failed_strictly = group is CheckGroup.OFFLINE or (
+                strict_aws and group is CheckGroup.AWS
+            )
             mark = "ok  " if result.passed else ("FAIL" if failed_strictly else "WARN")
             print(f"{mark} {result.name:<20} {result.detail}")
             if not result.passed:
