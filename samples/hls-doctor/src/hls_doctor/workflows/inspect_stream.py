@@ -24,6 +24,7 @@ from hls_doctor.domain.report.summarize_presentation import (
 from hls_doctor.domain.scte35.collect_ad_breaks import collect_ad_breaks, validate_ad_breaks
 from hls_doctor.domain.validate.validate_encryption import validate_encryption
 from hls_doctor.domain.validate.validate_interstitials import validate_interstitials
+from hls_doctor.domain.validate.validate_ll_hls import validate_ll_hls
 from hls_doctor.domain.validate.validate_media_playlist import validate_media_playlist
 from hls_doctor.domain.validate.validate_multivariant import validate_multivariant
 from hls_doctor.domain.validate.validate_renditions import validate_renditions
@@ -34,7 +35,9 @@ from hls_doctor.domain.versioning.compute_required_version import (
     required_multivariant_version,
 )
 from hls_doctor.workflows.build_probe_context import ProbeContext
+from hls_doctor.workflows.inspect_content_steering import inspect_content_steering
 from hls_doctor.workflows.inspect_interstitial import inspect_interstitials
+from hls_doctor.workflows.inspect_ll_hls import inspect_ll_hls
 from hls_doctor.workflows.probe_media_samples import media_findings
 from hls_doctor.workflows.probe_segment_samples import (
     SamplePlan,
@@ -67,6 +70,8 @@ def inspect_stream(
             ad_signaling_findings(graph),
             interstitial_findings(graph, context, evidence),
             alignment_findings(graph),
+            ll_hls_findings(graph, context, evidence),
+            inspect_content_steering(graph, context, evidence),
             run_validator_crosscheck(entry_url, context.validator),
             *watch_findings(graph, context, evidence, watch_seconds),
         ]
@@ -95,6 +100,17 @@ def interstitial_findings(
     graph: PresentationGraph, context: ProbeContext, evidence: EvidenceStore
 ) -> list[Finding]:
     return inspect_interstitials(graph, context, evidence)
+
+
+def ll_hls_findings(
+    graph: PresentationGraph, context: ProbeContext, evidence: EvidenceStore
+) -> list[Finding]:
+    findings: list[Finding] = []
+    for parsed in graph.media_playlists():
+        if parsed.media is not None:
+            findings.extend(validate_ll_hls(parsed.url, parsed.media))
+    findings.extend(inspect_ll_hls(graph, context, evidence))
+    return findings
 
 
 def alignment_findings(graph: PresentationGraph) -> list[Finding]:

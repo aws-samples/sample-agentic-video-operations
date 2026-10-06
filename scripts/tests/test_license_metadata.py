@@ -15,6 +15,7 @@ PYTHON_MANIFESTS = (
     "samples/medialive/pyproject.toml",
 )
 JAVASCRIPT_MANIFESTS = (
+    "samples/hls-doctor/player-probe/package.json",
     "samples/hub/cdk/package.json",
     "samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/package.json",
     "samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/package.json",

@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 
 from hls_doctor.adapters.applevalidator.validator_report import ValidatorReport
 from hls_doctor.adapters.ffprobe.probe_report import SegmentProbe
+from hls_doctor.adapters.hlsjs.player_probe_report import PlayerProbeReport
+from hls_doctor.adapters.hlsjs.run_player_probe import run_player_probe as run_harness
 from hls_doctor.adapters.http.classify_http_error import require_usable_entry_url
 from hls_doctor.domain.correlate.finding_model import Finding
 from hls_doctor.settings.runtime_settings import HlsDoctorSettings
@@ -67,4 +69,12 @@ def create_probe_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
             )
         return context.validator(resolve_default_url(url, settings))
 
-    return [watch_playlist, probe_segment, run_apple_validator]
+    def run_player_probe(url: str, duration_seconds: float = 10) -> PlayerProbeReport:
+        """Play the stream headlessly with hls.js and report its events and errors.
+
+        Optional: needs Node.js 20+ and `npm install` in samples/hls-doctor/player-probe.
+        """
+        require_usable_entry_url(url)
+        return run_harness(url, duration_seconds)
+
+    return [watch_playlist, probe_segment, run_apple_validator, run_player_probe]

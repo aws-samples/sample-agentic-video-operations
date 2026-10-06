@@ -1,0 +1,12 @@
+{
+  "name": "hls-doctor-player-probe",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Optional hls.js behavioral probe for HLS Doctor: runs a real player session headlessly and reports its events and network activity.",
+  "license": "MIT-0",
+  "type": "module",
+  "dependencies": {
+    "hls.js": "^1.6.16",
+    "playwright-core": "^1.49.0"
+  }
+}

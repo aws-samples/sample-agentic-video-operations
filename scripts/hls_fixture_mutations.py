@@ -378,6 +378,71 @@ def variant_lag(files: ScenarioFiles) -> ScenarioFiles:
     return mutated
 
 
+def llhls_blocking_reload(files: ScenarioFiles) -> ScenarioFiles:
+    """The _HLS_msn blocking reload answers with a stale playlist generation."""
+    mutated = copy.deepcopy(files)
+    for prefix in ("v1080", "v720"):
+        stale = dict(_exchanges(mutated)[f"https://demo.example/llhls/{prefix}/prog.m3u8"])
+        _exchanges(mutated)[f"https://demo.example/llhls/{prefix}/prog.m3u8?_HLS_msn=304"] = stale
+    return mutated
+
+
+def stale_rendition_report(files: ScenarioFiles) -> ScenarioFiles:
+    """RENDITION-REPORT lags the actual rendition by more than three segments."""
+    mutated = copy.deepcopy(files)
+    for prefix in ("v1080", "v720"):
+        url = f"https://demo.example/llhls/{prefix}/prog.m3u8"
+        entry = _exchanges(mutated)[url]
+        entry["body"] = entry["body"].replace("LAST-MSN=303", "LAST-MSN=299")
+    return mutated
+
+
+def preload_hint_404(files: ScenarioFiles) -> ScenarioFiles:
+    """The hinted part keeps returning 404 for the whole probe window."""
+    mutated = copy.deepcopy(files)
+    for prefix in ("v1080", "v720"):
+        url = f"https://demo.example/llhls/{prefix}/seg304.part2.m4s"
+        _not_found(_exchanges(mutated)[url])
+    return mutated
+
+
+def steering_pathway_failure(files: ScenarioFiles) -> ScenarioFiles:
+    """Pathway B's representative variant fails while pathway A stays healthy."""
+    mutated = copy.deepcopy(files)
+    master_url = "https://demo.example/vod/master.m3u8"
+    master = _exchanges(mutated)[master_url]
+    body = master["body"].replace(
+        "#EXT-X-INDEPENDENT-SEGMENTS",
+        "#EXT-X-INDEPENDENT-SEGMENTS\n"
+        '#EXT-X-CONTENT-STEERING:SERVER-URI="steering.json",PATHWAY-ID="A"',
+    )
+    body = body.replace("#EXT-X-STREAM-INF:", '#EXT-X-STREAM-INF:PATHWAY-ID="A",')
+    body += (
+        '#EXT-X-STREAM-INF:PATHWAY-ID="B",BANDWIDTH=6000000,'
+        'CODECS="avc1.640028,mp4a.40.2",RESOLUTION=1920x1080,FRAME-RATE=29.970\n'
+        "b/v1080/prog.m3u8\n"
+    )
+    master["body"] = body
+    _exchanges(mutated)["https://demo.example/vod/steering.json"] = {
+        "status": 200,
+        "headers": {"content-type": "application/json", "server": "demo-cdn"},
+        "body": json.dumps(
+            {
+                "VERSION": 1,
+                "TTL": 300,
+                "RELOAD-URI": "steering.json",
+                "PATHWAY-PRIORITY": ["A", "B"],
+            }
+        ),
+    }
+    _exchanges(mutated)["https://demo.example/vod/b/v1080/prog.m3u8"] = {
+        "status": 503,
+        "headers": {"content-type": "text/html", "server": "demo-cdn"},
+        "body": "<html><body><h1>503 Service Unavailable</h1></body></html>",
+    }
+    return mutated
+
+
 MUTATIONS: dict[str, tuple[str, Mutation]] = {
     "hls_missing_variant": ("hls_clean_vod", missing_variant),
     "hls_wrong_version": ("hls_clean_vod", wrong_version),
@@ -398,6 +463,10 @@ MUTATIONS: dict[str, tuple[str, Mutation]] = {
     "hls_interstitial_bad_asset": ("hls_clean_live", interstitial_bad_asset),
     "hls_interstitial_rendition_mismatch": ("hls_clean_live", interstitial_rendition_mismatch),
     "hls_variant_lag": ("hls_clean_live", variant_lag),
+    "hls_llhls_blocking_reload": ("hls_clean_llhls", llhls_blocking_reload),
+    "hls_stale_rendition_report": ("hls_clean_llhls", stale_rendition_report),
+    "hls_preload_hint_404": ("hls_clean_llhls", preload_hint_404),
+    "hls_steering_pathway_failure": ("hls_clean_vod", steering_pathway_failure),
 }
 
 

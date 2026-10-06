@@ -37,6 +37,11 @@ with sanitized recordings when those are available.
 | `hls_interstitial_bad_asset` | `hls_clean_live` with an interstitial asset declaring an incompatible codec (mutation `hls_interstitial_bad_asset`) | hls-doctor |
 | `hls_interstitial_rendition_mismatch` | `hls_clean_live` with the interstitial signaled only in the video renditions (mutation `hls_interstitial_rendition_mismatch`) | hls-doctor |
 | `hls_variant_lag` | `hls_clean_live` with the 720p variant two segments behind its peers (mutation `hls_variant_lag`) | hls-doctor |
+| `hls_clean_llhls` | A healthy Low-Latency HLS presentation: parts, blocking reload, preload hints and rendition reports | hls-doctor |
+| `hls_llhls_blocking_reload` | `hls_clean_llhls` where the _HLS_msn blocking reload answers with a stale generation (mutation `hls_llhls_blocking_reload`) | hls-doctor |
+| `hls_stale_rendition_report` | `hls_clean_llhls` with RENDITION-REPORT lagging the actual rendition by four segments (mutation `hls_stale_rendition_report`) | hls-doctor |
+| `hls_preload_hint_404` | `hls_clean_llhls` where the hinted part keeps returning 404 (mutation `hls_preload_hint_404`) | hls-doctor |
+| `hls_steering_pathway_failure` | `hls_clean_vod` with Content Steering where pathway B fails and pathway A stays healthy (mutation `hls_steering_pathway_failure`) | hls-doctor |
 
 The `hls_*` scenarios replay HTTP exchanges (`http.exchanges.json`) instead of AWS
 responses: each URL maps to a recorded response or an ordered `sequence`. The clean

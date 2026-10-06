@@ -161,6 +161,9 @@ verification.
 | `decode_scte35` | read | Decode a base64 or hex SCTE-35 payload into splice structures |
 | `compare_rendition_alignment` | read | Sequence, program-clock and event alignment across renditions |
 | `inspect_interstitial` | read | Validate and probe interstitial events, asset lists and assets |
+| `inspect_ll_hls` | read | LL-HLS probes: blocking reload, rendition reports, preload hints |
+| `inspect_content_steering` | read | Steering manifest, pathway validation, per-pathway health |
+| `run_player_probe` | read | Optional hls.js headless session (needs Node.js 20+ and npm install) |
 
 ## Demo Scenarios
 
@@ -184,6 +187,11 @@ the incident:
 | `hls_interstitial_bad_asset` | Live: the interstitial asset declares an undecodable codec |
 | `hls_interstitial_rendition_mismatch` | Live: the interstitial is missing from the audio rendition |
 | `hls_variant_lag` | Live: one variant publishes two segments behind its peers |
+| `hls_clean_llhls` | Healthy Low-Latency HLS: parts, blocking reload, hints, reports |
+| `hls_llhls_blocking_reload` | LL-HLS: the _HLS_msn blocking reload answers with a stale generation |
+| `hls_stale_rendition_report` | LL-HLS: RENDITION-REPORT lags the actual rendition |
+| `hls_preload_hint_404` | LL-HLS: the hinted part keeps returning 404 |
+| `hls_steering_pathway_failure` | VOD: steering pathway B fails while pathway A serves |
 | `hls_clean_vod` | Healthy encrypted VOD; zero errors |
 | `hls_missing_variant` | One ABR variant playlist returns 404 |
 | `hls_wrong_version` | EXT-X-VERSION:3 declared while v7 syntax is in use |
@@ -195,6 +203,14 @@ the incident:
 The scenarios are derived from the clean base by the deterministic mutations
 in `scripts/hls_fixture_mutations.py`; `scripts/record_hls_fixtures.py`
 records new bases from a live stream with hosts and query tokens redacted.
+
+## Player Probe (optional)
+
+`run_player_probe` plays the stream with [hls.js](https://github.com/video-dev/hls.js)
+in headless Chromium and reports the player's events, errors and network
+requests. It runs when Node.js 20+ is installed and `npm install` has been run
+in `samples/hls-doctor/player-probe`; without them the tool reports exactly
+what is missing, and every other check works normally.
 
 ## Teardown
 

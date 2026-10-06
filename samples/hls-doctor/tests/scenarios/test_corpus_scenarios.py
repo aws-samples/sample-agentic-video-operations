@@ -7,6 +7,7 @@ from hls_doctor.workflows.inspect_stream import inspect_stream
 
 VOD_ENTRY = "https://demo.example/vod/master.m3u8"
 LIVE_ENTRY = "https://demo.example/live/master.m3u8"
+LLHLS_ENTRY = "https://demo.example/llhls/master.m3u8"
 
 # scenario -> (entry url, watch seconds, expected status, expected finding title)
 EXPECTATIONS = {
@@ -53,6 +54,15 @@ EXPECTATIONS = {
         LIVE_ENTRY, 0, "degraded", "Date-range events are missing from a rendition",
     ),
     "hls_variant_lag": (LIVE_ENTRY, 0, "at-risk", "One variant lags its peers at the live edge"),
+    "hls_clean_llhls": (LLHLS_ENTRY, 0, "healthy", None),
+    "hls_llhls_blocking_reload": (
+        LLHLS_ENTRY, 0, "degraded", "Blocking playlist reload returns a stale generation",
+    ),
+    "hls_stale_rendition_report": (LLHLS_ENTRY, 0, "at-risk", "Stale rendition report"),
+    "hls_preload_hint_404": (LLHLS_ENTRY, 0, "at-risk", "PRELOAD-HINT never resolves"),
+    "hls_steering_pathway_failure": (
+        VOD_ENTRY, 0, "degraded", "Steering pathway 'B' is failing while A serves",
+    ),
 }  # fmt: skip
 
 

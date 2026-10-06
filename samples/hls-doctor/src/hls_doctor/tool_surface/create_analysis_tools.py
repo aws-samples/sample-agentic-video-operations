@@ -16,7 +16,11 @@ from hls_doctor.domain.scte35.splice_model import SpliceInfoSection
 from hls_doctor.settings.runtime_settings import HlsDoctorSettings
 from hls_doctor.tool_surface.create_inspection_tools import resolve_default_url
 from hls_doctor.workflows.build_probe_context import build_probe_context
+from hls_doctor.workflows.inspect_content_steering import (
+    inspect_content_steering as run_steering_inspection,
+)
 from hls_doctor.workflows.inspect_interstitial import inspect_interstitials
+from hls_doctor.workflows.inspect_ll_hls import inspect_ll_hls as run_ll_hls_inspection
 from media_ops_contracts.domain_pack import ReadTool
 
 
@@ -63,7 +67,31 @@ def create_analysis_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
         findings = correlate_findings([inspect_interstitials(graph, context, evidence)])
         return InterstitialReport(entry_url=entry, findings=findings)
 
-    return [decode_scte35, compare_rendition_alignment, inspect_interstitial]
+    def inspect_ll_hls(url: str = "") -> InterstitialReport:
+        """Probe LL-HLS behavior: blocking reload, rendition reports, preload hints."""
+        entry = resolve_default_url(url, settings)
+        context = build_probe_context(settings)
+        evidence = EvidenceStore()
+        graph = build_presentation_graph(entry, context.fetch, evidence)
+        findings = correlate_findings([run_ll_hls_inspection(graph, context, evidence)])
+        return InterstitialReport(entry_url=entry, findings=findings)
+
+    def inspect_content_steering(url: str = "") -> InterstitialReport:
+        """Fetch the steering manifest, validate pathways, probe each pathway once."""
+        entry = resolve_default_url(url, settings)
+        context = build_probe_context(settings)
+        evidence = EvidenceStore()
+        graph = build_presentation_graph(entry, context.fetch, evidence)
+        findings = correlate_findings([run_steering_inspection(graph, context, evidence)])
+        return InterstitialReport(entry_url=entry, findings=findings)
+
+    return [
+        decode_scte35,
+        compare_rendition_alignment,
+        inspect_interstitial,
+        inspect_ll_hls,
+        inspect_content_steering,
+    ]
 
 
 def role_of(graph: PresentationGraph, url: str) -> str:
