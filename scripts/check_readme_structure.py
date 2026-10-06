@@ -15,7 +15,7 @@ REQUIRED_HEADINGS = [
     "Teardown",
     "Known Limitations",
 ]
-CONVERTED_READMES: list[str] = []
+CONVERTED_READMES: list[str] = ["cmcd-mcp-server/README.md"]
 LINK_PATTERN = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 
 

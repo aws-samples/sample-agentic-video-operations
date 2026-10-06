@@ -81,10 +81,10 @@ Resources:
   # S3 Bucket Policy for CloudFront and Account Access
   ContentBucketPolicy:
     Type: AWS::S3::BucketPolicy
-    Version: '2012-10-17'
     Properties:
       Bucket: !Ref ContentBucket
       PolicyDocument:
+        Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
@@ -504,7 +504,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub '${AWS::StackName}-secret-rotation'
-      Runtime: python3.9
+      Runtime: python3.13
       Handler: index.lambda_handler
       Code:
         ZipFile: |
@@ -518,7 +518,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub '${AWS::StackName}-update-secret'
-      Runtime: python3.9
+      Runtime: python3.13
       Handler: index.lambda_handler
       Code:
         ZipFile: !Sub |
@@ -678,7 +678,7 @@ Resources:
     Type: AWS::EC2::Instance
     DependsOn: InfluxDBInstance
     Properties:
-      ImageId: ami-09e6f87a47903347c # Amazon Linux 2023 AMI (update for your region)
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
       InstanceType: t3.micro
       SubnetId: !Ref PublicSubnet
       SecurityGroupIds:

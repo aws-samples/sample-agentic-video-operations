@@ -1,0 +1,20 @@
+[
+  {
+    "_time": "2026-10-05T12:00:00Z",
+    "_field": "cmcd_br",
+    "_value": 4200,
+    "cmcd_sid": "demo-session-west"
+  },
+  {
+    "_time": "2026-10-05T12:00:02Z",
+    "_field": "cmcd_bl",
+    "_value": 80,
+    "cmcd_sid": "demo-session-west"
+  },
+  {
+    "_time": "2026-10-05T12:00:04Z",
+    "_field": "cmcd_bl",
+    "_value": 0,
+    "cmcd_sid": "demo-session-west"
+  }
+]

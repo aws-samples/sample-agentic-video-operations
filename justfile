@@ -22,7 +22,7 @@ run sample *args:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{ sample }}" in
-      cmcd)         just _pending cmcd 1 ;;
+      cmcd)         uv run --package cmcd-mcp-server serve-cmcd {{ args }} ;;
       mediaconnect) just _pending mediaconnect 2 ;;
       medialive)    just _pending medialive 3 ;;
       langchain)    just _pending langchain 4 ;;
@@ -38,7 +38,8 @@ test sample="":
     case "{{ sample }}" in
       "")        uv run pytest ;;
       contracts) uv run pytest media_ops_contracts/tests ;;
-      cmcd|mediaconnect|medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
+      cmcd)      uv run pytest cmcd-mcp-server/tests ;;
+      mediaconnect|medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
       *)         just _unknown "{{ sample }}" ;;
     esac
 
@@ -69,7 +70,8 @@ deploy sample *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{ sample }}" in
-      cmcd|mediaconnect|medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
+      cmcd) uv run python scripts/manage_cmcd_stack.py deploy {{ flags }} ;;
+      mediaconnect|medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
       *) just _unknown "{{ sample }}" ;;
     esac
 
@@ -79,7 +81,8 @@ destroy sample *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{ sample }}" in
-      cmcd|mediaconnect|medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
+      cmcd) uv run python scripts/manage_cmcd_stack.py destroy {{ flags }} ;;
+      mediaconnect|medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
       *) just _unknown "{{ sample }}" ;;
     esac
 

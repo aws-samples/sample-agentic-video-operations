@@ -1,0 +1,13 @@
+{
+  "sequence": [
+    [
+      {"cmcd_sid": "demo-session-west"},
+      {"cmcd_sid": "demo-session-east"},
+      {"cmcd_sid": "demo-session-west"}
+    ],
+    [
+      {"cmcd_cid": "demo-content"},
+      {"cmcd_cid": "demo-live-event"}
+    ]
+  ]
+}

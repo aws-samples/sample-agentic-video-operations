@@ -1,0 +1,22 @@
+[project]
+name = "cmcd-mcp-server"
+version = "0.1.0"
+description = "Read-only MCP tools for CMCD viewer quality-of-experience analysis."
+requires-python = ">=3.12"
+dependencies = [
+  "fastmcp>=3.2,<4",
+  "influxdb-client>=1.48,<2",
+  "media-ops-contracts",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.6,<3",
+]
+
+[project.scripts]
+serve-cmcd = "cmcd_mcp.entrypoints.serve_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "cmcd_mcp"

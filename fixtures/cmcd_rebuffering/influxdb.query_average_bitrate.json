@@ -1,0 +1,9 @@
+[
+  {
+    "_time": "2026-10-05T12:00:00Z",
+    "_field": "cmcd_br",
+    "_value": 4200.0,
+    "cmcd_sid": "demo-session-west",
+    "cmcd_cid": "demo-content"
+  }
+]

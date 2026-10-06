@@ -1,0 +1,42 @@
+[
+  {
+    "_time": "2026-10-05T12:00:00Z",
+    "_field": "cmcd_bl",
+    "_value": 1800,
+    "cmcd_sid": "demo-session-east",
+    "edge_location": "demo-edge-east",
+    "cdn": "other-demo-cdn"
+  },
+  {
+    "_time": "2026-10-05T12:00:01Z",
+    "_field": "cmcd_bl",
+    "_value": 1600,
+    "cmcd_sid": "demo-session-west",
+    "edge_location": "demo-edge-west",
+    "cdn": "demo-cdn"
+  },
+  {
+    "_time": "2026-10-05T12:00:02Z",
+    "_field": "cmcd_bl",
+    "_value": 320,
+    "cmcd_sid": "demo-session-west",
+    "edge_location": "demo-edge-west",
+    "cdn": "demo-cdn"
+  },
+  {
+    "_time": "2026-10-05T12:00:03Z",
+    "_field": "cmcd_bl",
+    "_value": 80,
+    "cmcd_sid": "demo-session-west",
+    "edge_location": "demo-edge-west",
+    "cdn": "demo-cdn"
+  },
+  {
+    "_time": "2026-10-05T12:00:04Z",
+    "_field": "cmcd_bl",
+    "_value": 0,
+    "cmcd_sid": "demo-session-west",
+    "edge_location": "demo-edge-west",
+    "cdn": "demo-cdn"
+  }
+]

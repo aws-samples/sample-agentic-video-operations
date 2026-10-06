@@ -33,10 +33,11 @@ operational safety win over both.
 2. Run one sample locally: `just run <key>`
 3. Run one sample's offline tests: `just test <key>`
 4. Replay the cross-service demo without AWS: `just demo`
-5. Run the quality gate: `just lint && just test && just eval && just docs-check`
+5. Run the quality gate: `just lint && just test && just docs-check`
 
 Run `just` with no arguments to list all recipes. Deployments create billable
 AWS resources; use `just destroy <key>` when finished.
+`just eval` joins the gate in step 4a, when the first eval scenarios exist.
 For changed deploy material, also run `cdk synth` or `cfn-lint`, as applicable.
 
 ## Change Rules

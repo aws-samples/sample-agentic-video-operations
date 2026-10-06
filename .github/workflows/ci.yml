@@ -34,6 +34,18 @@ jobs:
       # `just eval` joins in step 4a, when the first eval scenarios exist.
       - run: just docs-check
 
+  cloudformation-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.8.4"
+      # Add each sample's CloudFormation template here when the sample converts.
+      - run: uvx cfn-lint==1.57.1 --non-zero-exit-code error cmcd-mcp-server/cloudfront-cmcd-kinesis.yaml
+
   cdk-synth:
     runs-on: ubuntu-latest
     strategy:
