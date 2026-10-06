@@ -13,7 +13,6 @@ class InspectOptions(BaseModel):
     watch_seconds: float = 0
     output: str = "text"
     report_path: str | None = None
-    redact_query_params: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,10 +34,6 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("--timeout", type=float, metavar="SECONDS", help="Request timeout")
     inspect.add_argument("--output", choices=["text", "json"], default="text")
     inspect.add_argument("--report", metavar="PATH", help="Also write the JSON report here")
-    inspect.add_argument(
-        "--redact-query-params", action="store_true",
-        help="Redact every query value in reports, not just credential-shaped ones",
-    )  # fmt: skip
     return parser
 
 
@@ -56,5 +51,4 @@ def parse_inspect_options(argv: list[str] | None = None) -> InspectOptions:
         timeout_seconds=arguments.timeout,
         output=arguments.output,
         report_path=arguments.report,
-        redact_query_params=arguments.redact_query_params,
     )

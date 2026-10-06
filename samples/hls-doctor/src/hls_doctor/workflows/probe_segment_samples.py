@@ -65,10 +65,11 @@ def probe_samples(
         range_header = SEGMENT_RANGE_HEADER if plan.resource_types[url] == "segment" else None
         return fetch(url, range_header=range_header)
 
+    urls = list(plan.resource_types)
     if not concurrent:
-        for url in plan.resource_types:
-            evidence.record_exchange(probe(url))
+        for url in urls:
+            evidence.record_exchange(probe(url), plan.resource_types[url])
         return
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_PROBES) as executor:
-        for exchange in executor.map(probe, list(plan.resource_types)):
-            evidence.record_exchange(exchange)
+        for url, exchange in zip(urls, executor.map(probe, urls), strict=True):
+            evidence.record_exchange(exchange, plan.resource_types[url])

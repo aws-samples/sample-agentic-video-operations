@@ -52,11 +52,10 @@ def inspect_stream(
     entry_url: str,
     context: ProbeContext,
     *,
-    redact_all_query: bool = False,
     watch_seconds: float | None = None,
 ) -> InspectionReport:
     require_usable_entry_url(entry_url)
-    evidence = EvidenceStore(redact_all_query=redact_all_query)
+    evidence = EvidenceStore()
     graph = build_presentation_graph(entry_url, context.fetch, evidence)
     raise_when_entry_transport_failed(entry_url, graph, evidence)
     plan = plan_default_samples(graph)
@@ -184,14 +183,9 @@ def delivery_findings(
     evidence: EvidenceStore, graph: PresentationGraph, sample_plan: SamplePlan
 ) -> list[Finding]:
     resource_types: dict[str, str] = {
-        redact_url(url, redact_all_query=evidence.redact_all_query): node.node_type
-        for url, node in graph.nodes.items()
+        redact_url(url): node.node_type for url, node in graph.nodes.items()
     }
     for url, resource_type in sample_plan.resource_types.items():
-        resource_types.setdefault(
-            redact_url(url, redact_all_query=evidence.redact_all_query), resource_type
-        )
-    gap_urls = {
-        redact_url(url, redact_all_query=evidence.redact_all_query) for url in sample_plan.gap_urls
-    }
+        resource_types.setdefault(redact_url(url), resource_type)
+    gap_urls = {redact_url(url) for url in sample_plan.gap_urls}
     return derive_unreachable_findings(evidence, resource_types, gap_urls)

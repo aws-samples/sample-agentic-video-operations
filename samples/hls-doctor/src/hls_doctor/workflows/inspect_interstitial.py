@@ -10,6 +10,7 @@ from hls_doctor.domain.correlate.severity_model import Confidence, Severity
 from hls_doctor.domain.evidence.evidence_store import EvidenceStore
 from hls_doctor.domain.graph.build_presentation_graph import PresentationGraph
 from hls_doctor.domain.playlist.resolve_uri import resolve_uri
+from hls_doctor.domain.report.quote_untrusted import quote_untrusted
 from hls_doctor.domain.validate.validate_interstitials import interstitial_dateranges
 from hls_doctor.workflows.build_probe_context import ProbeContext
 
@@ -100,7 +101,7 @@ def read_asset_list(event: InterstitialEvent, url: str, body: str, findings: lis
                 [
                     observe(
                         f"The response is not a JSON object with an ASSETS array"
-                        f" (first bytes: {body[:60]!r})"
+                        f" (first bytes: {quote_untrusted(body, 60)!r})"
                     )
                 ],
                 "The asset list must follow the X-ASSET-LIST JSON format.",
@@ -182,7 +183,7 @@ def check_asset_compatibility(
             [
                 observe(
                     f"Asset of event {event.event_id!r} does not start with #EXTM3U"
-                    f" (first bytes: {body[:40]!r})"
+                    f" (first bytes: {quote_untrusted(body, 40)!r})"
                 )
             ],
             "X-ASSET-URI and asset-list URIs must reference HLS assets.",

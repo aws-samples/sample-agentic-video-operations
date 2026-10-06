@@ -6,6 +6,18 @@ from typing import Protocol
 
 from pydantic import BaseModel, Field
 
+from hls_doctor.adapters.http.redact_url import redact_url
+
+# Response headers that may appear in evidence; everything else is dropped.
+# Set-Cookie, Authorization, Cookie and x-amz-* never pass this list.
+HEADER_ALLOWLIST = frozenset(
+    {
+        "accept-ranges", "age", "cache-control", "content-encoding", "content-length",
+        "content-range", "content-type", "date", "etag", "expires", "last-modified",
+        "location", "server", "vary", "via", "x-cache", "cf-cache-status",
+    }
+)  # fmt: skip
+
 
 class HttpExchange(BaseModel):
     """What one request observed. A 404 here is evidence, never an exception."""
@@ -33,25 +45,38 @@ class HttpExchange(BaseModel):
         lowered = {key.lower(): value for key, value in self.headers.items()}
         return lowered.get(name.lower())
 
-    def with_preview(self, preview_bytes: int = 1024) -> "HttpExchange":
-        """A copy safe to store or return: body cut to a preview, hash retained."""
-        updates: dict[str, object] = {}
+    def sanitized(self, preview_bytes: int = 1024, *, drop_body: bool = False) -> "HttpExchange":
+        """The only form that may leave the process: redacted URLs, allowlisted
+        headers, and a hashed body preview (or no body at all for key material)."""
+        updates: dict[str, object] = {
+            "url": redact_url(self.url),
+            "requested_url": redact_url(self.requested_url),
+            "redirects": [redact_url(hop) for hop in self.redirects],
+            "headers": {
+                name: value
+                for name, value in self.headers.items()
+                if name.lower() in HEADER_ALLOWLIST
+            },
+        }
+        updates.update(self.body_policy(0 if drop_body else preview_bytes))
+        return self.model_copy(update=updates)
+
+    def body_policy(self, preview_bytes: int) -> dict[str, object]:
         if self.body_text is not None and len(self.body_text) > preview_bytes:
-            digest = hashlib.sha256(self.body_text.encode()).hexdigest()
-            updates = {
-                "body_text": self.body_text[:preview_bytes],
+            return {
+                "body_text": self.body_text[:preview_bytes] or None,
                 "body_truncated": True,
-                "body_sha256": digest,
+                "body_sha256": hashlib.sha256(self.body_text.encode()).hexdigest(),
             }
-        elif self.body_bytes_b64 is not None:
+        if self.body_bytes_b64 is not None:
             raw = base64.b64decode(self.body_bytes_b64)
             if len(raw) > preview_bytes:
-                updates = {
-                    "body_bytes_b64": base64.b64encode(raw[:preview_bytes]).decode(),
+                return {
+                    "body_bytes_b64": base64.b64encode(raw[:preview_bytes]).decode() or None,
                     "body_truncated": True,
                     "body_sha256": hashlib.sha256(raw).hexdigest(),
                 }
-        return self.model_copy(update=updates) if updates else self
+        return {}
 
 
 class FetchUrl(Protocol):

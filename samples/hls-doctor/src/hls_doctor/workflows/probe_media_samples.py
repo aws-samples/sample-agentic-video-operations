@@ -52,7 +52,13 @@ def run_media_probe(url: str, probe: ProbeSegment, context: ProbeContext) -> Seg
         return probe(url, with_packets=True)
     exchange = context.fetch(url)
     if not exchange.ok or exchange.body_bytes_b64 is None:
-        return probe(url, with_packets=True)
+        return SegmentProbe(
+            url=url,
+            available=False,
+            unavailable_reason=f"fetch failed (HTTP {exchange.status})"
+            if exchange.transport_error is None
+            else f"fetch failed ({exchange.transport_error})",
+        )
     with tempfile.NamedTemporaryFile(prefix="hls-doctor-media-", suffix=".bin") as handle:
         handle.write(base64.b64decode(exchange.body_bytes_b64))
         handle.flush()

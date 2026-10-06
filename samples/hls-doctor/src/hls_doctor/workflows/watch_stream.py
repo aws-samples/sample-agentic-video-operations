@@ -31,11 +31,10 @@ def watch_stream(
     context: ProbeContext,
     *,
     duration_seconds: float | None = None,
-    redact_all_query: bool = False,
 ) -> WatchReport:
     """Observe the live playlists over a bounded window (spec §9)."""
     require_usable_entry_url(entry_url)
-    evidence = EvidenceStore(redact_all_query=redact_all_query)
+    evidence = EvidenceStore()
     graph = build_presentation_graph(entry_url, context.fetch, evidence)
     watches, findings = watch_media_playlists(
         graph, context, evidence, bounded_duration(duration_seconds, context)

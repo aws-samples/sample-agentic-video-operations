@@ -275,10 +275,23 @@ literals.
 ## Security
 
 - The inspector is read-only; it sends only GET requests.
-- Key bodies, tokens and cookies never appear in reports: URLs are redacted
-  and `--redact-query-params` masks every query value.
-- Treat inspected playlists as untrusted input; findings quote at most short
-  fragments of them.
+- Every fetch - including every redirect hop, and the URLs handed to ffprobe,
+  the Apple validator and the player probe - passes an SSRF guard: only
+  http(s) to hosts whose every resolved address is global unicast. Loopback,
+  private, link-local and metadata addresses are refused. Set
+  `HLS_ALLOW_PRIVATE_TARGETS=true` locally to diagnose a private stream; the
+  deployed container refuses that override.
+- Report sanitization is unconditional: every query value is redacted except
+  the LL-HLS delivery directives, response headers pass an allowlist (never
+  `Set-Cookie` or `x-amz-*`), evidence bodies are 1 KiB previews with a
+  sha256, and key exchanges keep no body at all - only hash and length.
+- Response bodies are read as bounded streams: a declared oversize body is
+  not read, and chunked or compressed bodies stop at the decoded cap.
+- ffprobe runs under an explicit protocol whitelist (`http,https,tcp,tls`
+  for URLs; `file` only for the bytes the workflow itself just downloaded).
+- Fetched content is treated as data, never as instructions: quoted remote
+  text in findings is length-bounded and stripped of control characters, and
+  the packaged skills instruct the agent accordingly.
 
 ## License
 

@@ -1,4 +1,10 @@
-"""Live media probe: ffprobe over one URL, JSON output, fixed argv."""
+"""Live media probe: ffprobe with an explicit protocol whitelist, fixed argv.
+
+Network targets may only use http/https (tcp/tls beneath them); a local path -
+the temp file the workflow just downloaded - may only use `file`. Everything
+else (`file:` URLs, `concat:`, `data:`, `subfile:`, bare devices) is refused
+before ffprobe sees it, rather than relying on ffmpeg's own checks.
+"""
 
 import json
 import subprocess
@@ -9,6 +15,7 @@ from hls_doctor.adapters.ffprobe.probe_report import (
     SegmentProbe,
     parse_ffprobe_output,
 )
+from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
 PROBE_TIMEOUT_SECONDS = 60
 
@@ -18,7 +25,8 @@ def create_live_probe() -> ProbeSegment:
 
     def probe(url: str, *, with_packets: bool = False) -> SegmentProbe:
         binary = locate_ffprobe()
-        argv = [binary, "-v", "error", "-show_streams", "-show_format", "-of", "json"]
+        argv = [binary, "-v", "error", "-protocol_whitelist", protocol_whitelist(url),
+                "-show_streams", "-show_format", "-of", "json"]  # fmt: skip
         if with_packets:
             argv += ["-show_packets", "-select_streams", "v:0"]
         argv.append(url)
@@ -36,3 +44,18 @@ def create_live_probe() -> ProbeSegment:
         return parse_ffprobe_output(url, json.loads(completed.stdout or "{}"))
 
     return probe
+
+
+def protocol_whitelist(target: str) -> str:
+    """http(s) for URLs, `file` for the workflow's own local temp path."""
+    lowered = target.lower()
+    if lowered.startswith(("http://", "https://")):
+        return "http,https,tcp,tls"
+    if "://" in lowered or lowered.startswith(("concat:", "data:", "subfile:", "pipe:")):
+        raise ToolFailure(
+            FailureKind.INVALID_REQUEST,
+            f"Refusing to probe {target[:80]!r}: only http(s) URLs and the"
+            " workflow's own downloaded bytes are probed.",
+            "Pass an http or https segment URL.",
+        )
+    return "file"

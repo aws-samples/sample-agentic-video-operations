@@ -12,6 +12,19 @@ the top.
 Work merged after the latest release candidate. It moves into a candidate
 section when the next candidate is cut.
 
+### Added
+
+- `samples/hls-doctor`: an HLS stream diagnostic agent - CLI, MCP stdio server
+  and read-only `hls` hub domain pack over one tool surface. Builds the
+  presentation graph, validates playlists against rfc8216bis, probes delivery
+  with an SSRF guard on every request and redirect hop, watches live playlists
+  (publication races, frozen playlists, stale CDN generations), decodes
+  SCTE-35, inspects interstitials, LL-HLS and Content Steering, and emits
+  evidence-model findings with unconditional redaction (query values,
+  header allowlist, key bodies never stored). Ships a 26-scenario fixture
+  corpus derived by registered mutations with a drift test, and a scored
+  eval suite that fails on any unexpected severe finding.
+
 ## [media-ops-samples-2026-10-06] — release candidate, update 3 (audit fixes and visual quality)
 
 Branch: `release-candidate/media-ops-samples-2026-10-06`. Adds the picture-quality

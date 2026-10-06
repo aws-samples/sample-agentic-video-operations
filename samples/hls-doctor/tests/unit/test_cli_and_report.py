@@ -45,10 +45,10 @@ def test_text_report_leads_with_the_critical_finding() -> None:
 def test_cli_options_parse_headers_and_flags() -> None:
     options = parse_inspect_options(
         ["inspect", "https://demo.example/m.m3u8", "--header", "X-A: 1",
-         "--output", "json", "--redact-query-params"]
+         "--output", "json", "--watch", "15"]
     )  # fmt: skip
     assert options.headers == {"X-A": "1"}
-    assert options.output == "json" and options.redact_query_params
+    assert options.output == "json" and options.watch_seconds == 15
 
 
 def test_exit_codes_reflect_worst_severity() -> None:

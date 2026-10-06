@@ -3,6 +3,7 @@
 from hls_doctor.domain.correlate.finding_model import Finding, Observation
 from hls_doctor.domain.correlate.severity_model import Confidence, Severity
 from hls_doctor.domain.playlist.playlist_line import PlaylistLine
+from hls_doctor.domain.report.quote_untrusted import quote_untrusted
 
 UNIQUE_TAGS = (
     "EXT-X-VERSION", "EXT-X-TARGETDURATION", "EXT-X-MEDIA-SEQUENCE",
@@ -32,7 +33,8 @@ def check_extm3u(url: str, lines: list[PlaylistLine], findings: list[Finding]) -
                 affected_resources=[url],
                 observations=[
                     Observation(
-                        statement=f"First non-blank line is {first_content.raw[:60]!r}"
+                        statement="First non-blank line is "
+                        f"{quote_untrusted(first_content.raw, 60)!r}"
                         if first_content
                         else "The playlist body is empty"
                     )

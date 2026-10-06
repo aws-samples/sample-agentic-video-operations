@@ -19,6 +19,9 @@ class HlsDoctorSettings(BaseSettings):
     hls_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     hls_user_agent: str = Field(default="hls-doctor/0.1")
     hls_max_watch_seconds: int = Field(default=60, ge=1, le=600)
+    # Allows loopback/private fetch targets for diagnosing a local stream.
+    # The guard refuses it inside the deployed container (DOCKER_CONTAINER=1).
+    hls_allow_private_targets: bool = Field(default=False)
 
     @field_validator("demo_scenario", mode="before")
     @classmethod

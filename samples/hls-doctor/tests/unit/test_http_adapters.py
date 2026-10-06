@@ -16,12 +16,11 @@ def test_entry_url_scheme_is_validated() -> None:
     assert failure.value.kind.value == "InvalidRequest"
 
 
-def test_redact_masks_credential_shaped_query_values() -> None:
-    url = "https://demo.example/seg.ts?token=abc&start=5&Signature=zzz"
-    assert (
-        redact_url(url) == "https://demo.example/seg.ts?token=REDACTED&start=5&Signature=REDACTED"
-    )
-    assert redact_url(url, redact_all_query=True).count("REDACTED") == 3
+def test_redact_masks_every_query_value_except_delivery_directives() -> None:
+    url = "https://demo.example/seg.ts?hdnts=exp~hmac&start=5&_HLS_msn=304"
+    redacted = redact_url(url)
+    assert redacted == "https://demo.example/seg.ts?hdnts=REDACTED&start=REDACTED&_HLS_msn=304"
+    assert redact_url("https://demo.example/seg.ts") == "https://demo.example/seg.ts"
 
 
 def test_replay_fails_closed_on_unknown_url() -> None:

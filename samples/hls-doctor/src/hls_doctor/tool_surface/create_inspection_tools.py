@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from hls_doctor.adapters.http.classify_http_error import require_usable_entry_url
 from hls_doctor.adapters.http.http_exchange import HttpExchange
+from hls_doctor.adapters.http.redact_url import redact_url
 from hls_doctor.domain.evidence.evidence_store import EvidenceStore
 from hls_doctor.domain.graph.build_presentation_graph import build_presentation_graph
 from hls_doctor.domain.graph.classify_presentation import (
@@ -64,7 +65,7 @@ def create_inspection_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
         body = exchange.body_text or ""
         lines = tokenize_playlist(body)
         return ManifestFetch(
-            url=exchange.url,
+            url=redact_url(exchange.url),
             status=exchange.status,
             content_type=exchange.header("content-type"),
             looks_like_m3u8=body.lstrip().startswith("#EXTM3U"),
@@ -110,13 +111,13 @@ def create_inspection_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
     def probe_http(url: str, include_body_bytes: int = 1024) -> HttpExchange:
         """One GET with timings and headers; an error status is evidence, not failure.
 
-        The body is returned as a preview of at most `include_body_bytes`
-        (capped at 65536) with its sha256; probe again with a larger value
-        for deeper inspection.
+        The response is sanitized: query values redacted, headers allowlisted,
+        and the body returned as a preview of at most `include_body_bytes`
+        (capped at 65536) with its sha256.
         """
         require_usable_entry_url(url)
         preview = max(0, min(include_body_bytes, 65536))
-        return build_probe_context(settings).fetch(url).with_preview(preview)
+        return build_probe_context(settings).fetch(url).sanitized(preview)
 
     def inspect_stream(url: str = "") -> InspectionReport:
         """Run the full inspection: graph, validation, delivery probes, findings.

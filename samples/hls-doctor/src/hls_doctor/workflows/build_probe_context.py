@@ -73,6 +73,7 @@ def build_probe_context(
         timeout_seconds=settings.hls_timeout_seconds,
         user_agent=settings.hls_user_agent,
         extra_headers=extra_headers,
+        allow_private_targets=settings.hls_allow_private_targets,
     )
     return ProbeContext(
         fetch=fetch,
@@ -80,5 +81,5 @@ def build_probe_context(
         demo=False,
         scenario=None,
         settings=settings,
-        validator=create_live_validator(),
+        validator=create_live_validator(allow_private_targets=settings.hls_allow_private_targets),
     )

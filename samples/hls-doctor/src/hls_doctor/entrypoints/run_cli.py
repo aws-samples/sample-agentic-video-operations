@@ -41,12 +41,7 @@ def run_inspection(options: InspectOptions) -> InspectionReport:
     if options.user_agent is not None:
         settings = settings.model_copy(update={"hls_user_agent": options.user_agent})
     context = build_probe_context(settings, extra_headers=options.headers or None)
-    return inspect_stream(
-        options.url,
-        context,
-        redact_all_query=options.redact_query_params,
-        watch_seconds=options.watch_seconds or None,
-    )
+    return inspect_stream(options.url, context, watch_seconds=options.watch_seconds or None)
 
 
 def emit(report: InspectionReport, options: InspectOptions) -> None:

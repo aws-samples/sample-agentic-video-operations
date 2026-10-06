@@ -4,9 +4,11 @@ from pydantic import BaseModel, Field
 
 from hls_doctor.adapters.applevalidator.validator_report import ValidatorReport
 from hls_doctor.adapters.ffprobe.probe_report import SegmentProbe
+from hls_doctor.adapters.hlsjs.locate_player_probe import locate_player_probe
 from hls_doctor.adapters.hlsjs.player_probe_report import PlayerProbeReport
 from hls_doctor.adapters.hlsjs.run_player_probe import run_player_probe as run_harness
 from hls_doctor.adapters.http.classify_http_error import require_usable_entry_url
+from hls_doctor.adapters.http.guard_fetch_target import guard_fetch_target
 from hls_doctor.domain.correlate.finding_model import Finding
 from hls_doctor.settings.runtime_settings import HlsDoctorSettings
 from hls_doctor.tool_surface.create_inspection_tools import resolve_default_url
@@ -47,7 +49,10 @@ def create_probe_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
 
     def probe_segment(url: str) -> SegmentProbe:
         """Probe one segment or init section with ffprobe: streams, format, timestamps."""
-        require_usable_entry_url(url)
+        if not settings.demo:
+            guard_fetch_target(url, allow_private=settings.hls_allow_private_targets)
+        else:
+            require_usable_entry_url(url)
         probe = build_probe_context(settings).media_probe()
         if probe is None:
             raise ToolFailure(
@@ -60,6 +65,11 @@ def create_probe_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
 
     def run_apple_validator(url: str = "") -> ValidatorReport:
         """Run Apple's mediastreamvalidator as an independent conformance crosscheck."""
+        if not settings.demo:
+            guard_fetch_target(
+                resolve_default_url(url, settings),
+                allow_private=settings.hls_allow_private_targets,
+            )
         context = build_probe_context(settings)
         if context.validator is None:
             raise ToolFailure(
@@ -74,7 +84,19 @@ def create_probe_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
 
         Optional: needs Node.js 20+ and `npm install` in samples/hls-doctor/player-probe.
         """
-        require_usable_entry_url(url)
+        guard_fetch_target(url, allow_private=settings.hls_allow_private_targets)
         return run_harness(url, duration_seconds)
 
-    return [watch_playlist, probe_segment, run_apple_validator, run_player_probe]
+    tools: list[ReadTool] = [watch_playlist, probe_segment, run_apple_validator]
+    if player_probe_available():
+        tools.append(run_player_probe)
+    return tools
+
+
+def player_probe_available() -> bool:
+    """The hls.js harness tool is advertised only where it can actually run."""
+    try:
+        locate_player_probe()
+    except ToolFailure:
+        return False
+    return True

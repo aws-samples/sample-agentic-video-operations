@@ -13,14 +13,16 @@ from hls_doctor.adapters.applevalidator.validator_report import (
     ValidatorReport,
     parse_validator_output,
 )
+from hls_doctor.adapters.http.guard_fetch_target import guard_fetch_target
 
 VALIDATOR_TIMEOUT_SECONDS = 300
 
 
-def create_live_validator() -> ValidateStream:
+def create_live_validator(*, allow_private_targets: bool = False) -> ValidateStream:
     """A ValidateStream backed by the local mediastreamvalidator binary."""
 
     def validate(url: str) -> ValidatorReport:
+        guard_fetch_target(url, allow_private=allow_private_targets)
         binary = locate_mediastreamvalidator()
         with tempfile.TemporaryDirectory(prefix="hls-doctor-msv-") as workdir:
             output = Path(workdir) / "validation_data.json"

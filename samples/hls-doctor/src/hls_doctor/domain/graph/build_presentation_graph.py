@@ -109,7 +109,7 @@ def fetch_playlist(
     if url in graph.playlists:
         return graph.playlists[url]
     exchange = fetch(url)
-    evidence_id = evidence.record_exchange(exchange)
+    evidence_id = evidence.record_exchange(exchange, "media_playlist")
     node = PresentationNode(
         url=url, node_type="media_playlist", role=role, parent_url=parent_url,
         evidence_ids=[evidence_id],
