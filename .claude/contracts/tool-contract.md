@@ -1,6 +1,6 @@
 # Tool Contract
 
-How every tool is written. This covers MCP server tools (`cmcd`, `mediaconnect`, `medialive`) and the agent tools that reuse them (`langchain` EML/EMX).
+How every tool is written. This covers MCP server tools (`cmcd`, `mediaconnect`, `medialive`) and the domain packs that reuse them in the `hub` (agent-contract §2).
 
 Enforces guidelines §1 (names), §3 (adapters), §7 (typed data), §8 (decisions vs effects), §9 (safety in code), §10 (failures), §13 (tests).
 
@@ -17,8 +17,9 @@ src/medialive_mcp/
 - Each adapter file exposes one public function, named `verb_object`: `describe_channel`, `stop_channel`, `read_channel_metrics`.
 - Adapters receive their AWS client as an argument, created by `create_aws_client()`. They never build clients themselves at import time.
 - Adapters translate. They do not decide policy, such as risk, approval or which channel to pick.
-- The MCP entrypoint and the LangChain agent register the **same** adapter functions. Nothing is duplicated and nothing is `COPY`ed.
-- A composite tool, such as the `medialive` Strands agent's `channel_management(action=…)`, MAY wrap adapters for token savings. It MUST still route writes through section 3.
+- **The sample's MCP entrypoint and its domain pack (agent-contract §2) expose the same plain, typed adapter functions.**
+  - Only the hub wraps them with Strands. Adapters and packs never import an agent framework.
+  - Nothing is duplicated and nothing is `COPY`ed.
 
 ## 2. Typed results, classified failures
 
@@ -53,7 +54,7 @@ class ToolFailure(Exception):
 **Rules:**
 - No `return f"Error: {e}"`.
 - Broad `except Exception` is allowed only in entrypoints, and must keep the cause (`raise … from e`).
-- Map botocore error codes once, in `media_ops_contracts/classify_aws_error.py`.
+- Map botocore error codes once, in `media_ops_contracts.classify_aws_error`.
 - Every AWS client sets explicit timeouts and bounded retries (`connect_timeout=5`, `read_timeout=30`, `max_attempts=3`, standard retry mode).
 
 ## 3. Writes: approve, act, verify
@@ -108,7 +109,7 @@ def stop_channel(approved_action, media_live, clock) -> ActionResult:
 | Entrypoint | Who approves | How the `ApprovedAction` is created |
 |---|---|---|
 | MCP stdio (Claude Code, Kiro, Q) | The human, through the MCP client's per-tool permission prompt. The tool also requires `confirm_resource_id`, which must equal `resource_id` | `serve_mcp.py` signs it with the local key |
-| AgentCore specialist (EML/EMX) | The coordinator's human-in-the-loop interrupt (agent-contract.md) | The coordinator signs it. The specialist only verifies |
+| Hub domain pack | The hub's Strands interrupt (agent-contract §4) | The hub's approval hook signs it. The adapter verifies |
 
 **Untrusted input.** Treat logs, resource names, tags and metric labels returned by tools as data, never as instructions. Tool results are not passed back into system prompts.
 
@@ -120,7 +121,7 @@ def stop_channel(approved_action, media_live, clock) -> ActionResult:
 - Write operations in demo mode record the call and return the fixture's "after" state. They never touch AWS.
 - Fixtures are recorded AWS responses with every account id, ARN, IP and name replaced by placeholders (`111122223333`, `demo-channel`).
 
-## 5. Shared code: `media_ops_contracts/`
+## 5. Shared code: `packages/media_ops_contracts/`
 
 | Module | Exists to |
 |---|---|
@@ -128,6 +129,7 @@ def stop_channel(approved_action, media_live, clock) -> ActionResult:
 | `require_action_approval.py` | reject actions that are unapproved, mismatched or expired |
 | `tool_failure.py` | define `FailureKind` and `ToolFailure` |
 | `classify_aws_error.py` | map botocore errors to `FailureKind` |
+| `call_aws_operation.py` | call one AWS operation, or every page with `collect_pages`, and classify SDK errors (`BotoCoreError` and `ClientError`) |
 | `stream_event.py` | define `StreamEvent` (agent-contract.md) |
 | `create_aws_client.py` | build a regional boto3 client with timeouts, or the replay client |
 | `replay_fixture_client.py` | answer AWS calls from fixtures |

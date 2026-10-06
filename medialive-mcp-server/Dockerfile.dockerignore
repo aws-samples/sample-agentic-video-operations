@@ -1,0 +1,14 @@
+# Used by `docker build -f medialive-mcp-server/Dockerfile .` (context = repository root).
+**/.git
+**/.venv
+**/node_modules
+**/cdk.out
+**/__pycache__
+**/.pytest_cache
+.claude
+.kiro
+images
+hydrolix-cdn-insights
+media-services-langchain/cdk
+medialive-mcp-server/cdk
+medialive-mcp-server/tests

@@ -405,6 +405,8 @@ MediaLive and MediaConnect specialists MUST NOT import each other. Cross-service
 
 ## 5. Recommended Refactored Project Layout
 
+This section is the layout *inside* one sample. Where samples, shared packages, fixtures and images live at the repository level is §20.
+
 The target layout organizes the same service by responsibility and by the external system each adapter talks to.
 
 ```text
@@ -1368,6 +1370,7 @@ A change reaches the expected standard when:
 - Adding a specialist does not require rewriting coordinator branches.
 - Tests describe customer and operational behavior.
 - The README path to first success is shorter than the architecture explanation.
+- A newcomer finds every sample at `samples/<key>/`, and nothing at the root that isn't on the §20 allowlist.
 
 WOW is not more abstraction. WOW is clarity under change.
 
@@ -1383,6 +1386,9 @@ Before submitting a change, verify:
 - [ ] Unrelated cleanup is excluded.
 - [ ] New files have one reason to change.
 - [ ] No new vague `manager`, `service`, `helper`, `utils`, or `common` module was added.
+- [ ] No new root entry outside the §20 allowlist. Samples sit in `samples/<key>/`, and shared code in `packages/`.
+- [ ] Images are only in `docs/images/` or `samples/<key>/docs/images/`, or inside a web app (`public/` or `src/`).
+- [ ] Nothing under `.claude/plans/` is tracked. `just docs-check` passes.
 
 ### Architecture
 
@@ -1449,6 +1455,36 @@ Stop and redesign before continuing when:
 - documentation describes behavior that is not used by the deployed runtime.
 
 These are architecture signals, not inconveniences to work around.
+
+---
+
+## 20. Repository Layout
+
+The repository is a master-class sample. Its folders teach as much as its code does, so the layout is a contract, enforced by `scripts/check_repository_layout.py` in `just docs-check` and CI.
+
+### The root holds only
+
+```text
+README.md  AGENTS.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
+justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
+.github/    .claude/    docs/    samples/    packages/    fixtures/    scripts/
+```
+
+| Folder | Holds |
+|---|---|
+| `samples/<key>/` | One runnable sample per folder. The folder name is the sample key used by every `just` recipe (`samples/cmcd`, `samples/mediaconnect`, `samples/medialive`, `samples/hub`, `samples/hydrolix`). Inside it, §5 and sample-contract §2 apply. |
+| `packages/<name>/` | Shared code that several samples import (`packages/media_ops_contracts`). No sample-specific behavior. |
+| `fixtures/<scenario>/` | The only home of recorded responses. Scenarios are shared across samples. |
+| `docs/` | Repo-level documentation; repo-level images in `docs/images/`. |
+| `scripts/` | Repo tooling run by `just`, each with tests in `scripts/tests/`. |
+| `.claude/` | Agent instructions and contracts. `.claude/plans/` is local and never tracked. |
+
+### Rules
+
+- A new top-level entry needs a guideline change first. Don't add it and explain later.
+- Images live in `docs/images/` (repo) or `samples/<key>/docs/images/` (sample). A web app's own assets stay inside the app, in `public/` or `src/`. The check finds images by file extension, not only by a folder called `images/`.
+- The folder name is the key. Package and distribution names may differ (`samples/hub` ships `media-ops-hub`), but the folder never does.
+- Move with `git mv` in one dedicated change, then fix every path in the same change: `pyproject.toml`, `justfile`, CI, `scripts/`, READMEs, `AGENTS.md` and `mcp.json`. Merge in-flight branches with rename detection; never rebase them.
 
 ---
 

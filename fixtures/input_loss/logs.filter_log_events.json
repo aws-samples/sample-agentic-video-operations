@@ -1,0 +1,24 @@
+{
+  "events": [
+    {
+      "timestamp": 1791200400000,
+      "logStreamName": "demo-channel/pipeline-0",
+      "message": "pipeline 0: input demo-primary-srt: no SRT packets received for 5 s"
+    },
+    {
+      "timestamp": 1791200400000,
+      "logStreamName": "demo-channel/pipeline-0",
+      "message": "pipeline 0: alert SET: Video Not Detected (input demo-primary-srt)"
+    },
+    {
+      "timestamp": 1791200460000,
+      "logStreamName": "demo-channel/pipeline-0",
+      "message": "pipeline 0: input loss behavior active: emitting slate"
+    },
+    {
+      "timestamp": 1791201480000,
+      "logStreamName": "demo-channel/pipeline-0",
+      "message": "pipeline 0: input demo-primary-srt: still no SRT packets (1080 s)"
+    }
+  ]
+}

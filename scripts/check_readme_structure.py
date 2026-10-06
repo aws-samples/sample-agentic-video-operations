@@ -1,5 +1,7 @@
 """`just docs-check`: README headings (guidelines §16) and relative links for converted samples.
 
+The repository layout is checked separately by check_repository_layout.py.
+
 Add a sample's README to CONVERTED_READMES in the step that converts the sample.
 """
 
@@ -15,7 +17,7 @@ REQUIRED_HEADINGS = [
     "Teardown",
     "Known Limitations",
 ]
-CONVERTED_READMES: list[str] = ["cmcd-mcp-server/README.md"]
+CONVERTED_READMES: list[str] = ["cmcd-mcp-server/README.md", "medialive-mcp-server/README.md"]
 LINK_PATTERN = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 
 

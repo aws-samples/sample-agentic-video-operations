@@ -1,0 +1,32 @@
+[project]
+name = "medialive-mcp-server"
+version = "0.2.0"
+description = "MediaLive channel health and control: an MCP server plus a Strands agent for AgentCore."
+requires-python = ">=3.12"
+dependencies = [
+  "media-ops-contracts",
+  "boto3>=1.35,<2",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.5,<3",
+  "fastmcp>=3.2,<4",
+  "strands-agents>=1.0,<2",
+  "bedrock-agentcore>=1.0,<2",
+]
+
+[project.optional-dependencies]
+# Installed only in the AgentCore container image.
+runtime = ["aws-opentelemetry-distro>=0.10.1,<1"]
+
+[project.scripts]
+serve-medialive = "medialive_mcp.entrypoints.serve_mcp:main"
+serve-medialive-agent = "medialive_mcp.entrypoints.handle_agentcore_invocation:main"
+
+[tool.uv.sources]
+media-ops-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "medialive_mcp"

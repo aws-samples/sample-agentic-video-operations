@@ -46,9 +46,16 @@ export class MediaLiveAgentCoreStack extends cdk.Stack {
     // DOCKER IMAGE ASSET
     // ================================
 
+    // Build from the repository root: the image installs this sample from the uv workspace.
     const dockerImageAsset = new ecr_assets.DockerImageAsset(this, 'RuntimeDockerImage', {
-      directory: path.join(__dirname, '../../'),
+      directory: path.join(__dirname, '../../..'),
+      file: 'medialive-mcp-server/Dockerfile',
       platform: ecr_assets.Platform.LINUX_ARM64,
+      exclude: [
+        '**/.git', '**/.venv', '**/node_modules', '**/cdk.out', '**/__pycache__',
+        '**/.pytest_cache', '.claude', '.kiro', 'images', 'hydrolix-cdn-insights',
+        'media-services-langchain/cdk', 'medialive-mcp-server/cdk', 'medialive-mcp-server/tests',
+      ],
     });
 
     // ================================
@@ -105,7 +112,7 @@ export class MediaLiveAgentCoreStack extends cdk.Stack {
             new iam.PolicyStatement({
               sid: 'CloudWatchMetrics',
               effect: iam.Effect.ALLOW,
-              actions: ['cloudwatch:GetMetricStatistics'],
+              actions: ['cloudwatch:GetMetricData'],
               resources: ['*'],
             }),
             // CloudWatch Logs — filter events
@@ -261,7 +268,7 @@ export class MediaLiveAgentCoreStack extends cdk.Stack {
       environmentVariables: {
         AGENT_MODEL_ID: bedrockModelId.valueAsString,
         THUMBNAIL_MODEL_ID: thumbnailModelId.valueAsString,
-        MEDIALIVE_DEFAULT_CHANNEL_ID: defaultChannelId.valueAsString,
+        MEDIALIVE_CHANNEL_ID: defaultChannelId.valueAsString,
         MEMORY_ID: agentMemory.attrMemoryId,
         AWS_REGION: this.region,
       },

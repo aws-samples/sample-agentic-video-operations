@@ -1,150 +1,167 @@
-# Agent Contract
+# Agent Contract: the media ops hub
 
-How the AgentCore runtimes in `media-services-langchain` talk to callers and to each other. There are 3 runtimes:
-- the coordinator,
-- EML (the MediaLive specialist),
-- EMX (the MediaConnect specialist).
+One Strands agent on one AgentCore runtime serves every media domain. Domains plug in as
+in-process **domain packs**. The hub replaces the earlier coordinator, EML and EMX runtimes,
+and also the medialive sample's own Strands agent (`hub` with `MEDIA_DOMAINS=medialive`).
 
-The `medialive` Strands agent and the `hydrolix` agents SHOULD follow sections 1–2 when they are next changed.
+Enforces guidelines §3–4 (layers), §7 (typed data), §9 (safety), §11 (prompts), §12 (observability), §13 (tests).
 
-Enforces guidelines §3–4 (layers, one-way dependencies), §7 (typed payloads), §9 (safety), §11 (prompts), §12 (observability), §13 (tests).
+## 1. Hub (sample key `hub`, folder `samples/hub/`, distribution `media-ops-hub`, package `media_ops_hub`)
 
-## 1. Runtime interface
+- **One `strands.Agent`, built per request.** The tools come from the selected packs, the prompt comes from skill metadata, and the hooks come from §4. There is no hardcoded tool list.
+  - Only the Bedrock model client is cached across requests. A long-lived agent accumulates stale tool results.
+  - `HUB_TOOL_BUDGET` (default 12) caps tool calls per request. Going over it ends the turn with `error(InvalidRequest)` and a next action.
+- **Interrupt state survives between requests** through a Strands session manager keyed by `session_id`: `AgentCoreMemorySessionManager` when `MEMORY_ID` is set, `FileSessionManager` otherwise (local and `DEMO=1`).
+- **Entrypoint:** `entrypoints/handle_agentcore_invocation.py` (`BedrockAgentCoreApp`, port 8080). It parses the request, builds the agent and streams events. Nothing else.
+- **Commands:**
+  - `just run hub` runs it locally.
+  - `just demo` is `DEMO=1 just run hub` with a scripted prompt, and needs no AWS.
+  - `just deploy hub` deploys it.
+- **Deploy:** the hub CDK is the existing `samples/medialive/cdk/` (a Strands agent on AgentCore), moved to `samples/hub/cdk/` and generalized.
+  - `MEDIA_DOMAINS` becomes a runtime environment variable.
+  - **IAM is declared by each pack, not by the hub.** Every pack's sample folder holds `samples/<key>/iam_permissions.json`, in this shape:
 
-All runtimes use `BedrockAgentCoreApp` on port 8080 (`/invocations`, `/ping`). Each runtime has one entrypoint file, `entrypoints/agentcore/handle_<role>_invocation.py`. That file only parses the request, calls the workflow and streams events.
+    ```json
+    {"read":  [{"actions": ["medialive:DescribeChannel"], "resources": ["arn:aws:medialive:{region}:{account}:channel:*"]}],
+     "write": [{"actions": ["medialive:StopChannel"],     "resources": ["arn:aws:medialive:{region}:{account}:channel:*"]}]}
+    ```
 
-**Coordinator request:**
+    The hub CDK reads the file of each pack in `MEDIA_DOMAINS` (pack name = sample key = folder), fills in `{region}` and `{account}`, and grants every `read` statement. It grants `write` statements only with `-c allowWrites=true`.
+  - Adding a pack therefore needs no hub CDK edit.
+  - A unit test checks that the file covers every AWS operation the pack's adapters call.
+- **Foreign-auth services** (for example Hydrolix) may get their own runtime or A2A later. That is out of scope now.
+
+**Request:**
 
 ```python
-class CoordinatorRequest(BaseModel):
-    prompt: str | None = None          # a new question
+class HubRequest(BaseModel):
+    prompt: str | None = None                 # a new question
     decision: ApprovalDecision | None = None  # resumes a paused run
     # session_id comes from context.session_id (AgentCore requires at least 33 characters)
     # actor_id comes from the X-Amzn-Bedrock-AgentCore-Runtime-Custom-Actor-Id header
 
 class ApprovalDecision(BaseModel):
-    approval_id: str
+    approval_id: str   # the interrupt id streamed in approval_requested
     approve: bool
     reason: str | None = None
 ```
 
-**Specialist request.** Only the coordinator sends these:
+**Response:** `StreamEvent` from `media_ops_contracts.stream_event`, one JSON object per event, encoded once.
+- `task_started`: one per pack whose tool runs first in a turn.
+- `tool_called`: name and read/write only, never raw output.
+- `approval_requested`
+- `action_completed`
+- `verification_completed`
+- `final_answer`: impact first, then evidence, then the next action.
+- `error`
+
+## 2. Domain packs (`packages/media_ops_contracts/src/media_ops_contracts/domain_pack.py`, framework-free)
 
 ```python
-class SpecialistRequest(BaseModel):
-    task: str                                   # a self-contained instruction
-    approved_action: ApprovedAction | None = None   # present only for writes
+class WriteTool(BaseModel, frozen=True):
+    function: Callable[..., ActionResult]   # typed; takes approved_action: ApprovedAction
+    resource_parameter: str                 # e.g. "channel_id": the input that names the resource
+
+class DomainPack(Protocol):
+    name: str                               # "medialive"
+    skill_paths: Sequence[Path]             # SKILL.md files shipped inside the package
+    fixture_scenarios: Sequence[str]        # scenarios under fixtures/ this pack can replay
+    def read_tools(self) -> Sequence[Callable[..., BaseModel | list[BaseModel]]]: ...
+    def write_tools(self) -> Sequence[WriteTool]: ...
 ```
 
-**Response.** Every runtime streams `StreamEvent` objects. Each event is JSON-encoded exactly once:
+- **Registration:** each sample package exports `create_domain_pack() -> DomainPack` under the entry-point group `media_ops.domain_packs`:
 
-```python
-class StreamEventType(StrEnum):
-    TASK_STARTED = "task_started"
-    TOOL_CALLED = "tool_called"
-    APPROVAL_REQUESTED = "approval_requested"
-    ACTION_COMPLETED = "action_completed"
-    VERIFICATION_COMPLETED = "verification_completed"
-    FINAL_ANSWER = "final_answer"
-    ERROR = "error"
-
-class BaseStreamEvent(BaseModel):
-    session_id: str
-    at: AwareDatetime   # defaults to now, UTC
-
-class TaskStarted(BaseStreamEvent):
-    type: Literal[StreamEventType.TASK_STARTED] = StreamEventType.TASK_STARTED
-    specialist: str
-    task: str
-# ... one class per type, fields as in the table below
-
-StreamEvent = Annotated[TaskStarted | ToolCalled | ... | ErrorEvent, Field(discriminator="type")]
-```
-
-This is the same discriminated-union pattern as `sample-agentic-platform` (`core/models/streaming_models.py`). The fields are typed per event, and a client parses an event with one `TypeAdapter(StreamEvent)`.
-
-| type | fields |
-|---|---|
-| `task_started` | `{specialist, task}` |
-| `tool_called` | `{tool, read_only, resource_id?}`. No raw tool output |
-| `approval_requested` | `{approval_id, proposal: ActionProposal, risk: "low"\|"high", expires_at}` |
-| `action_completed` | `{approval_id, action, resource_id}` |
-| `verification_completed` | `{approval_id, verified, before_state, after_state}` |
-| `final_answer` | `{text}`. Impact first, then evidence, then the next action |
-| `error` | `{kind, message, next_action}` from `ToolFailure` |
-
-## 2. Memory and sessions
-
-- **The LangGraph thread id is the session id.** One operator conversation is one thread.
-- **Specialists use thread `"{session_id}:{specialist}"`.** They MUST NOT mint a random thread per delegation.
-- **Isolation is by `actor_id`** through the existing `AgentCoreMemorySaver` namespace (`shared/memory.py`, which moves to `adapters/agentcore/`).
-- **No memory when `MEMORY_ID` is empty.** This is the local and demo default: an in-memory checkpointer.
-
-## 3. Specialists (EML, EMX)
-
-- A specialist is `langchain.agents.create_agent(model, tools, system_prompt)`.
-  - Its tools are the adapter functions from its MCP package (tool-contract.md).
-  - Its prompt lives in `prompts/inspect_media_live_prompt.py` or `prompts/inspect_media_connect_prompt.py`.
-- **Read tools are always available.** Write tools are only bound when the request carries an `approved_action`, and then only the one tool that matches `approved_action.action`.
-- **The specialist verifies the signature, then executes, then verifies the resource state.** It never asks the model whether something is approved.
-- **A specialist never imports the other specialist or the coordinator.**
-- **Its endpoint is not exported from CDK.** IAM allows only the coordinator role to invoke it.
-
-## 4. Coordinator
-
-- The coordinator is `create_agent(model, tools, middleware=[HumanInTheLoopMiddleware(...)])`.
-- **Specialists come from settings, not code:**
-
-  ```python
-  specialists: list[SpecialistConfig]   # name, runtime_arn, description, write_actions
+  ```toml
+  [project.entry-points."media_ops.domain_packs"]
+  medialive = "medialive_mcp.domain_pack:create_domain_pack"
   ```
+- **Which packs ship:** medialive and mediaconnect now, cmcd later.
+- **Selection:** `MEDIA_DOMAINS=medialive,mediaconnect` chooses the packs. An unknown name fails at startup and lists the installed packs.
+- **What a pack wraps:** plain typed functions over **the same adapters the sample's MCP server registers**. The pack builds its own clients and settings, including `DEMO` replay. The hub wraps the functions with `strands.tool`. A pack never imports Strands, the hub or another pack.
+- **Cross-domain reasoning** (signal path from source to flow to channel) lives in hub skills, not in a pack.
 
-  For each specialist the coordinator generates:
-  - `ask_<name>(task)`: read-only, never interrupts.
-  - `act_<name>(action, resource_id, parameters)`: interrupts first.
+## 3. Skills
 
-  Adding a specialist means adding a settings entry. There MUST NOT be an `if name == "eml"` branch.
-- **The `InvokeSpecialist` port has two adapters:**
-  - `invoke_agentcore_specialist.py`: boto3 `invoke_agent_runtime`, used when `runtime_arn` is set.
-  - `invoke_specialist_in_process.py`: calls the specialist agent directly, used locally and in `DEMO=1`.
+- **Format:** one `SKILL.md` per skill, with YAML front-matter:
 
-  This is what makes `just run langchain` and `just demo` work without AWS.
-- **Parallel:** independent `ask_*` calls in one model turn run concurrently (the default tool node). Each call has a deadline (`SPECIALIST_TIMEOUT_SECONDS`, default 120). A timeout returns `ToolFailure(EXTERNAL_SERVICE_UNAVAILABLE)` for that task only.
-- **Approval flow:**
-  1. The model calls `act_eml("stop_channel", "1234567", {})`.
-  2. The middleware interrupts, and the coordinator streams `approval_requested` with a new `approval_id`. The run pauses.
-  3. The caller re-invokes with the same session and a `decision`. The coordinator resumes the graph:
-     - **Rejected:** the tool returns "rejected by operator", and the run continues read-only.
-     - **Approved:** the coordinator builds and signs an `ApprovedAction` bound to exactly the proposed action, resource, parameters and actor, with a 10-minute expiry. It sends that action to the specialist.
-  4. The specialist returns `ActionResult`. The coordinator streams `action_completed`, then `verification_completed`.
-- **A decision is valid only for its `approval_id`, in the same session, from the same actor.** Anything else streams `error(ApprovalRequired)`.
-- **`write_todos` is removed.** It recorded nothing durable.
+  ```markdown
+  ---
+  name: diagnose-input-loss          # unique across all loaded packs
+  description: When a channel shows input loss or slate, find whether the fault is upstream.
+  domain: medialive                  # or "hub" for cross-domain skills
+  ---
+  Steps, evidence to collect, tools to call, what to conclude, when evidence is insufficient.
+  ```
+- **Location:** `src/<pkg>/skills/<name>/SKILL.md`, shipped in the wheel. Hub-level skills live in `media_ops_hub/skills/`.
+- **Naming:** the front-matter `name` must equal the directory name. The hub refuses to start if any listed skill fails to parse or load by its name.
+- **Prompt and loading:** the system prompt lists only each skill's `name` and `description`. The `load_skill(name)` tool returns the body, and an unknown name returns the list of names.
+- **No S3 and no skill publishing** in this sample.
+- **Safety stays in code:** skills describe behavior and evidence, never permission. Each skill file is one purpose (guidelines §11).
 
-## 5. Prompts
+## 4. Writes: typed tools, approval through a Strands interrupt
 
-- Each prompt file is one module exporting one constant and a `PROMPT_VERSION`.
-- Prompts describe behavior only: evidence first, impact first, and say when evidence is insufficient. They do not restate tool schemas.
-- Safety lives in sections 3–4 above, never in prompt text alone.
+**Write tools are registered only when `ALLOW_WRITES=true`.** Otherwise the model never sees them.
 
-## 6. Observability
+**The flow,** using Strands' human-in-the-loop API in strands-agents 1.x (checked against the installed 1.57.2 source):
+1. **Interrupt.** A `BeforeToolCallEvent` hook runs for every write tool.
+   - It builds an `ActionProposal`: action = the tool name, `resource_id` = the input named by `resource_parameter`, and parameters = the other inputs.
+   - It sets `expires_at = now + 10 minutes`.
+   - It then calls `event.interrupt("approve-write", reason={"proposal": proposal, "expires_at": expires_at})`. The reason is stored with the interrupt in the session, so the deadline survives between requests.
+2. **Ask.** The run stops with `result.stop_reason == "interrupt"`. The hub streams `approval_requested` with `approval_id = interrupt.id`, the proposal, `risk` and `expires_at`.
+3. **Resume.** The caller sends `HubRequest(decision=...)` in the same session. The hub resumes with `agent([{"interruptResponse": {"interruptId": approval_id, "response": decision}}])`.
+4. **On resume,** `event.interrupt(...)` returns the decision.
+   - **Rejected,** or from a different actor: the hook sets `event.cancel_tool = "rejected by operator"`.
+   - **Approved:** before signing, the hook checks three things against the stored reason:
+     - `now < expires_at`;
+     - the pending tool call still names the same action and resource;
+     - its parameters equal the proposal's.
 
-- The containers keep `opentelemetry-instrument` (ADOT). The CDK sets the AgentCore observability environment variables.
-- Every `StreamEvent` is also logged as structured JSON with these fields:
+     If any check fails, the hook sets `event.cancel_tool` and the hub streams `error(ApprovalExpired)` or `error(ApprovalRequired)`. Nothing is signed.
+   - **Signing:** if every check passes, the hook signs an `ApprovedAction` for exactly that proposal, with the **same** `expires_at`, never a fresh one. It writes it into `event.tool_use["input"]["approved_action"]`, replacing any value the model supplied.
+5. **Execute and verify.** The write adapter runs `require_action_approval`, acts once, verifies, and returns `ActionResult`. The hub streams `action_completed`, then `verification_completed`.
+
+**Approval rules:**
+- A decision for an unknown `approval_id`, another session or another actor streams `error(ApprovalRequired)`. The pending tool call is not run.
+- The adapter still checks expiry and the signature (tool-contract §3) as a second line. The hook's checks don't replace them.
+
+## 5. Code execution (optional, analysis only)
+
+- **`analyze_with_code(code, data_json)`** exists only with `ENABLE_CODE_MODE=true` (default `false`).
+- **Sandbox:** it runs in AgentCore Code Interpreter with network mode `SANDBOX` and no execution role, so it cannot call AWS, including AWS write APIs. The implementation must verify both settings.
+- **Inputs and outputs:** it takes only data that read tools already returned, and returns stdout (capped at 16 KB).
+- **No fallback:** if the sandbox is unavailable, the tool returns an error. There is no local `exec`.
+
+## 6. Observability and evals
+
+- **Logging:** every `StreamEvent` is also logged as structured JSON with:
   - `session.id`
   - `actor.id`
-  - `specialist.name`
+  - `pack.name`
   - `tool.name`
+  - `skill.name`
   - `approval.id`
   - `prompt.version`
-- Raw prompts, tool output and logs are not recorded by default.
+
+  Raw tool output and prompts are not logged.
+- **`just eval`** replays each scenario under `samples/hub/tests/scenarios/<name>/scenario.yaml`:
+  - **Inputs:** the prompt, `MEDIA_DOMAINS`, the fixture scenario, and any decision.
+  - **Expected:** tools, skills, diagnosis keywords, forbidden tools, and a maximum number of tool calls.
+- **Each scenario records:**
+  - input and output tokens (`result.metrics.accumulated_usage`);
+  - tool calls;
+  - skills loaded;
+  - wall-clock latency;
+  - writes attempted.
+- **Output:** the results print as a table, and `eval-results.json` is written for comparison across runs. This is the efficiency evidence.
+- **Models:** the fake model is the default. The real model runs with `EVAL_MODEL=bedrock`.
 
 ## 7. Required tests
 
 | Test | Proves |
 |---|---|
-| `tests/contract/verify_specialist_contract.py` | Each specialist, with fixtures and a fake model, accepts `SpecialistRequest` and emits valid `StreamEvent`s. It refuses writes without a valid `ApprovedAction` |
-| `tests/contract/verify_approval_contract.py` | Coordinator: no approval means no `act_*` execution. A decision for another `approval_id`, session or actor is rejected. An expired approval is rejected |
-| `tests/scenarios/<incident>/` | Fixture replay end to end: expected specialists and tools, diagnosis keywords, zero unapproved writes |
-| `tests/unit/...` | Pure decisions: specialist tool generation from settings, `require_action_approval`, event serialization |
-
-These are deterministic and offline. A fake chat model scripts the tool calls for contract tests. `just eval` runs the scenarios with the real model when credentials exist, and with the fake model otherwise.
+| `packages/media_ops_contracts/tests/unit/test_domain_pack.py` | Entry-point discovery, selection by `MEDIA_DOMAINS`, and that an unknown pack fails with the list of installed packs |
+| `samples/<key>/tests/unit/test_domain_pack.py` (each pack) | Its tools are the MCP server's adapters. Write tools need `ApprovedAction`. Its skills parse. `iam_permissions.json` covers every AWS operation its adapters call |
+| `samples/hub/tests/contract/verify_approval_flow.py` | With a scripted fake model: no write runs without approval; a rejection cancels; a decision for another approval, session or actor is refused; **a decision after the pending approval's `expires_at` is refused and nothing is signed**; changed action, resource or parameters are refused; an expired `ApprovedAction` is refused by the adapter |
+| `samples/hub/tests/contract/verify_stream_events.py` | Every streamed event validates against `StreamEvent`, and raw tool output never appears |
+| `samples/hub/tests/scenarios/*` | `just eval` scenarios, offline, with recorded metrics |

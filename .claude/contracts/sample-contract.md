@@ -10,20 +10,22 @@ Enforces guidelines §1 (names), §2 (small files), §5 (layout, trimmed), §15 
 
 The sample key is the argument to every `just` recipe.
 
-| Key | Folder | Use case | Deploys with (existing material, unchanged) |
-|---|---|---|---|
-| `cmcd` | `cmcd-mcp-server/` | Viewer QoE from CMCD data in InfluxDB | `cloudfront-cmcd-kinesis.yaml` (CloudFormation) |
-| `mediaconnect` | `mediaconnect-mcp-server/` | MediaConnect flow health and control | No own deploy. Runs in the cloud as the EMX specialist of `langchain` |
-| `medialive` | `medialive-mcp-server/` | MediaLive channel health and control | `cdk/` (Strands agent on AgentCore) |
-| `langchain` | `media-services-langchain/` | Coordinator + EML + EMX specialists on AgentCore | `cdk/` (3 runtimes) + `demo-channel.json` |
-| `hydrolix` | `hydrolix-cdn-insights/` | CDN analytics with a web UI | Its existing CDK + Amplify |
+**The folder is the key:** every sample lives in `samples/<key>/` (§3).
 
-Adding a sample means adding a row here, a folder that follows section 2, and its recipes in the `justfile`.
+| Key | Use case | Deploys with (existing material) | Folder before task R1 |
+|---|---|---|---|
+| `cmcd` | Viewer QoE from CMCD data in InfluxDB | `cloudfront-cmcd-kinesis.yaml` (CloudFormation) | `cmcd-mcp-server/` |
+| `mediaconnect` | MediaConnect flow health and control | No own deploy. Runs in the cloud as a domain pack of `hub` | `mediaconnect-mcp-server/` |
+| `medialive` | MediaLive channel health and control | No own deploy after step 4. Runs as a domain pack of `hub`; its `cdk/` becomes the hub's | `medialive-mcp-server/` |
+| `hub` | One agent that investigates across the selected media domains (agent-contract) | `samples/hub/cdk/`, moved from `samples/medialive/cdk/` · `demo-channel.json` | replaces `media-services-langchain/` |
+| `hydrolix` | CDN analytics with a web UI | Its existing CDK + Amplify | `hydrolix-cdn-insights/` |
+
+Adding a sample means adding a row here, a `samples/<key>/` folder that follows section 2, and its recipes in the `justfile`.
 
 ## 2. Folder layout (Python samples)
 
 ```
-<folder>/
+samples/<key>/
   pyproject.toml        # uv workspace member; pinned deps; one console script
   README.md             # sections in section 6
   .env.example          # the sample's variables to add to the root .env (safe placeholders)
@@ -36,15 +38,18 @@ Adding a sample means adding a row here, a folder that follows section 2, and it
   tests/
     unit/               # offline, no AWS credentials, no network
     scenarios/          # replays fixtures end to end (agents)
+  iam_permissions.json  # domain packs only: IAM the hub grants for this pack (agent-contract §1)
+  docs/                 # optional; the sample's own images go in docs/images/
   cdk/ | *.yaml         # existing deploy material stays where it is
 ```
 
-| Folder | Package | Console script |
-|---|---|---|
-| `cmcd-mcp-server` | `cmcd_mcp` | `serve-cmcd` |
-| `mediaconnect-mcp-server` | `mediaconnect_mcp` | `serve-mediaconnect` |
-| `medialive-mcp-server` | `medialive_mcp` | `serve-medialive` |
-| `media-services-langchain` | `media_iops` | `serve-langchain` |
+| Folder | Distribution | Package | Console script |
+|---|---|---|---|
+| `samples/cmcd` | `cmcd-mcp-server` | `cmcd_mcp` | `serve-cmcd` |
+| `samples/mediaconnect` | `mediaconnect-mcp-server` | `mediaconnect_mcp` | `serve-mediaconnect` |
+| `samples/medialive` | `medialive-mcp-server` | `medialive_mcp` | `serve-medialive` |
+| `samples/hub` | `media-ops-hub` | `media_ops_hub` | `serve-hub` |
+| `packages/media_ops_contracts` | `media-ops-contracts` | `media_ops_contracts` | none |
 
 **Rules:**
 - Package names MUST be unique across the repo. There MUST NOT be a top-level `tools`, `src` or `shared` package.
@@ -55,21 +60,32 @@ Adding a sample means adding a row here, a folder that follows section 2, and it
   [tool.uv.sources]
   medialive-mcp-server = { workspace = true }
   ```
-- A Dockerfile builds with `uv sync --frozen --package <folder>`. It MUST NOT `COPY` sibling sample folders. It MAY copy the workspace root files (`pyproject.toml`, `uv.lock`) plus the member folders it depends on, through uv.
+- A Dockerfile builds with `uv sync --frozen --package <distribution>`. It MUST NOT `COPY` sibling sample folders. It MAY copy the workspace root files (`pyproject.toml`, `uv.lock`) plus the member folders it depends on, through uv.
 - `hydrolix` (TypeScript CDK + React) follows only sections 4–6.
 
-## 3. Repo root
+## 3. Repo root (guidelines §20)
+
+The root holds only these entries. `scripts/check_repository_layout.py`, run by `just docs-check` and CI, enforces the list.
 
 ```
-pyproject.toml        # [tool.uv.workspace] members = the Python samples + media_ops_contracts
-uv.lock               # one lock for the whole repo
-justfile              # the only command entry point
-scripts/check_prerequisites.py
-media_ops_contracts/  # shared contract code (see tool-contract.md)
-fixtures/<scenario>/  # the only fixture location; scenarios are shared across samples (one source of truth)
-AGENTS.md             # one page: what is where, links to these contracts
+README.md  AGENTS.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md  LICENSE
+justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
 .github/workflows/ci.yml
+.claude/              # agent instructions and these contracts; .claude/plans/ is never tracked
+docs/                 # repo-level documentation; repo-level images in docs/images/
+samples/<key>/        # one folder per sample (§1, §2)
+packages/media_ops_contracts/   # shared contract code (tool-contract §5)
+fixtures/<scenario>/  # the only fixture location; scenarios are shared across samples
+scripts/              # repo tooling: check_prerequisites.py, check_*.py, manage_*_stack.py
 ```
+
+**Rules:**
+- **Images** are any file with an image extension, or anything in a folder named `images/`. They live only in:
+  - `docs/images/` (repo);
+  - `samples/<key>/docs/images/` (sample);
+  - a web app's own `public/` or `src/`. A web app is a folder with a tracked `package.json` and a `public/`; CDK apps aren't web apps.
+- **Nothing under `.claude/plans/` is tracked.** Handoff, review and plan files stay in each builder's clone.
+- **Workspace:** `pyproject.toml` lists `samples/*` and `packages/*` members explicitly, and the root project depends on each member, so `uv sync` installs them all.
 
 If two members cannot share one lock (a dependency conflict), the member is excluded from the workspace and gets its own `uv.lock`. Record the reason in its README.
 
@@ -80,11 +96,12 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | Recipe | Meaning | Native command it wraps |
 |---|---|---|
 | `just doctor` | Check prerequisites, printing a fix command for each failure | `uv run scripts/check_prerequisites.py` |
-| `just run <key>` | Run the sample locally (MCP stdio or local agent server) | `uv run --package <folder> serve-<key>` |
-| `just test [key]` | Offline unit and scenario tests | `uv run pytest <folder>/tests` |
+| `just docs-check` | README structure (§6) and repository layout (§3) | `uv run python scripts/check_readme_structure.py && uv run python scripts/check_repository_layout.py` |
+| `just run <key>` | Run the sample locally (MCP stdio or local agent server) | `uv run --package <distribution> serve-<key>` |
+| `just test [key]` | Offline unit and scenario tests | `uv run pytest samples/<key>/tests` |
 | `just lint` | ruff check + format check | `uv run ruff check . && uv run ruff format --check .` |
 | `just eval` | Replay the fixture scenarios and score them | `uv run pytest -m eval` |
-| `just demo` | Coordinator on fixtures, with no AWS account | `DEMO=1 uv run --package media-services-langchain demo` |
+| `just demo` | Hub on fixtures, with no AWS account | `DEMO=1 uv run --package media-ops-hub demo` |
 | `just deploy <key>` | Deploy with the sample's existing material | per sample, see section 1 |
 | `just destroy <key>` | Remove everything `deploy` created | per sample |
 | `just demo-channel create\|delete` | Create or delete the MediaLive channel from `demo-channel.json` | `aws medialive create-channel --cli-input-json …` |
@@ -112,6 +129,8 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | `DEMO_SCENARIO` | per sample | Which `fixtures/<scenario>/` to replay |
 | `FIXTURES_DIR` | `fixtures` (relative to the repo root, where `just` runs) | Fixture root override |
 | `APPROVAL_SIGNING_KEY` | random per process locally; from Secrets Manager when deployed | HMAC key for `ApprovedAction` |
+| `MEDIA_DOMAINS` | `medialive,mediaconnect` | Domain packs the hub loads (agent-contract §2) |
+| `ENABLE_CODE_MODE` | `false` | Register the hub's analysis-only code tool (agent-contract §5) |
 
 **Names that are retired**, replaced by the shared ones above:
 - `BEDROCK_AGENTCORE_MEMORY_ID` → `MEMORY_ID`.
@@ -129,8 +148,8 @@ The user chooses models **once**, in the root `.env`. Every `just run` and `just
 
 | Role | Env var | CDK parameter | Default | Used by |
 |---|---|---|---|---|
-| Reasoning agent | `AGENT_MODEL_ID` | `BedrockModelId` | `us.anthropic.claude-sonnet-4-6` | langchain coordinator, EML, EMX · medialive Strands agent · hydrolix orchestrator and its 3 sub-agents · `cmcd` client script |
-| Thumbnail vision | `THUMBNAIL_MODEL_ID` | `ThumbnailModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | medialive and mediaconnect thumbnail adapters (and so EML/EMX) |
+| Reasoning agent | `AGENT_MODEL_ID` | `BedrockModelId` | `us.anthropic.claude-sonnet-4-6` | the hub · hydrolix orchestrator and its 3 sub-agents |
+| Thumbnail vision | `THUMBNAIL_MODEL_ID` | `ThumbnailModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | medialive and mediaconnect thumbnail adapters (in the MCP servers and the hub) |
 | Chart generation | `CHART_MODEL_ID` | Amplify build env | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | hydrolix web UI only |
 
 **Rules:**

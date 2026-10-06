@@ -1,0 +1,12 @@
+{
+  "Channels": [
+    {
+      "Arn": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+      "ChannelClass": "STANDARD",
+      "Id": "1234567",
+      "Name": "demo-channel",
+      "PipelinesRunningCount": 2,
+      "State": "RUNNING"
+    }
+  ]
+}

@@ -1,511 +1,217 @@
 # MediaLive MCP Server
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+Find out why a live channel is unhealthy (input loss, alerts, dropped frames, bad
+output), with evidence from metrics and logs, from any MCP client or AgentCore agent.
 
-A hybrid Model Context Protocol (MCP) server for managing and monitoring AWS Elemental MediaLive channels. Provides AI-powered tools for live video encoding operations including channel management, schedule management, 5-category CloudWatch monitoring, thumbnail analysis via Amazon Bedrock, and a sandboxed code interpreter for data processing.
+> [!IMPORTANT]
+> This sample is for educational and reference purposes. It is not production-ready
+> without security hardening, testing, and customization for your environment.
 
-## What is AWS Elemental MediaLive?
+## Purpose
 
-[AWS Elemental MediaLive](https://aws.amazon.com/medialive/) is a real-time video encoding service that creates high-quality live video streams for delivery to broadcast televisions and internet-connected devices. It encodes live video from a variety of sources, including on-premises encoders, AWS Elemental MediaConnect, and Amazon S3, and outputs to MediaPackage, MediaStore, or directly to HTTP/RTMP destinations.
+This sample is for video operators and developers who run channels on AWS Elemental
+MediaLive. Ask about a channel in plain language. The server lists and describes
+channels, reads both pipelines' CloudWatch metrics and the channel logs, scores five
+health categories, and describes the output thumbnail with a vision model.
+
+On your first run you replay a recorded incident without an AWS account. In it,
+pipeline 0 has lost its SRT input, and `check_channel_issues` finds that.
 
 ## Architecture
 
-This project has two entry points sharing the same tool core:
-
-- `server.py` (FastMCP) — spawned by local MCP clients via stdio, registers each tool individually
-- `main.py` → `app.py` (Strands Agent) — spawned by AgentCore runtime, uses composite tools pattern for token reduction, includes FastAPI endpoints for UI
-
-```
-                    ┌──────────────────────────────────────────────┐
-                    │         medialive-mcp-server/                │
-                    │                                              │
-┌──────────┐       │  ┌─────────────┐     ┌──────────────────┐   │    ┌─────────────────┐
-│ MCP      │──────▶│  │ server.py   │────▶│ src/tools/       │   │───▶│ AWS APIs         │
-│ Client   │       │  │ (FastMCP)   │     │  medialive_tools │   │    │ ├─ MediaLive     │
-└──────────┘       │  └─────────────┘     │  schedule_tools  │   │    │ ├─ CloudWatch    │
-                    │        │             │  thumbnails      │   │    │ ├─ CloudWatch    │
-                    │        │             │  truncation      │   │    │ │   Logs         │
-                    │        ▼             │  constants       │   │    │ └─ Bedrock       │
-                    │  ┌─────────────┐     └──────────────────┘   │    └─────────────────┘
-                    │  │ src/        │              ▲              │
-                    │  │ monitoring/ │              │              │
-                    │  │ (5-category │──────────────┘              │
-                    │  │  CloudWatch)│              │              │
-                    │  └─────────────┘              │              │
-                    │        ▲                      │              │
-┌──────────┐       │  ┌─────┴───────┐     ┌────────┴─────────┐   │
-│ AgentCore│──────▶│  │ main.py     │────▶│ src/app.py       │   │
-│ / UI     │       │  │ (AgentCore) │     │ (Strands Agent + │   │
-└──────────┘       │  └─────────────┘     │  FastAPI + 6     │   │
-                    │                      │  composite tools) │   │
-                    │                      └──────────────────┘   │
-                    └──────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    Client[MCP client] --> Server[serve-medialive]
+    Agent[AgentCore runtime] --> Strands[Strands agent, read-only]
+    Server --> Adapters[adapters: one action per file]
+    Strands --> Adapters
+    Adapters --> EML[AWS Elemental MediaLive]
+    Adapters --> CW[CloudWatch metrics and logs]
+    Adapters --> BR[Bedrock vision model]
+    Server -. ALLOW_WRITES=true .-> Writes[write adapters: approve, act, verify]
+    Writes --> EML
 ```
 
-## Features
-
-### Channel Management
-- **List Channels** — Enumerate all MediaLive channels with IDs, ARNs, and state
-- **Describe Channel** — Get detailed configuration, input attachments, and pipeline status
-- **Start/Stop Channel** — Control channel lifecycle
-- **Thumbnail Analysis** — AI-powered visual analysis of channel thumbnails using Claude via Amazon Bedrock
-
-### Schedule Management
-- **Describe Schedule** — List all schedule actions for a channel
-- **Input Switch** — Schedule timed or immediate input switches
-- **SCTE-35** — Schedule splice insert actions for ad signaling
-- **Pause/Unpause** — Schedule pipeline pause and unpause actions
-- **Delete Action** — Remove schedule actions
-
-### CloudWatch Monitoring (5 Categories)
-- **Channel Health** — Active alerts, pipeline lock, fill milliseconds, frame rate, dropped frames
-- **Input Health** — Network bitrate, input loss, RTP packets, FEC recovery, input errors
-- **Output Health** — Network out, active outputs, HTTP 4xx/5xx errors, audio levels, dropped frames
-- **Media Health** — Timecodes, audio levels, input error seconds, fill milliseconds
-- **Content Quality** — MQCS score, black frame detection, freeze frame detection, continuity errors
-
-### Issue Detection
-- **Cross-Category Issue Scan** — Scan all monitoring categories for problems with HIGH/MEDIUM severity classification
-- **Metrics Table** — Export key metrics in tabular format for charting and visualization
+- **Entrypoints** handle transport only:
+  - `serve_mcp.py` (MCP stdio);
+  - `handle_agentcore_invocation.py` (the Strands agent on AgentCore).
+- **Adapters** (`src/medialive_mcp/adapters/`) make one AWS call each and return typed results.
+  - `read_channel_metrics` reads every metric for both pipelines in one `GetMetricData` call.
+- **Domain rules** (`domain/identify_channel_issues.py`) score the five categories:
+  - channel health;
+  - input health;
+  - output health;
+  - media health;
+  - content quality.
+- **Writes are authorized and verified in code**, not by the prompt:
+  - Write tools exist only with `ALLOW_WRITES=true`.
+  - Each one needs `confirm_resource_id` equal to the channel id, and your MCP client's tool-approval prompt.
+  - The adapter rejects an unsigned or expired approval, sends the change once, then polls until the channel reaches the target state.
+- **The Strands agent registers no write tools,** because it has no approval path.
 
 ## Prerequisites
 
-- Python 3.11+
-- AWS credentials configured (`aws configure`)
-- AWS region set in your AWS config
-- Required IAM permissions (see [Required Permissions](#required-permissions))
-- Amazon Bedrock access (for thumbnail analysis with Claude)
-
-## Environment Variables
-
-All configuration is via environment variables — no hardcoded account or channel IDs.
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `AWS_REGION` | No | `us-west-2` | AWS region for all API calls |
-| `MEDIALIVE_DEFAULT_CHANNEL_ID` | No | _(none)_ | Default channel ID when not passed explicitly |
-| `THUMBNAIL_MODEL_ID` | No | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Bedrock model for thumbnail analysis |
-| `AGENT_MODEL_ID` | No | `us.anthropic.claude-sonnet-4-6` | Bedrock model for the Strands Agent |
-| `BEDROCK_AGENTCORE_MEMORY_ID` | No | _(none)_ | AgentCore Memory ID (for Strands Agent deployment) |
-| `MEDIALIVE_TEST_CHANNEL_ID` | No | _(none)_ | Channel ID for running integration tests |
-| `FASTMCP_LOG_LEVEL` | No | `INFO` | Log level for the FastMCP server |
-
-## Setup
-
-### 1. Set Up Virtual Environment
+- Python 3.12 or newer. `uv` installs it automatically from `.python-version`.
+- [`uv`](https://docs.astral.sh/uv/) and [`just`](https://just.systems/) (`uv tool install rust-just`).
+- An MCP client, such as Claude Code, Kiro or Amazon Q Developer CLI.
+- **For AWS-backed use:**
+  - AWS credentials with the read permissions listed under Deploy to AWS;
+  - a MediaLive channel;
+  - access to the thumbnail model in `THUMBNAIL_MODEL_ID`.
+- **For deployment:**
+  - Docker;
+  - Node.js 20 or newer;
+  - a bootstrapped CDK environment (`just doctor` checks it).
 
 ```bash
-cd sample-agentic-video-operations/medialive-mcp-server
-
-python3 -m venv venv
-source venv/bin/activate  # macOS/Linux
+just doctor
 ```
 
-### 2. Install Dependencies
+## Setup and Run
+
+### Run Locally
+
+1. From the repository root, create the configuration and add this sample's variables
+   from `medialive-mcp-server/.env.example`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Replay the recorded incident (no AWS account needed):
+
+   ```bash
+   DEMO=1 just run medialive
+   ```
+
+   Raw command: `DEMO=1 uv run --package medialive-mcp-server serve-medialive`
+
+3. Or connect an MCP client. Add the entries from [`mcp.json`](mcp.json) to the client's
+   configuration, and replace `/absolute/path/to/sample-agentic-video-operations` with
+   your clone's path.
+   - `medialive-demo` replays fixtures.
+   - `medialive` uses your root `.env` and real AWS credentials.
+
+4. Send a known-good request:
+
+   ```text
+   Check channel 1234567 for issues in the last hour.
+   ```
+
+   Expected result with `medialive-demo`: the assistant calls `check_channel_issues` and
+   reports `InputLossSeconds` and `ActiveAlerts` on pipeline 0, with pipeline 1 healthy.
+   The log events say "no SRT packets received".
+
+### Deploy to AWS
+
+`just deploy medialive` arrives with task C3.2. Until then, use the existing CDK app:
 
 ```bash
-pip install -r requirements.txt
+cd medialive-mcp-server/cdk
+npm ci
+npx cdk deploy \
+  --parameters BedrockModelId="$AGENT_MODEL_ID" \
+  --parameters ThumbnailModelId="$THUMBNAIL_MODEL_ID" \
+  --parameters DefaultChannelId="<your channel id>"
 ```
 
-### 3. Verify the MCP Configuration File
+- **What it deploys:** the read-only Strands agent on AgentCore Runtime, its AgentCore Memory, and an IAM role.
+- **Billing:** AgentCore Runtime, Memory and Bedrock usage are billable.
+- **Image build:** the container image is built from the repository root (`medialive-mcp-server/Dockerfile`).
+- **Read permissions** used by the tools:
+  - `medialive:ListChannels`, `DescribeChannel`, `DescribeSchedule`, `DescribeThumbnails`
+  - `cloudwatch:GetMetricData`
+  - `logs:FilterLogEvents`
+  - `bedrock:InvokeModel` (also used by the Converse API)
+- **Write permissions**, needed only for the MCP write tools: `medialive:StartChannel`, `StopChannel`, `BatchUpdateSchedule`.
 
-The `mcp.json` file configures local MCP clients to spawn `server.py`:
+### Verify the Deployment
 
-```json
-{
-  "mcpServers": {
-    "medialive-mcp": {
-      "command": "python3",
-      "args": ["server.py"],
-      "cwd": "<DIRECTORY_PATH>",
-      "env": {
-        "AWS_REGION": "us-west-2",
-        "MEDIALIVE_DEFAULT_CHANNEL_ID": "<YOUR_CHANNEL_ID>",
-        "THUMBNAIL_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        "FASTMCP_LOG_LEVEL": "INFO"
-      }
-    }
-  }
-}
-```
-
-Replace `<DIRECTORY_PATH>` with the absolute path to the `medialive-mcp-server/` directory and `<YOUR_CHANNEL_ID>` with your MediaLive channel ID.
-
-## Integration with Kiro
-
-Add the MCP server configuration to your Kiro workspace:
-
-1. Open the MCP configuration file at `.kiro/settings/mcp.json`
-2. Add the MediaLive MCP server entry:
-
-```json
-{
-  "mcpServers": {
-    "medialive-mcp": {
-      "command": "python3",
-      "args": ["server.py"],
-      "cwd": "/path/to/sample-agentic-video-operations/medialive-mcp-server",
-      "env": {
-        "AWS_REGION": "us-west-2",
-        "MEDIALIVE_DEFAULT_CHANNEL_ID": "<YOUR_CHANNEL_ID>",
-        "THUMBNAIL_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        "FASTMCP_LOG_LEVEL": "INFO"
-      }
-    }
-  }
-}
-```
-
-## Integration with Amazon Q CLI
-
-### 1. Copy the mcp.json File to Q CLI Directory
+Invoke the deployed agent with a known-good request. Use the `AgentRuntimeArn` stack
+output:
 
 ```bash
-cp mcp.json ~/.aws/amazonq/mcp.json
+export AGENT_RUNTIME_ARN="<AgentRuntimeArn output>"
+aws bedrock-agentcore invoke-agent-runtime \
+  --agent-runtime-arn "$AGENT_RUNTIME_ARN" \
+  --runtime-session-id "$(uuidgen)-$(uuidgen)" \
+  --payload "$(printf '%s' '{"prompt":"List my MediaLive channels"}' | base64)" \
+  --region "$AWS_REGION" \
+  output.json && cat output.json
 ```
 
-Edit the file to set your `cwd`, `AWS_REGION`, and `MEDIALIVE_DEFAULT_CHANNEL_ID`.
-
-### 2. Running Amazon Q CLI
-
-```bash
-q chat
-```
-
-## Integration with Claude Code
-
-Add the MCP server to your Claude Code project configuration:
-
-```bash
-claude mcp add medialive-mcp -- python3 /path/to/sample-agentic-video-operations/medialive-mcp-server/server.py
-```
-
-Or add it manually to `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "medialive-mcp": {
-      "command": "python3",
-      "args": ["/path/to/sample-agentic-video-operations/medialive-mcp-server/server.py"],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "INFO"
-      }
-    }
-  }
-}
-```
+Expected result: a `response` that lists your channels with their state.
 
 ## Available Tools
 
-### Channel Management
+| Tool | Read/write | What it does |
+|---|---|---|
+| `list_channels` | Read | Channels with id, name, state and running pipelines |
+| `describe_channel` | Read | State, input attachments, active input per pipeline |
+| `read_channel_metrics` | Read | 5-minute averages per pipeline; optional `category` |
+| `read_channel_logs` | Read | Most recent channel log events |
+| `check_channel_issues` | Read | Five category scores and every failing metric rule |
+| `read_metrics_table` | Read | Key metrics as rows for charts |
+| `describe_schedule` | Read | Scheduled input switches, SCTE-35, pauses |
+| `describe_channel_thumbnail` | Read | Vision-model description of a pipeline's thumbnail |
+| `start_channel`, `stop_channel` | Write | Change channel state, then verify RUNNING / IDLE |
+| `switch_channel_input` | Write | Switch now, then verify every pipeline's active input |
+| `create_input_switch_action`, `create_scte35_action`, `create_pause_action`, `create_unpause_action` | Write | Add a timed action, then verify it is scheduled |
+| `delete_schedule_action` | Write | Remove an action, then verify it is gone |
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `mcp_list_channels` | List all MediaLive channels with IDs, ARNs, and state | None |
-| `mcp_describe_channel` | Get detailed channel configuration and pipeline status | `channel_id` (optional) |
-| `mcp_start_channel` | Start a MediaLive channel | `channel_id` (optional) |
-| `mcp_stop_channel` | Stop a running MediaLive channel | `channel_id` (optional) |
-| `mcp_describe_channel_thumbnail` | AI-powered visual analysis of channel thumbnail via Bedrock | `channel_id` (optional), `pipeline_id` (default: "0") |
+The Strands agent groups the read tools into four composite tools:
+- `channel_management`
+- `channel_monitoring`
+- `schedule_management`
+- `channel_health_monitoring`
 
-### Channel Monitoring
+## Teardown
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `mcp_get_channel_metrics` | Get basic CloudWatch metrics (frame rate, network, fill, alerts) | `channel_id` (optional), `hours_back` (default: 1) |
-| `mcp_get_channel_logs` | Get recent CloudWatch log events | `channel_id` (optional), `hours_back` (default: 1) |
-
-### Schedule Management
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `mcp_describe_schedule` | List all schedule actions for a channel | `channel_id` (optional) |
-| `mcp_create_input_switch_action` | Schedule a timed input switch | `channel_id`, `action_name`, `input_attachment_name`, `start_time` |
-| `mcp_create_immediate_input_switch` | Immediately switch the active input | `channel_id`, `action_name`, `input_attachment_name` |
-| `mcp_create_scte35_action` | Schedule a SCTE-35 splice insert for ad signaling | `channel_id`, `action_name`, `start_time`, `splice_event_id`, `duration` (optional) |
-| `mcp_create_pause_action` | Schedule a pipeline pause | `channel_id`, `action_name`, `start_time`, `pipeline_id` (default: "PIPELINE_0") |
-| `mcp_create_unpause_action` | Schedule a pipeline unpause | `channel_id`, `action_name`, `start_time`, `pipeline_id` (default: "PIPELINE_0") |
-| `mcp_delete_schedule_action` | Delete a schedule action | `channel_id`, `action_name` |
-
-### CloudWatch Monitoring (5-Category)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `mcp_get_all_metrics` | Get all metrics across all 5 categories | `channel_id` (required), `hours_back` (default: 1) |
-| `mcp_get_channel_health_metrics` | Channel health: alerts, pipeline lock, fill, frame rate, drops | `channel_id` (required), `hours_back` (default: 1) |
-| `mcp_get_input_health_metrics` | Input health: network in, input loss, RTP packets, FEC recovery | `channel_id` (required), `hours_back` (default: 1) |
-| `mcp_get_output_health_metrics` | Output health: network out, active outputs, HTTP errors, audio | `channel_id` (required), `hours_back` (default: 1) |
-| `mcp_get_media_health_metrics` | Media health: timecodes, audio levels, input errors, fill | `channel_id` (required), `hours_back` (default: 1) |
-| `mcp_get_content_quality_metrics` | Content quality: MQCS, black/freeze frames, continuity errors | `channel_id` (required), `hours_back` (default: 1) |
-
-### Issue Detection & Analysis
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `mcp_check_channel_issues` | Cross-category issue scan with severity classification | `channel_id` (required), `hours_back` (default: 24) |
-| `mcp_get_metrics_table` | Metrics in tabular format for graphing | `channel_id` (required), `hours_back` (default: 6) |
-
-## Sample Questions
-
-### Channel Management & Status
-- "List all my MediaLive channels"
-- "Describe channel 1234567"
-- "Start the production channel"
-- "What does the thumbnail look like for channel 1234567?"
-
-### Schedule Operations
-- "Show me the schedule for channel 1234567"
-- "Create an input switch to backup-input at 2025-01-15T10:00:00Z"
-- "Immediately switch to the slate input"
-- "Schedule a SCTE-35 ad break at the top of the hour"
-- "Pause pipeline 0 for maintenance"
-
-### Health Monitoring
-- "Get all metrics for channel 1234567 from the past hour"
-- "Check channel health metrics for dropped frames"
-- "Get input health — any packet loss or input errors?"
-- "Check output health for HTTP errors"
-- "Get content quality metrics — any black frames or frozen video?"
-- "What's the media health status?"
-
-### Issue Detection & Troubleshooting
-- "Check for issues on channel 1234567 in the past 24 hours"
-- "Are there any problems across all categories?"
-- "Get metrics in table format for graphing"
-
-## CloudWatch Metrics Reference
-
-### Channel Health Metrics
-
-| Metric | Description | Unit | Dimensions |
-|--------|-------------|------|------------|
-| `ActiveAlerts` | Number of active alerts on the channel | Count | ChannelId, Pipeline |
-| `PipelinesLocked` | Whether pipelines are locked (1=locked, 0=unlocked) | Count | ChannelId, Pipeline |
-| `InputVideoAligned` | Whether input video is aligned across pipelines | Count | ChannelId, Pipeline |
-| `FillMsec` | Milliseconds of fill content (no source content available) | Milliseconds | ChannelId, Pipeline |
-| `InputVideoFrameRate` | Input video frame rate | Count | ChannelId, Pipeline |
-| `DroppedFrames` | Number of dropped frames | Count | Pipeline, Region |
-| `SvqTime` | Time spent in SVQ (encoder quality adjustment) | Milliseconds | Pipeline, Region |
-
-### Input Health Metrics
-
-| Metric | Description | Unit | Dimensions |
-|--------|-------------|------|------------|
-| `NetworkIn` | Inbound network bitrate | Megabits/Second | ChannelId, Pipeline |
-| `InputLossSeconds` | Seconds of input signal loss | Seconds | ChannelId, Pipeline |
-| `InputVideoFrameRate` | Input video frame rate | Count | ChannelId, Pipeline |
-| `RtpPacketsReceived` | Total RTP packets received | Count | ChannelId, Pipeline |
-| `RtpPacketsLost` | RTP packets lost during transit | Count | ChannelId, Pipeline |
-| `RtpPacketsRecoveredViaFec` | RTP packets recovered via FEC | Count | ChannelId, Pipeline |
-| `FecRowPacketsReceived` | FEC row packets received | Count | ChannelId, Pipeline |
-| `FecColumnPacketsReceived` | FEC column packets received | Count | ChannelId, Pipeline |
-| `ChannelInputErrorSeconds` | Seconds with input errors | Seconds | ChannelId, Pipeline |
-| `PrimaryInputActive` | Whether the primary input is active (1=active) | Count | ChannelId, Pipeline |
-
-### Output Health Metrics
-
-| Metric | Description | Unit | Dimensions |
-|--------|-------------|------|------------|
-| `NetworkOut` | Outbound network bitrate | Megabits/Second | ChannelId, Pipeline |
-| `ActiveOutputs` | Number of active outputs | Count | OutputGroupName, ChannelId, Pipeline |
-| `Output4xxErrors` | HTTP 4xx errors on outputs | Count | OutputGroupName, ChannelId, Pipeline |
-| `Output5xxErrors` | HTTP 5xx errors on outputs | Count | OutputGroupName, ChannelId, Pipeline |
-| `OutputAudioLevelDbfs` | Output audio level in dBFS | Count | AudioDescriptionName, ChannelId, Pipeline |
-| `OutputAudioLevelLkfs` | Output audio level in LKFS | Count | AudioDescriptionName, ChannelId, Pipeline |
-| `ComplexFrcPresent` | Whether complex frame rate conversion is active | Count | ChannelId, Pipeline |
-| `DroppedFrames` | Number of dropped frames | Count | Pipeline, Region |
-| `SvqTime` | Time spent in SVQ | Milliseconds | Pipeline, Region |
-
-### Media Health Metrics
-
-| Metric | Description | Unit | Dimensions |
-|--------|-------------|------|------------|
-| `InputTimecodesPresent` | Whether input timecodes are present | Count | ChannelId, Pipeline |
-| `OutputAudioLevelDbfs` | Output audio level in dBFS | Count | AudioDescriptionName, ChannelId, Pipeline |
-| `OutputAudioLevelLkfs` | Output audio level in LKFS | Count | AudioDescriptionName, ChannelId, Pipeline |
-| `ChannelInputErrorSeconds` | Seconds with input errors | Seconds | ChannelId, Pipeline |
-| `FillMsec` | Milliseconds of fill content | Milliseconds | ChannelId, Pipeline |
-
-### Content Quality Metrics
-
-| Metric | Description | Unit | Dimensions |
-|--------|-------------|------|------------|
-| `MinMQCS` | Minimum Media Quality Confidence Score | Count | OutputGroupName, ChannelId, Pipeline |
-| `MqcsBlackFrameDetected` | Black frame detection flag | Count | ChannelId, Pipeline |
-| `MqcsFreezeFrameDetected` | Freeze frame detection flag | Count | ChannelId, Pipeline |
-| `MqcsContinuityCounterErrors` | Transport stream continuity counter errors | Count | ChannelId, Pipeline |
-| `FillMsec` | Milliseconds of fill content | Milliseconds | ChannelId, Pipeline |
-| `InputLossSeconds` | Seconds of input signal loss | Seconds | ChannelId, Pipeline |
-| `DroppedFrames` | Number of dropped frames | Count | Pipeline, Region |
-
-> **Note:** Metrics with `Pipeline, Region` dimensions (DroppedFrames, SvqTime) do not include `ChannelId` in their CloudWatch dimension set. These may return empty datapoints when queried with the default ChannelId dimension.
-
-## Required Permissions
-
-The following IAM permissions are required:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "MediaLiveChannelOperations",
-      "Effect": "Allow",
-      "Action": [
-        "medialive:ListChannels",
-        "medialive:DescribeChannel",
-        "medialive:StartChannel",
-        "medialive:StopChannel",
-        "medialive:DescribeThumbnails",
-        "medialive:DescribeSchedule",
-        "medialive:BatchUpdateSchedule",
-        "medialive:DeleteSchedule",
-        "medialive:ListInputs",
-        "medialive:DescribeInput"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatchMetrics",
-      "Effect": "Allow",
-      "Action": [
-        "cloudwatch:GetMetricStatistics"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatchLogs",
-      "Effect": "Allow",
-      "Action": [
-        "logs:FilterLogEvents"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "BedrockThumbnailAnalysis",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel"
-      ],
-      "Resource": [
-        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
-        "arn:aws:bedrock:*:*:inference-profile/*"
-      ]
-    }
-  ]
-}
-```
-
-> **Security Note:** For production use, scope `Resource` to specific channel ARNs, log group ARNs, and Bedrock model ARNs rather than using wildcards.
-
-## Remote Deployment (Amazon Bedrock AgentCore)
-
-The `main.py` + `src/app.py` entry point is for remote deployment via [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html). It uses the same tool core but groups individual tools into composite tools for token reduction.
-
-### Prerequisites
-
-- [Amazon Bedrock AgentCore SDK](https://pypi.org/project/bedrock-agentcore/) installed (`pip install bedrock-agentcore`)
-- Docker installed and running
-- AWS credentials with permissions to create AgentCore resources
-
-### Deploy with AgentCore CLI
-
-The included `.bedrock_agentcore.yaml` provides the runtime configuration. On first deploy, AgentCore auto-creates the ECR repository, IAM roles, and runtime:
+Stop a local MCP server with `Ctrl+C`. Destroy the deployment:
 
 ```bash
-cd medialive-mcp-server
-
-# Set your environment variables
-export AWS_REGION=us-west-2
-export AGENT_MODEL_ID=us.anthropic.claude-sonnet-4-6
-export MEDIALIVE_DEFAULT_CHANNEL_ID=<YOUR_CHANNEL_ID>
-
-# Deploy (creates ECR repo, builds container, registers runtime)
-uv run agentcore launch --auto-update-on-conflict
+cd medialive-mcp-server/cdk
+npx cdk destroy MediaLiveAgentCoreStack
 ```
 
-After the first deploy, `.bedrock_agentcore.yaml` is populated with your account-specific values (runtime ARN, ECR repo, IAM roles). These are gitignored for public repos.
+**After destroying, check for:**
+- the ECR image pushed by the CDK asset;
+- the `/aws/bedrock-agentcore/runtimes/*` log groups.
 
-### Deploy with CDK (Production)
+Orphaned resources can keep incurring cost.
 
-For production deployments, use AWS CDK following the pattern in [hydrolix-cdn-insights/cdk-hydrolix-data-assistant-agentcore-strands/](../hydrolix-cdn-insights/cdk-hydrolix-data-assistant-agentcore-strands/). The CDK stack should create:
+## Known Limitations
 
-- AgentCore Runtime with container configuration
-- AgentCore Memory for conversation context
-- IAM execution role with least-privilege permissions
-- Runtime environment variables (`AGENT_MODEL_ID`, `MEDIALIVE_DEFAULT_CHANNEL_ID`, `THUMBNAIL_MODEL_ID`, `MEMORY_ID`)
+- The responses in `fixtures/input_loss` are synthetic, shaped like the AWS responses. They are not recordings.
+- The Strands agent is read-only. It recommends an input switch but cannot apply one.
+- `code_mode` (Strands agent) only exists with `ENABLE_CODE_MODE=true`. It runs model-written Python in the agent process, so enable it only in a sandbox you trust.
+- `DroppedFrames` and `SvqTime` use other dimensions in CloudWatch, so they may show no data.
+- IAM resources are wildcards, and write permissions are granted even though the agent doesn't use them. Task C3.2 tightens this.
+- The tests in `tests/unit`, `tests/local` and `tests/remote` still target the old layout. They move to the new package in task G3.2. `just test medialive` runs `tests/scenarios`.
+- Model output is nondeterministic. Safety comes from the write adapters, not from the prompt.
 
-A CDK stack for this project is planned for Phase 2.
+## Development
 
-### Composite Tools (Strands Agent)
+```bash
+just test medialive
+just lint
+```
 
-The Strands Agent groups 15 individual tools into 6 composite tools for token reduction:
-
-| Composite Tool | Actions | Individual Tools |
-|----------------|---------|-----------------|
-| `channel_management` | list, describe, start, stop, thumbnail | 5 tools |
-| `channel_monitoring` | metrics, logs | 2 tools |
-| `schedule_management` | describe, input_switch, immediate_switch, scte35, pause, unpause, delete | 7 tools |
-| `channel_health_monitoring` | all_metrics, category_metrics, check_issues, metrics_table | 4 coordinator methods |
-| `code_mode` | Any command + Python script | Sandboxed data processing |
-| `current_time` | — | Current timestamp |
-
-## Troubleshooting
-
-### Common Issues
-
-1. **No Channels Returned**
-   - Verify AWS credentials: `aws sts get-caller-identity`
-   - Check that the AWS region is set correctly
-   - Ensure IAM permissions include `medialive:ListChannels`
-
-2. **Thumbnail Analysis Fails**
-   - Channel must be in RUNNING state with thumbnail generation enabled
-   - Verify Bedrock access is configured in your region
-   - Check IAM permissions include `bedrock:InvokeModel`
-
-3. **No Metrics Data**
-   - Channel must be or have been in RUNNING state during the queried time range
-   - Verify CloudWatch permissions
-   - MediaLive metrics may take a few minutes to appear after channel start
-   - `DroppedFrames` and `SvqTime` use Pipeline+Region dimensions — empty results are expected when querying by ChannelId
-
-4. **Connection Errors**
-   - Verify AWS credentials are not expired
-   - Check network connectivity to AWS APIs
-   - Ensure the correct AWS region is configured
-
-## Security Considerations
-
-⚠️ **Important Security Notice**
-
-This sample is provided for demonstration and educational purposes only. It is not recommended for production deployment without significant security hardening.
-
-### Before Production Use
-
-- Scope IAM permissions to specific channel ARNs rather than using wildcard resources
-- Implement proper credential rotation and management
-- Enable CloudTrail logging for all MediaLive API calls
-- Review Bedrock model access policies
-- Conduct security testing appropriate for your environment
+Add a tool as one adapter file under `src/medialive_mcp/adapters/<system>/`, returning a
+typed result. Register it in `entrypoints/serve_mcp.py`. Write tools take an
+`ApprovedAction` and verify the result (see `.claude/contracts/tool-contract.md`).
 
 ## Contributing
 
-Contributions are welcome. Please ensure:
+Read the root [`AGENTS.md`](../AGENTS.md) and [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
-1. Code follows existing patterns
-2. New tools include proper documentation
-3. Error handling is comprehensive
-4. Tests cover new functionality
+## Security
+
+Never commit credentials, `.env` files, account ids, ARNs or real channel ids. Report
+security issues through
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#security-issue-notifications).
 
 ## License
 
-This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.
-
-## Related Projects
-
-- [MediaConnect MCP Server](../mediaconnect-mcp-server/) — MCP server for MediaConnect flow management and monitoring
-- [CMCD MCP Server](../cmcd-mcp-server/) — MCP server for CMCD streaming telemetry analysis
-- [Hydrolix CDN Insights](../hydrolix-cdn-insights/) — Multi-agent CDN analytics with Amazon Bedrock AgentCore
-- [AWS Elemental MediaLive Documentation](https://docs.aws.amazon.com/medialive/)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
+This project is licensed under the MIT No Attribution License. See
+[`LICENSE`](../LICENSE).

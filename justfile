@@ -24,7 +24,7 @@ run sample *args:
     case "{{ sample }}" in
       cmcd)         uv run --package cmcd-mcp-server serve-cmcd {{ args }} ;;
       mediaconnect) uv run --package mediaconnect-mcp-server serve-mediaconnect {{ args }} ;;
-      medialive)    just _pending medialive 3 ;;
+      medialive)    uv run --package medialive-mcp-server serve-medialive {{ args }} ;;
       langchain)    just _pending langchain 4 ;;
       hydrolix)     just _pending hydrolix 5 ;;
       *)            just _unknown "{{ sample }}" ;;
@@ -40,7 +40,8 @@ test sample="":
       contracts) uv run pytest media_ops_contracts/tests ;;
       cmcd)      uv run pytest cmcd-mcp-server/tests ;;
       mediaconnect) uv run pytest mediaconnect-mcp-server/tests ;;
-      medialive|langchain|hydrolix) just _pending "{{ sample }}" ;;
+      medialive) uv run pytest medialive-mcp-server/tests/scenarios ;;
+      langchain|hydrolix) just _pending "{{ sample }}" ;;
       *)         just _unknown "{{ sample }}" ;;
     esac
 
@@ -64,6 +65,7 @@ demo:
 [group('develop')]
 docs-check:
     uv run python scripts/check_readme_structure.py
+    uv run python scripts/check_repository_layout.py
 
 # Deploy a sample with its existing deploy material (scripts/confirm_aws_action.py asks first; --yes skips)
 [group('deploy')]

@@ -4,7 +4,7 @@ default_agent: medialive_agent
 agents:
   medialive_agent:
     name: medialive_agent
-    entrypoint: main.py
+    entrypoint: src/medialive_mcp/entrypoints/handle_agentcore_invocation.py
     platform: linux/arm64
     container_runtime: none
     aws:

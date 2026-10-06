@@ -110,7 +110,7 @@ describe('AgentCore Runtime', () => {
     const envVars = resources[rtKey].Properties.EnvironmentVariables;
     expect(envVars).toHaveProperty('AGENT_MODEL_ID');
     expect(envVars).toHaveProperty('THUMBNAIL_MODEL_ID');
-    expect(envVars).toHaveProperty('MEDIALIVE_DEFAULT_CHANNEL_ID');
+    expect(envVars).toHaveProperty('MEDIALIVE_CHANNEL_ID');
     expect(envVars).toHaveProperty('MEMORY_ID');
     expect(envVars).toHaveProperty('AWS_REGION');
   });
