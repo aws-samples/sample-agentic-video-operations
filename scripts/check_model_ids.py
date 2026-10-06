@@ -20,8 +20,15 @@ MODEL_ID_PATTERN = re.compile(
     r"\b(?:us\.|eu\.|apac\.|global\.)?(?:anthropic\.claude|amazon\.nova)-[a-z0-9.:-]*[a-z0-9]"
 )
 
-# Files allowed to mention non-canonical IDs: the allowlist itself and this check.
-EXEMPT_FILES = {"scripts/model_ids.py", "scripts/check_model_ids.py"}
+# Files allowed to mention non-canonical IDs: the allowlist, this check and its
+# tests, and the price table, which is keyed by base-model prefixes on purpose.
+EXEMPT_FILES = {
+    "scripts/model_ids.py",
+    "scripts/check_model_ids.py",
+    "scripts/tests/test_check_model_ids.py",
+    "packages/media_ops_contracts/src/media_ops_contracts/estimate_model_cost.py",
+    "packages/media_ops_contracts/tests/unit/test_estimate_model_cost.py",
+}
 
 
 def tracked_files() -> list[str]:
