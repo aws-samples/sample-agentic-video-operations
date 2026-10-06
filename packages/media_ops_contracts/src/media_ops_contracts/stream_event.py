@@ -21,6 +21,7 @@ class StreamEventType(StrEnum):
     ACTION_COMPLETED = "action_completed"
     VERIFICATION_COMPLETED = "verification_completed"
     FINAL_ANSWER = "final_answer"
+    USAGE_REPORTED = "usage_reported"
     ERROR = "error"
 
 
@@ -72,6 +73,21 @@ class FinalAnswer(BaseStreamEvent):
     text: str
 
 
+class UsageReported(BaseStreamEvent):
+    """The turn's accumulated token usage, so a caller sees what the request cost.
+
+    `estimated_usd` comes from `estimate_model_cost.py`'s dated price table and is
+    None when the model is not in it; the token counts are always exact.
+    """
+
+    type: Literal[StreamEventType.USAGE_REPORTED] = StreamEventType.USAGE_REPORTED
+    model_id: str | None = None
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    estimated_usd: float | None = None
+
+
 class ErrorEvent(BaseStreamEvent):
     type: Literal[StreamEventType.ERROR] = StreamEventType.ERROR
     kind: FailureKind
@@ -86,6 +102,7 @@ StreamEvent = Annotated[
     | ActionCompleted
     | VerificationCompleted
     | FinalAnswer
+    | UsageReported
     | ErrorEvent,
     Field(discriminator="type"),
 ]

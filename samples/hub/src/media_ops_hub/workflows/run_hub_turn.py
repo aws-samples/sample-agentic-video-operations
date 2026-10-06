@@ -90,6 +90,15 @@ def run_hub_turn(
         recorder.fail(budget.exceeded)
     elif result.stop_reason != "interrupt":
         recorder.answer(str(result).strip())
+    report_turn_usage(recorder, result, hub.settings.agent_model_id)
+
+
+def report_turn_usage(recorder: StreamEventRecorder, result: Any, model_id: str | None) -> None:
+    """One usage_reported event per turn, also on an interrupt: those tokens cost too."""
+    usage = result.metrics.accumulated_usage
+    if not usage.get("totalTokens"):
+        return
+    recorder.usage(model_id, usage.get("inputTokens", 0), usage.get("outputTokens", 0))
 
 
 def choose_agent_input(agent: Agent, request: HubRequest, actor_id: str) -> Any:

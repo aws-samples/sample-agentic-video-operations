@@ -56,6 +56,7 @@ class ApprovalDecision(BaseModel):
 - `action_completed`
 - `verification_completed`
 - `final_answer`: impact first, then evidence, then the next action.
+- `usage_reported`: one per turn (also on an approval pause): token counts and the estimated USD cost from `media_ops_contracts/estimate_model_cost.py`'s dated price table.
 - `error`
 
 ## 2. Domain packs (`packages/media_ops_contracts/src/media_ops_contracts/domain_pack.py`, framework-free)

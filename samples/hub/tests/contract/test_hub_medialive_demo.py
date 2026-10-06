@@ -22,7 +22,7 @@ def test_the_hub_reads_a_medialive_channel_in_demo_mode(tmp_path, monkeypatch):
     request = HubRequest(prompt="Any problems?")
     events = list(stream_hub_turn(hub, request, session_id="demo", actor_id="operator-a"))
 
-    assert types(events) == ["task_started", "tool_called", "final_answer"]
+    assert types(events) == ["task_started", "tool_called", "final_answer", "usage_reported"]
     assert only(events, "task_started").specialist == "medialive"
     assert "load_skill" in model.tool_names
     assert not any(name.startswith(("stop_", "start_")) for name in model.tool_names)

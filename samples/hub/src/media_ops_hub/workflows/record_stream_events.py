@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookProvider, HookRegistry
 
 from media_ops_contracts.action_result import ActionResult
+from media_ops_contracts.estimate_model_cost import estimate_model_cost_usd
 from media_ops_contracts.stream_event import (
     ActionCompleted,
     ApprovalRequested,
@@ -21,6 +22,7 @@ from media_ops_contracts.stream_event import (
     StreamEvent,
     TaskStarted,
     ToolCalled,
+    UsageReported,
     VerificationCompleted,
 )
 from media_ops_contracts.tool_failure import ToolFailure
@@ -123,6 +125,20 @@ class StreamEventRecorder(HookProvider):
     def answer(self, text: str) -> None:
         self.add(FinalAnswer(session_id=self.session_id, text=text))
 
+    def usage(self, model_id: str | None, input_tokens: int, output_tokens: int) -> None:
+        self.add(
+            UsageReported(
+                session_id=self.session_id,
+                model_id=model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+                estimated_usd=None
+                if model_id is None
+                else estimate_model_cost_usd(model_id, input_tokens, output_tokens),
+            )
+        )
+
     def add(self, event: StreamEvent, *, skill_name: str | None = None) -> None:
         self.events.append(event)
         LOGGER.info(json.dumps(self.log_fields(event, skill_name)))
@@ -140,5 +156,9 @@ class StreamEventRecorder(HookProvider):
             "tool.name": tool,
             "skill.name": skill_name,
             "approval.id": getattr(event, "approval_id", None),
+            "model.id": getattr(event, "model_id", None),
+            "tokens.input": getattr(event, "input_tokens", None),
+            "tokens.output": getattr(event, "output_tokens", None),
+            "cost.estimated_usd": getattr(event, "estimated_usd", None),
         }
         return {key: value for key, value in fields.items() if value is not None}

@@ -24,10 +24,11 @@ def test_a_prompt_streams_the_final_answer_for_the_header_actor(tmp_path, monkey
     hub = build_hub(tmp_path, ScriptedModel([say("All channels are healthy.")]))
     monkeypatch.setattr(entrypoint, "get_hub", lambda: hub.hub)
 
-    [answer] = invoke({"prompt": "Status?"}, headers={ACTOR: "operator-a"})
+    [answer, usage] = invoke({"prompt": "Status?"}, headers={ACTOR: "operator-a"})
 
     assert answer.type == "final_answer"
     assert answer.session_id == "session-a"
+    assert usage.type == "usage_reported"
 
 
 @pytest.mark.parametrize("payload", [{}, {"prompt": "x", "decision": {"approval_id": "a", "approve": True}}])  # fmt: skip
@@ -60,7 +61,8 @@ def test_a_headerless_deployed_decision_cannot_resume_a_pending_write(tmp_path, 
     model = ScriptedModel([call("stop_channel", "use-1", channel_id="ch-1")], [say("Stopped.")])
     hub = build_hub(tmp_path, model)
     monkeypatch.setattr(entrypoint, "get_hub", lambda: hub.hub)
-    [*_, approval] = invoke({"prompt": "Stop ch-1."}, headers={ACTOR: "operator-a"})
+    events = invoke({"prompt": "Stop ch-1."}, headers={ACTOR: "operator-a"})
+    [approval] = [event for event in events if event.type == "approval_requested"]
     decision = {"decision": {"approval_id": approval.approval_id, "approve": True}}
 
     [error] = invoke(decision)
@@ -73,7 +75,7 @@ def test_local_mode_runs_a_headerless_request_as_the_local_operator(tmp_path, mo
     hub = build_hub(tmp_path, ScriptedModel([say("Healthy.")]), local_mode=True)
     monkeypatch.setattr(entrypoint, "get_hub", lambda: hub.hub)
 
-    [answer] = invoke({"prompt": "Status?"}, session=None)
+    [answer, _usage] = invoke({"prompt": "Status?"}, session=None)
 
     assert answer.type == "final_answer"
     assert answer.session_id == entrypoint.LOCAL_SESSION

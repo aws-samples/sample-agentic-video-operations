@@ -36,7 +36,7 @@ def test_an_approved_write_runs_once_with_the_stored_deadline(tmp_path):
 
     assert types(events) == [
         "task_started", "tool_called", "action_completed", "verification_completed",
-        "final_answer",
+        "final_answer", "usage_reported",
     ]  # fmt: skip
     [signed] = hub.pack.approvals
     assert signed.approval_id == approval.approval_id
