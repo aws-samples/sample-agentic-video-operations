@@ -18,6 +18,9 @@ def describe_channel(medialive: Any, channel_id: str) -> ChannelDetails:
         state=ChannelState(channel["State"]),
         pipelines_running=channel.get("PipelinesRunningCount", 0),
         channel_class=channel.get("ChannelClass"),
+        output_locking_mode=channel.get("EncoderSettings", {})
+        .get("GlobalConfiguration", {})
+        .get("OutputLockingMode"),
         input_attachments=[
             attachment["InputAttachmentName"] for attachment in channel.get("InputAttachments", [])
         ],

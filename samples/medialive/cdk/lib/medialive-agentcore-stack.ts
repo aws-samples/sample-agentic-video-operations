@@ -115,12 +115,14 @@ export class MediaLiveAgentCoreStack extends cdk.Stack {
               actions: ['cloudwatch:GetMetricData'],
               resources: ['*'],
             }),
-            // CloudWatch Logs — filter events
+            // MediaLive channel logs
             new iam.PolicyStatement({
               sid: 'CloudWatchLogs',
               effect: iam.Effect.ALLOW,
-              actions: ['logs:FilterLogEvents'],
-              resources: ['*'],
+              actions: ['logs:DescribeLogStreams', 'logs:FilterLogEvents'],
+              resources: [
+                `arn:aws:logs:${this.region}:${this.account}:log-group:ElementalMediaLive:*`,
+              ],
             }),
             // Bedrock model invocation
             new iam.PolicyStatement({

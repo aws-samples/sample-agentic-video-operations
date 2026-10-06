@@ -1,21 +1,36 @@
-"""`just doctor`: check what the samples need before the first run or deploy.
+"""Check offline and AWS deployment prerequisites.
 
-Every failed check prints the one command that fixes it. Exit code 1 if any check fails.
+`just doctor` fails only when the offline development group is incomplete.
+`just doctor aws` makes AWS and deployment checks strict too.
 """
 
+import argparse
 import os
+import platform
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
+from enum import StrEnum
 
-DEFAULT_AGENT_MODEL_ID = "us.anthropic.claude-sonnet-4-6"
-DEFAULT_THUMBNAIL_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 MINIMUM_NODE_MAJOR = 20
+MINIMUM_PYTHON = (3, 12)
+SESSION_MANAGER_INSTALL = (
+    "Install the Session Manager plugin: "
+    "https://docs.aws.amazon.com/systems-manager/latest/userguide/"
+    "session-manager-working-with-install-plugin.html"
+)
+
+
+class CheckGroup(StrEnum):
+    OFFLINE = "offline"
+    AWS = "aws"
 
 
 @dataclass(frozen=True)
 class CheckResult:
+    group: CheckGroup
     name: str
     passed: bool
     detail: str
@@ -23,33 +38,85 @@ class CheckResult:
 
 
 def run_command(*command: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(command, 124, "", "timed out")
 
 
-def check_tool(name: str, fix: str) -> CheckResult:
+def check_tool(name: str, fix: str, group: CheckGroup) -> CheckResult:
     path = shutil.which(name)
-    return CheckResult(name, path is not None, path or "not found", fix)
+    return CheckResult(group, name, path is not None, path or "not found", fix)
+
+
+def check_python_version() -> CheckResult:
+    version = platform.python_version()
+    return CheckResult(
+        CheckGroup.OFFLINE,
+        "python",
+        sys.version_info >= MINIMUM_PYTHON,
+        version,
+        "uv python install 3.12",
+    )
 
 
 def check_docker() -> CheckResult:
     if not shutil.which("docker"):
-        return CheckResult("docker", False, "not found", "Install Docker Desktop or Finch")
+        return CheckResult(
+            CheckGroup.AWS,
+            "docker",
+            False,
+            "not found",
+            "Install Docker: https://docs.docker.com/get-docker/",
+        )
     running = run_command("docker", "info").returncode == 0
     return CheckResult(
-        "docker daemon", running, "running" if running else "not running", "Start Docker Desktop"
+        CheckGroup.AWS,
+        "docker daemon",
+        running,
+        "running" if running else "not running",
+        "Start Docker Desktop, or start the Docker Engine service",
     )
 
 
 def check_node() -> CheckResult:
     if not shutil.which("node"):
-        return CheckResult("node", False, "not found", "brew install node")
+        return CheckResult(
+            CheckGroup.AWS,
+            "node",
+            False,
+            "not found",
+            "Install Node.js 20+: https://nodejs.org/en/download",
+        )
     version = run_command("node", "--version").stdout.strip()
-    major = int(re.match(r"v(\d+)", version).group(1)) if version.startswith("v") else 0
+    match = re.match(r"v(\d+)", version)
+    major = int(match.group(1)) if match else 0
     return CheckResult(
+        CheckGroup.AWS,
         "node",
         major >= MINIMUM_NODE_MAJOR,
-        version,
-        f"Install Node.js {MINIMUM_NODE_MAJOR} or newer",
+        version or "unknown version",
+        f"Install Node.js {MINIMUM_NODE_MAJOR}+: https://nodejs.org/en/download",
+    )
+
+
+def check_session_manager_plugin() -> CheckResult:
+    if not shutil.which("session-manager-plugin"):
+        return CheckResult(
+            CheckGroup.AWS,
+            "session-manager-plugin",
+            False,
+            "not found",
+            SESSION_MANAGER_INSTALL,
+        )
+    result = run_command("session-manager-plugin", "--version")
+    version = result.stdout.strip()
+    return CheckResult(
+        CheckGroup.AWS,
+        "session-manager-plugin",
+        result.returncode == 0 and bool(version),
+        version or "version check failed",
+        SESSION_MANAGER_INSTALL,
     )
 
 
@@ -60,13 +127,18 @@ def check_aws_credentials() -> CheckResult:
     passed = result.returncode == 0
     detail = f"account {result.stdout.strip()}" if passed else "no valid credentials"
     return CheckResult(
-        "aws credentials", passed, detail, "aws configure sso  # or export AWS_PROFILE"
+        CheckGroup.AWS,
+        "aws credentials",
+        passed,
+        detail,
+        "aws configure sso  # or export AWS_PROFILE",
     )
 
 
 def check_region() -> CheckResult:
     region = os.environ.get("AWS_REGION", "")
     return CheckResult(
+        CheckGroup.AWS,
         "AWS_REGION",
         bool(region),
         region or "not set",
@@ -74,8 +146,16 @@ def check_region() -> CheckResult:
     )
 
 
-def check_model_access(variable: str, default: str, region: str) -> CheckResult:
-    model_id = os.environ.get(variable, default)
+def check_model_access(variable: str, region: str) -> CheckResult:
+    model_id = os.environ.get(variable, "")
+    if not model_id:
+        return CheckResult(
+            CheckGroup.AWS,
+            variable,
+            False,
+            "not set",
+            f"cp .env.example .env  # then set {variable}",
+        )
     if re.match(r"^(us|eu|apac|global)\.", model_id):
         command = (
             "aws",
@@ -88,6 +168,7 @@ def check_model_access(variable: str, default: str, region: str) -> CheckResult:
         command = ("aws", "bedrock", "get-foundation-model", "--model-identifier", model_id)
     passed = run_command(*command, "--region", region).returncode == 0
     return CheckResult(
+        CheckGroup.AWS,
         variable,
         passed,
         model_id,
@@ -101,6 +182,7 @@ def check_cdk_bootstrap(region: str) -> CheckResult:
     )
     passed = result.returncode == 0
     return CheckResult(
+        CheckGroup.AWS,
         "cdk bootstrap",
         passed,
         "CDKToolkit found" if passed else "missing",
@@ -108,38 +190,114 @@ def check_cdk_bootstrap(region: str) -> CheckResult:
     )
 
 
-def collect_results() -> list[CheckResult]:
-    results = [
-        check_tool("uv", "curl -LsSf https://astral.sh/uv/install.sh | sh"),
-        check_tool("just", "uv tool install rust-just"),
-        check_tool("aws", "brew install awscli"),
-        check_node(),
-        check_docker(),
-        check_region(),
+def blocked_cdk_bootstrap() -> CheckResult:
+    return CheckResult(
+        CheckGroup.AWS,
+        "cdk bootstrap",
+        False,
+        "not checked: AWS CLI, credentials, and AWS_REGION are required",
+        "AWS_REGION=<region> npx cdk bootstrap aws://<account>/<region>",
+    )
+
+
+def collect_offline_results() -> list[CheckResult]:
+    return [
+        check_tool(
+            "uv",
+            "curl -LsSf https://astral.sh/uv/install.sh | sh",
+            CheckGroup.OFFLINE,
+        ),
+        check_tool("just", "uv tool install rust-just", CheckGroup.OFFLINE),
+        check_python_version(),
     ]
-    region = os.environ.get("AWS_REGION", "")
-    if not (shutil.which("aws") and region):
-        return results
+
+
+def collect_aws_results() -> list[CheckResult]:
+    aws_cli = check_tool(
+        "aws",
+        "Install AWS CLI v2: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
+        CheckGroup.AWS,
+    )
+    region = check_region()
+    results = [
+        aws_cli,
+        check_session_manager_plugin(),
+        check_docker(),
+        check_node(),
+        check_tool(
+            "npx",
+            "Install Node.js 20+; each CDK app installs its own CDK with npm ci",
+            CheckGroup.AWS,
+        ),
+        region,
+    ]
+    if not (aws_cli.passed and region.passed):
+        return [*results, blocked_cdk_bootstrap()]
+
     credentials = check_aws_credentials()
     results.append(credentials)
-    if credentials.passed:
-        results.append(check_model_access("AGENT_MODEL_ID", DEFAULT_AGENT_MODEL_ID, region))
-        results.append(check_model_access("THUMBNAIL_MODEL_ID", DEFAULT_THUMBNAIL_MODEL_ID, region))
-        results.append(check_cdk_bootstrap(region))
+    if not credentials.passed:
+        return [*results, blocked_cdk_bootstrap()]
+
+    results.extend(
+        [
+            check_model_access("AGENT_MODEL_ID", region.detail),
+            check_model_access("THUMBNAIL_MODEL_ID", region.detail),
+            check_cdk_bootstrap(region.detail),
+        ]
+    )
     return results
 
 
-def main() -> int:
+def collect_results() -> list[CheckResult]:
+    return [*collect_offline_results(), *collect_aws_results()]
+
+
+def print_results(results: list[CheckResult], *, strict_aws: bool) -> None:
+    for group in CheckGroup:
+        print(f"{group.value.upper()} prerequisites")
+        for result in (item for item in results if item.group is group):
+            failed_strictly = group is CheckGroup.OFFLINE or strict_aws
+            mark = "ok  " if result.passed else ("FAIL" if failed_strictly else "WARN")
+            print(f"{mark} {result.name:<20} {result.detail}")
+            if not result.passed:
+                print(f"     fix: {result.fix}")
+        print()
+
+
+def parse_arguments(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "group",
+        nargs="?",
+        choices=[CheckGroup.AWS],
+        help="make AWS and deployment checks strict",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = parse_arguments(argv or [])
+    strict_aws = arguments.group == CheckGroup.AWS
     results = collect_results()
-    for result in results:
-        mark = "ok  " if result.passed else "FAIL"
-        print(f"{mark} {result.name:<20} {result.detail}")
-        if not result.passed:
-            print(f"     fix: {result.fix}")
-    failed = [result for result in results if not result.passed]
-    print("\nAll checks passed." if not failed else f"\n{len(failed)} check(s) failed.")
-    return 1 if failed else 0
+    print_results(results, strict_aws=strict_aws)
+
+    offline_failures = [
+        result for result in results if result.group is CheckGroup.OFFLINE and not result.passed
+    ]
+    aws_failures = [
+        result for result in results if result.group is CheckGroup.AWS and not result.passed
+    ]
+    blocking = [*offline_failures, *(aws_failures if strict_aws else [])]
+    if blocking:
+        print(f"{len(blocking)} required check(s) failed.")
+        return 1
+    if aws_failures:
+        print(f"Offline development is ready. {len(aws_failures)} AWS warning(s).")
+    else:
+        print("All checks passed.")
+    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

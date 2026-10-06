@@ -29,7 +29,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     const bedrockModelId = new cdk.CfnParameter(this, "BedrockModelId", {
       type: "String",
       description: "The Bedrock model ID for the agent",
-      default: "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      default: "us.anthropic.claude-sonnet-4-6",
     });
 
     // Hydrolix table name for time-series data queries
@@ -64,8 +64,8 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
 
     // Hydrolix credentials stored in AWS Secrets Manager with default placeholder values
     const hydrolixSecret = new secretsmanager.Secret(this, "HydrolixSecret", {
-      secretName: `hydrolix-data-assistant-secret`,
       description: "Hydrolix connection credentials for time-series data analysis",
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
       secretObjectValue: {
         HYDROLIX_HOST: cdk.SecretValue.unsafePlainText("your-hydrolix-host.example.com"),
         HYDROLIX_PORT: cdk.SecretValue.unsafePlainText("8088"),
@@ -309,7 +309,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
       description: 'Container runtime for Hydrolix CDN analytics data analyst assistant',
       environmentVariables: {
         MEMORY_ID: agentMemory.attrMemoryId,
-        BEDROCK_MODEL_ID: bedrockModelId.valueAsString,
+        AGENT_MODEL_ID: bedrockModelId.valueAsString,
         HYDROLIX_SECRET_ARN: hydrolixSecret.secretArn,
         HYDROLIX_TABLE: hydrolixTable.valueAsString,
         QUESTION_ANSWERS_TABLE: rawQueryResults.tableName,

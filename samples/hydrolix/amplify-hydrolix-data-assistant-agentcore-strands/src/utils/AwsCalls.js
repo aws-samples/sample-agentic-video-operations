@@ -11,7 +11,7 @@ import {
 } from "./Utils.js";
 import {
   QUESTION_ANSWERS_TABLE_NAME,
-  MODEL_ID_FOR_CHART,
+  CHART_MODEL_ID,
   CHART_PROMPT,
 } from "../env.js";
 
@@ -81,6 +81,9 @@ export const getQueryResults = async (queryUuid = "") => {
  * @returns {Object} Chart configuration or rationale for no chart
  */
 export const generateChart = async (answer) => {
+  if (!CHART_MODEL_ID) {
+    throw new Error("Set CHART_MODEL_ID before building the Amplify application.");
+  }
   const bedrock = await createAwsClient(BedrockRuntimeClient);
   let query_results = "";
   for (let i = 0; i < answer.queryResults.length; i++) {
@@ -122,7 +125,7 @@ export const generateChart = async (answer) => {
     const command = new InvokeModelCommand({
       contentType: "application/json",
       body: JSON.stringify(payload),
-      modelId: MODEL_ID_FOR_CHART,
+      modelId: CHART_MODEL_ID,
     });
 
     const apiResponse = await bedrock.send(command);

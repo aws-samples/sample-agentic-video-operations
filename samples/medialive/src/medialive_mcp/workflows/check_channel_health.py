@@ -6,8 +6,10 @@ from pydantic import BaseModel
 
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from medialive_mcp.adapters.cloudwatch.read_channel_metrics import read_channel_metrics
+from medialive_mcp.adapters.media_live.describe_channel import describe_channel
 from medialive_mcp.bootstrap.create_medialive_clients import MediaLiveClients
 from medialive_mcp.domain.identify_channel_issues import (
+    ChannelContext,
     ChannelHealthReport,
     identify_channel_issues,
 )
@@ -50,8 +52,10 @@ def check_channel_issues(
     clients: MediaLiveClients, channel_id: str, hours_back: int
 ) -> ChannelHealthReport:
     window = recent_window(hours_back)
+    channel = describe_channel(clients.medialive, channel_id)
+    context = ChannelContext(channel.channel_class, channel.output_locking_mode)
     series = read_channel_metrics(clients.cloudwatch, channel_id, ALL_METRICS, window)
-    return identify_channel_issues(channel_id, series)
+    return identify_channel_issues(channel_id, series, context)
 
 
 def build_metrics_table(

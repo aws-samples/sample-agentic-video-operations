@@ -65,7 +65,10 @@ def create_composite_tools(settings: RuntimeSettings, clients: MediaLiveClients)
             summarize_channel_metrics(clients, channel(channel_id), hours_back, category)
         ),
         "get_channel_logs": lambda channel_id=None, hours_back=1, **_: read_channel_logs(
-            clients.logs, channel(channel_id), recent_window(hours_back)
+            clients,
+            channel(channel_id),
+            recent_window(hours_back),
+            settings.aws_region,
         ),
         "check_channel_issues": lambda channel_id=None, hours_back=24, **_: check_channel_issues(
             clients, channel(channel_id), hours_back

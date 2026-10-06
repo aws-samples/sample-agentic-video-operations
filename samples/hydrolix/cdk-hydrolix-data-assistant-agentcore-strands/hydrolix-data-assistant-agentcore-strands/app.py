@@ -10,23 +10,23 @@ Available Subagents:
 - cache_origin_agent: Cache efficiency and origin server performance analysis
 """
 
-import logging
 import json
+import logging
 import os
 from uuid import uuid4
 
 from bedrock_agentcore import BedrockAgentCoreApp
-from strands import Agent
-from strands_tools import current_time, calculator
-from strands.models import BedrockModel
-
-from src.tools import hydrolix_agent, qoe_analysis_agent, cache_origin_agent
+from src.settings.runtime_settings import load_runtime_settings
+from src.tools import cache_origin_agent, hydrolix_agent, qoe_analysis_agent
 from src.utils import (
-    load_file_content,
-    get_agentcore_memory_messages,
     MemoryHookProvider,
+    get_agentcore_memory_messages,
     get_request_context,
+    load_file_content,
 )
+from strands import Agent
+from strands.models import BedrockModel
+from strands_tools import calculator, current_time
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -34,9 +34,8 @@ logger = logging.getLogger("orchestrator-agent")
 
 # Environment configuration
 memory_id = os.environ.get("MEMORY_ID")
-bedrock_model_id = os.environ.get(
-    "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
-)
+runtime_settings = load_runtime_settings()
+bedrock_model_id = runtime_settings.agent_model_id
 
 # Initialize the Bedrock Agent Core app
 app = BedrockAgentCoreApp()
@@ -44,15 +43,14 @@ app = BedrockAgentCoreApp()
 
 def load_orchestrator_prompt():
     """Load the orchestrator system prompt."""
-    fallback_prompt = """You are an intelligent assistant orchestrator. Your role is to understand user requests 
-and route them to the appropriate specialized subagent. You have access to:
-
-- video_games_sales_agent: For analyzing video game sales data, market trends, and business insights
-- hydrolix_agent: For general time-series data queries and combined analysis
-- qoe_analysis_agent: For Quality of Experience analysis (buffer health, bitrate, session quality, rebuffering)
-- cache_origin_agent: For cache efficiency, origin performance, error rates, and bandwidth analysis
-
-Always use the appropriate subagent tool to handle user requests. Provide helpful, conversational responses."""
+    fallback_prompt = (
+        "You are Gus, a Hydrolix CDN analytics orchestrator. Route each request "
+        "to one available specialist:\n\n"
+        "- hydrolix_agent: general time-series and combined analysis\n"
+        "- qoe_analysis_agent: viewer experience, buffer, bitrate, and sessions\n"
+        "- cache_origin_agent: cache efficiency, origin performance, and errors\n\n"
+        "Use the best specialist and return a clear, conversational response."
+    )
 
     try:
         prompt = load_file_content("orchestrator_instructions.txt", default_content=fallback_prompt)

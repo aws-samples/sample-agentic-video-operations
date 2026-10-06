@@ -19,7 +19,7 @@ RUN uv pip install -r requirements.txt
 
 
 
-RUN uv pip install aws-opentelemetry-distro>=0.10.1
+RUN uv pip install "aws-opentelemetry-distro>=0.10.1"
 
 
 # Signal that this is running in Docker for host binding logic

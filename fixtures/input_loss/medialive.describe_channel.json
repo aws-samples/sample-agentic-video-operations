@@ -3,6 +3,7 @@
   "ChannelClass": "STANDARD",
   "Id": "1234567",
   "Name": "demo-channel",
+  "LogLevel": "INFO",
   "PipelinesRunningCount": 2,
   "State": "RUNNING",
   "InputAttachments": [

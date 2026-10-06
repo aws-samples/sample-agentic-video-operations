@@ -24,7 +24,9 @@
         "serve-cmcd"
       ],
       "env": {
-        "DEMO": "1"
+        "DEMO": "1",
+        "DEMO_SCENARIO": "cmcd_rebuffering",
+        "ALLOW_WRITES": "false"
       }
     }
   }

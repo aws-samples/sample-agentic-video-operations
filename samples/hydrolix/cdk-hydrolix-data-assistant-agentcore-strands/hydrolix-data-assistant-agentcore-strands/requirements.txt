@@ -9,3 +9,4 @@ mcp
 clickhouse-connect
 fastmcp
 gunicorn
+pydantic-settings

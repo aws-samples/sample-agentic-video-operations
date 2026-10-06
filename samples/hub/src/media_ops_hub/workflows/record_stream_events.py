@@ -1,0 +1,144 @@
+"""Collect the StreamEvents of one turn and log each one (extend_the_hub.md §1, §6).
+
+Raw tool output never becomes an event: a tool call is reported by name and kind only,
+and a write by the ActionResult fields.
+"""
+
+import json
+import logging
+from collections.abc import Callable
+from typing import Any
+
+from pydantic import ValidationError
+from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookProvider, HookRegistry
+
+from media_ops_contracts.action_result import ActionResult
+from media_ops_contracts.stream_event import (
+    ActionCompleted,
+    ApprovalRequested,
+    ErrorEvent,
+    FinalAnswer,
+    StreamEvent,
+    TaskStarted,
+    ToolCalled,
+    VerificationCompleted,
+)
+from media_ops_contracts.tool_failure import ToolFailure
+from media_ops_hub.bootstrap.wrap_pack_tools import ToolSurface
+from media_ops_hub.domain.pending_approval import PendingApproval
+from media_ops_hub.prompts.build_system_prompt import PROMPT_VERSION
+
+LOGGER = logging.getLogger("media_ops_hub")
+
+
+class StreamEventRecorder(HookProvider):
+    def __init__(
+        self,
+        surface: ToolSurface,
+        *,
+        session_id: str,
+        actor_id: str,
+        publish: Callable[[StreamEvent], None] = lambda event: None,
+    ) -> None:
+        self.surface = surface
+        self.session_id = session_id
+        self.actor_id = actor_id
+        self.publish = publish  # called as each event is recorded, so callers can stream it
+        self.events: list[StreamEvent] = []
+        self._started_packs: set[str] = set()
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
+        registry.add_callback(BeforeToolCallEvent, self.record_tool_call)
+        registry.add_callback(AfterToolCallEvent, self.record_write_result)
+
+    def record_tool_call(self, event: BeforeToolCallEvent) -> None:
+        if event.cancel_tool:
+            return
+        name = event.tool_use["name"]
+        pack = self.surface.pack_by_tool.get(name)
+        if pack and pack not in self._started_packs:
+            self._started_packs.add(pack)
+            self.add(TaskStarted(session_id=self.session_id, specialist=pack, task=name))
+        write = self.surface.writes.get(name)
+        resource = event.tool_use["input"].get(write.resource_parameter) if write else None
+        skill = event.tool_use["input"].get("name") if name == "load_skill" else None
+        self.add(
+            ToolCalled(
+                session_id=self.session_id,
+                tool=name,
+                read_only=write is None,
+                resource_id=None if resource is None else str(resource),
+            ),
+            skill_name=skill,
+        )
+
+    def record_write_result(self, event: AfterToolCallEvent) -> None:
+        if event.tool_use["name"] not in self.surface.writes:
+            return
+        if event.cancel_message or event.result.get("status") != "success":
+            return
+        try:
+            result = ActionResult.model_validate_json(event.result["content"][0]["text"])
+        except (KeyError, IndexError, ValidationError):
+            return
+        self.add(
+            ActionCompleted(
+                session_id=self.session_id,
+                approval_id=result.approval_id,
+                action=result.action,
+                resource_id=result.resource_id,
+            )
+        )
+        self.add(
+            VerificationCompleted(
+                session_id=self.session_id,
+                approval_id=result.approval_id,
+                verified=result.verified,
+                before_state=result.before_state,
+                after_state=result.after_state,
+            )
+        )
+
+    def request_approval(self, pending: PendingApproval) -> None:
+        self.add(
+            ApprovalRequested(
+                session_id=self.session_id,
+                approval_id=pending.approval_id,
+                proposal=pending.proposal,
+                risk="high",
+                expires_at=pending.expires_at,
+            )
+        )
+
+    def fail(self, failure: ToolFailure) -> None:
+        self.add(
+            ErrorEvent(
+                session_id=self.session_id,
+                kind=failure.kind,
+                message=failure.message,
+                next_action=failure.next_action,
+            )
+        )
+
+    def answer(self, text: str) -> None:
+        self.add(FinalAnswer(session_id=self.session_id, text=text))
+
+    def add(self, event: StreamEvent, *, skill_name: str | None = None) -> None:
+        self.events.append(event)
+        LOGGER.info(json.dumps(self.log_fields(event, skill_name)))
+        self.publish(event)
+
+    def log_fields(self, event: StreamEvent, skill_name: str | None) -> dict[str, Any]:
+        """Ids and names only: no prompt, tool output or answer text."""
+        tool = getattr(event, "tool", None) or getattr(event, "action", None)
+        fields = {
+            "event": event.type,
+            "session.id": self.session_id,
+            "actor.id": self.actor_id,
+            "prompt.version": PROMPT_VERSION,
+            "pack.name": getattr(event, "specialist", None) or self.surface.pack_by_tool.get(tool),
+            "tool.name": tool,
+            "skill.name": skill_name,
+            "approval.id": getattr(event, "approval_id", None),
+        }
+        return {key: value for key, value in fields.items() if value is not None}

@@ -5,7 +5,7 @@
 name = "sample-agentic-video-operations"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["media-ops-contracts", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server"]
+dependencies = ["media-ops-contracts", "cmcd-mcp-server", "mediaconnect-mcp-server", "medialive-mcp-server", "media-ops-hub"]
 
 [dependency-groups]
 dev = ["pytest>=8.3,<9", "ruff>=0.12,<0.13"]
@@ -19,6 +19,7 @@ members = [
   "samples/cmcd",
   "samples/mediaconnect",
   "samples/medialive",
+  "samples/hub",
 ]
 
 [tool.uv.sources]
@@ -26,6 +27,7 @@ media-ops-contracts = { workspace = true }
 cmcd-mcp-server = { workspace = true }
 mediaconnect-mcp-server = { workspace = true }
 medialive-mcp-server = { workspace = true }
+media-ops-hub = { workspace = true }
 
 [tool.ruff]
 line-length = 100
@@ -35,6 +37,7 @@ src = [
   "samples/cmcd/src",
   "samples/mediaconnect/src",
   "samples/medialive/src",
+  "samples/hub/src",
 ]
 # Unconverted samples; remove each entry in the step that converts the sample.
 extend-exclude = [
@@ -42,7 +45,13 @@ extend-exclude = [
   "samples/medialive/tests/local",
   "samples/medialive/tests/remote",
   "samples/medialive/tests/unit",  # ported onto the new package in G3.2
-  "samples/hub",
+  # The legacy LangChain runtimes; the Strands hub in samples/hub/src replaces them.
+  "samples/hub/cdk",
+  "samples/hub/coordinator",
+  "samples/hub/eml",
+  "samples/hub/emx",
+  "samples/hub/shared",
+  "samples/hub/tests/*.py",
   "samples/hydrolix",
 ]
 
@@ -57,6 +66,8 @@ testpaths = [
   "samples/cmcd/tests",
   "samples/mediaconnect/tests",
   "samples/medialive/tests/scenarios",
+  "samples/medialive/tests/pack",
+  "samples/hub/tests/contract",
 ]
 pythonpath = ["scripts"]
 addopts = "--strict-markers --tb=short -m 'not eval and not integration'"

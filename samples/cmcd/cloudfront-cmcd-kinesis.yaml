@@ -139,7 +139,7 @@ Resources:
   CMCDKinesisStream:
     Type: AWS::Kinesis::Stream
     Properties:
-      Name: !Ref KinesisStreamName
+      Name: !Sub '${AWS::StackName}-${KinesisStreamName}'
       ShardCount: 1
       RetentionPeriodHours: 24
       StreamEncryption:
@@ -185,7 +185,7 @@ Resources:
   CMCDRealtimeLogConfig:
     Type: AWS::CloudFront::RealtimeLogConfig
     Properties:
-      Name: cmcd-realtime-logs
+      Name: !Sub '${AWS::StackName}-cmcd-realtime-logs'
       EndPoints:
         - StreamType: Kinesis
           KinesisStreamConfig:
@@ -292,11 +292,11 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Description: !Sub '${AWS::StackName}-influxdb-credentials'
+      KmsKeyId: !Ref SecretsManagerKMSKey
       GenerateSecretString:
         SecretStringTemplate: !Sub |
           {
             "username": "admin",
-            "token": "${AWS::StackName}-token-${AWS::AccountId}",
             "organization": "cmcd-org",
             "bucket": "${TableName}"
           }
@@ -308,6 +308,23 @@ Resources:
       Tags:
         - Key: Name
           Value: InfluxDBpassword
+
+  # Processor-only secret. The token custom resource replaces this placeholder.
+  InfluxDBProcessorSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: !Sub '${AWS::StackName}-influxdb-processor'
+      KmsKeyId: !Ref SecretsManagerKMSKey
+      SecretString: !Sub |
+        {
+          "endpoint": "",
+          "organization": "cmcd-org",
+          "bucket": "${TableName}",
+          "writeToken": ""
+        }
+      Tags:
+        - Key: Name
+          Value: InfluxDBprocessor
 
   # Timestream for InfluxDB
   InfluxDBInstance:
@@ -513,43 +530,309 @@ Resources:
               return {'statusCode': 200, 'body': json.dumps('Secret rotation placeholder')}
       Role: !GetAtt SecretRotationLambdaRole.Arn
 
-  # Lambda function to update secret with InfluxDB endpoint
+  # Provision least-privilege InfluxDB tokens and prove both paths work.
   UpdateSecretLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-update-secret'
+      FunctionName: !Sub '${AWS::StackName}-provision-influxdb-tokens'
       Runtime: python3.13
       Handler: index.lambda_handler
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
       Code:
         ZipFile: !Sub |
+          import base64
           import json
+          import ssl
+          import time
+          from http.cookiejar import CookieJar
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urlencode
+          from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener
+
           import boto3
           import cfnresponse
-          
+
+          READ_DESCRIPTION = "cmcd-mcp-server read-only"
+          WRITE_DESCRIPTION = "cmcd-kinesis-processor write-only"
+          ADMIN_SECRET_ARN = "${InfluxDBSecret}"
+          PROCESSOR_SECRET_ARN = "${InfluxDBProcessorSecret}"
+          PHYSICAL_RESOURCE_ID = "${AWS::StackName}-influxdb-tokens"
+          RESPONSE_BUFFER_MILLIS = 25_000
+
+          def remaining_seconds(context):
+              return max(
+                  0.0,
+                  (context.get_remaining_time_in_millis() - RESPONSE_BUFFER_MILLIS) / 1000,
+              )
+
+          def wait_before_retry(context, seconds):
+              wait_seconds = min(seconds, remaining_seconds(context) - 1)
+              if wait_seconds <= 0:
+                  raise TimeoutError("InfluxDB provisioning deadline reached")
+              time.sleep(wait_seconds)
+
+          def request(
+              opener,
+              url,
+              context,
+              *,
+              method="GET",
+              headers=None,
+              data=None,
+              attempts=3,
+              retry_delay=10,
+          ):
+              last_error = None
+              for attempt in range(attempts):
+                  timeout = min(30, remaining_seconds(context))
+                  if timeout < 1:
+                      raise TimeoutError("InfluxDB provisioning deadline reached")
+                  try:
+                      with opener.open(
+                          Request(url, method=method, headers=headers or {}, data=data),
+                          timeout=timeout,
+                      ) as response:
+                          return response.status, response.read()
+                  except HTTPError as error:
+                      if error.code == 401:
+                          raise RuntimeError(
+                              "InfluxDB authentication failed with HTTP 401; "
+                              "verify the admin credentials or token permissions"
+                          ) from error
+                      if not 500 <= error.code < 600:
+                          raise
+                      last_error = error
+                      if attempt + 1 < attempts:
+                          wait_before_retry(context, retry_delay)
+                  except (URLError, TimeoutError) as error:
+                      last_error = error
+                      if attempt + 1 < attempts:
+                          wait_before_retry(context, retry_delay)
+              raise last_error
+
+          def read_json(opener, url, context):
+              status, body = request(opener, url, context)
+              if status != 200:
+                  raise RuntimeError(f"InfluxDB lookup failed with HTTP {status}")
+              return json.loads(body)
+
+          def find_id(items, name):
+              match = next((item for item in items if item.get("name") == name), None)
+              if not match:
+                  raise RuntimeError(f"InfluxDB resource {name!r} was not found")
+              return match["id"]
+
+          def permission(action, org_id, bucket_id):
+              return {
+                  "action": action,
+                  "resource": {
+                      "type": "buckets",
+                      "id": bucket_id,
+                      "orgID": org_id,
+                  },
+              }
+
+          def has_permission(authorization, action, org_id, bucket_id):
+              permissions = authorization.get("permissions")
+              if not isinstance(permissions, list) or len(permissions) != 1:
+                  return False
+              candidate = permissions[0]
+              resource = candidate.get("resource", {})
+              return (
+                  candidate.get("action") == action
+                  and resource.get("type") == "buckets"
+                  and resource.get("id") == bucket_id
+                  and resource.get("orgID") == org_id
+              )
+
+          def find_or_create_token(
+              opener,
+              endpoint,
+              org_id,
+              bucket_id,
+              description,
+              action,
+              context,
+          ):
+              expected = [permission(action, org_id, bucket_id)]
+              existing = read_json(
+                  opener,
+                  f"{endpoint}/api/v2/authorizations?{urlencode({'orgID': org_id})}",
+                  context,
+              ).get("authorizations", [])
+              match = next(
+                  (
+                      authorization
+                      for authorization in existing
+                      if authorization.get("description") == description
+                      and has_permission(authorization, action, org_id, bucket_id)
+                      and authorization.get("token")
+                  ),
+                  None,
+              )
+              if match:
+                  return match["token"]
+              payload = json.dumps({
+                  "orgID": org_id,
+                  "description": description,
+                  "permissions": expected,
+              }).encode()
+              status, body = request(
+                  opener,
+                  f"{endpoint}/api/v2/authorizations",
+                  context,
+                  method="POST",
+                  headers={"Content-Type": "application/json"},
+                  data=payload,
+              )
+              if status != 201:
+                  raise RuntimeError(
+                      f"InfluxDB token creation for {description!r} failed with HTTP {status}"
+                  )
+              return json.loads(body)["token"]
+
+          def prove_write_and_read(opener, endpoint, secret, context):
+              write_url = f"{endpoint}/api/v2/write?{urlencode({
+                  'org': secret['organization'],
+                  'bucket': secret['bucket'],
+                  'precision': 'ns',
+              })}"
+              status, _ = request(
+                  opener,
+                  write_url,
+                  context,
+                  method="POST",
+                  headers={
+                      "Authorization": f"Token {secret['writeToken']}",
+                      "Content-Type": "text/plain",
+                  },
+                  data=b"cmcd_deploy_smoke,source=cloudformation value=1i",
+              )
+              if status != 204:
+                  raise RuntimeError(f"InfluxDB deployment smoke write failed with HTTP {status}")
+              query = (
+                  f'from(bucket: "{secret["bucket"]}")'
+                  ' |> range(start: -5m)'
+                  ' |> filter(fn: (r) => r["_measurement"] == "cmcd_deploy_smoke")'
+                  " |> limit(n: 1)"
+              ).encode()
+              for attempt in range(5):
+                  status, body = request(
+                      opener,
+                      f"{endpoint}/api/v2/query?{urlencode({'org': secret['organization']})}",
+                      context,
+                      method="POST",
+                      headers={
+                          "Authorization": f"Token {secret['readToken']}",
+                          "Content-Type": "application/vnd.flux",
+                      },
+                      data=query,
+                  )
+                  if status == 200 and b"cmcd_deploy_smoke" in body:
+                      return
+                  if attempt < 4:
+                      wait_before_retry(context, 2)
+              raise RuntimeError("InfluxDB deployment smoke read did not return the written point")
+
           def lambda_handler(event, context):
               try:
-                  if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                  if event["RequestType"] in ("Create", "Update"):
                       secrets_client = boto3.client('secretsmanager')
-                      
-                      # Get current secret value
-                      response = secrets_client.get_secret_value(SecretId='${InfluxDBSecret}')
-                      secret_dict = json.loads(response['SecretString'])
-                      
-                      # Update with InfluxDB endpoint
-                      secret_dict['endpoint'] = f"https://{event['ResourceProperties']['InfluxDBEndpoint']}:8086"
-                      
-                      # Update the secret
-                      secrets_client.update_secret(
-                          SecretId='${InfluxDBSecret}',
-                          SecretString=json.dumps(secret_dict)
+                      response = secrets_client.get_secret_value(SecretId=ADMIN_SECRET_ARN)
+                      secret_dict = json.loads(response["SecretString"])
+                      endpoint = f"https://{event['ResourceProperties']['InfluxDBEndpoint']}:8086"
+                      tls_context = ssl.create_default_context()
+                      opener = build_opener(
+                          HTTPSHandler(context=tls_context),
+                          HTTPCookieProcessor(CookieJar()),
                       )
-                      
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-              except Exception as e:
-                  print(f"Error: {str(e)}")
-                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                      basic = base64.b64encode(
+                          f"{secret_dict['username']}:{secret_dict['password']}".encode()
+                      ).decode()
+                      status, _ = request(
+                          opener,
+                          f"{endpoint}/api/v2/signin",
+                          context,
+                          method="POST",
+                          headers={"Authorization": f"Basic {basic}"},
+                          attempts=18,
+                      )
+                      if status != 204:
+                          raise RuntimeError(f"InfluxDB sign-in failed with HTTP {status}")
+                      org_id = find_id(
+                          read_json(
+                              opener,
+                              f"{endpoint}/api/v2/orgs?{urlencode({'org': secret_dict['organization']})}",
+                              context,
+                          )["orgs"],
+                          secret_dict["organization"],
+                      )
+                      bucket_id = find_id(
+                          read_json(
+                              opener,
+                              f"{endpoint}/api/v2/buckets?{urlencode({
+                                  'name': secret_dict['bucket'],
+                                  'orgID': org_id,
+                              })}",
+                              context,
+                          )["buckets"],
+                          secret_dict["bucket"],
+                      )
+                      secret_dict["endpoint"] = endpoint
+                      secret_dict["readToken"] = find_or_create_token(
+                          opener,
+                          endpoint,
+                          org_id,
+                          bucket_id,
+                          READ_DESCRIPTION,
+                          "read",
+                          context,
+                      )
+                      secret_dict.pop("writeToken", None)
+                      write_token = find_or_create_token(
+                          opener,
+                          endpoint,
+                          org_id,
+                          bucket_id,
+                          WRITE_DESCRIPTION,
+                          "write",
+                          context,
+                      )
+                      secrets_client.update_secret(
+                          SecretId=ADMIN_SECRET_ARN,
+                          SecretString=json.dumps(secret_dict),
+                      )
+                      processor_secret = {
+                          "endpoint": endpoint,
+                          "organization": secret_dict["organization"],
+                          "bucket": secret_dict["bucket"],
+                          "writeToken": write_token,
+                      }
+                      secrets_client.update_secret(
+                          SecretId=PROCESSOR_SECRET_ARN,
+                          SecretString=json.dumps(processor_secret),
+                      )
+                      prove_write_and_read(
+                          opener,
+                          endpoint,
+                          {**secret_dict, "writeToken": write_token},
+                          context,
+                      )
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                      "TokensProvisioned": event["RequestType"] != "Delete",
+                  }, physicalResourceId=PHYSICAL_RESOURCE_ID)
+              except Exception as error:
+                  print(f"InfluxDB token provisioning failed: {error}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {
+                      "Error": "InfluxDB token provisioning or smoke verification failed",
+                  }, physicalResourceId=PHYSICAL_RESOURCE_ID)
       Role: !GetAtt UpdateSecretLambdaRole.Arn
-      Timeout: 60
+      Timeout: 300
 
   # IAM Role for Update Secret Lambda
   UpdateSecretLambdaRole:
@@ -564,6 +847,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: UpdateSecretPolicy
           PolicyDocument:
@@ -576,18 +860,27 @@ Resources:
                 Resource: !Ref InfluxDBSecret
               - Effect: Allow
                 Action:
+                  - secretsmanager:UpdateSecret
+                Resource: !Ref InfluxDBProcessorSecret
+              - Effect: Allow
+                Action:
                   - kms:Decrypt
                   - kms:Encrypt
                   - kms:GenerateDataKey
                 Resource: !GetAtt SecretsManagerKMSKey.Arn
 
-  # Custom resource to trigger secret update
+  # Custom resource to provision and verify the least-privilege tokens.
   UpdateSecretCustomResource:
     Type: AWS::CloudFormation::CustomResource
-    DependsOn: InfluxDBInstance
+    DependsOn:
+      - PrivateRoute
+      - PrivateSubnet1RouteTableAssociation
+      - PrivateSubnet2RouteTableAssociation
     Properties:
       ServiceToken: !GetAtt UpdateSecretLambda.Arn
+      ServiceTimeout: 600
       InfluxDBEndpoint: !GetAtt InfluxDBInstance.Endpoint
+      Bucket: !Ref TableName
 
   # IAM Role for Secret Rotation Lambda
   SecretRotationLambdaRole:
@@ -625,22 +918,6 @@ Resources:
       RotationRules:
         AutomaticallyAfterDays: 30
 
-  # Managed Policy for Bastion Host InfluxDB access
-  BastionInfluxDBPolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-              - secretsmanager:GetSecretValue
-            Resource: !Ref InfluxDBSecret
-          - Effect: Allow
-            Action:
-              - kms:Decrypt
-            Resource: !GetAtt SecretsManagerKMSKey.Arn
-
   # DLQ for Lambda functions
   LambdaDLQ:
     Type: AWS::SQS::Queue
@@ -662,7 +939,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-        - !Ref BastionInfluxDBPolicy
 
   # Instance Profile for Bastion Host
   BastionInstanceProfile:
@@ -702,18 +978,12 @@ Resources:
           # Create connection script (will be updated after InfluxDB is ready)
           cat > /home/ec2-user/connect-influxdb.sh << 'EOF'
           #!/bin/bash
-          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id ${InfluxDBSecret} --query SecretString --output text --region ${AWS::Region})
-          PASSWORD=$(echo $SECRET_VALUE | jq -r .password)
-          
           # Get InfluxDB endpoint from CloudFormation stack outputs
           INFLUXDB_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} --query 'Stacks[0].Outputs[?OutputKey==`InfluxDBEndpoint`].OutputValue' --output text --region ${AWS::Region})
           
           echo "InfluxDB Endpoint: $INFLUXDB_ENDPOINT"
           echo "Username: admin"
-          echo "Password: $PASSWORD"
-          echo ""
-          echo "To connect using InfluxDB CLI:"
-          echo "influx -host $INFLUXDB_ENDPOINT -username admin -password $PASSWORD"
+          echo "Read the password locally with scripts/manage_cmcd_stack.py show-next-steps."
           EOF
           
           chmod +x /home/ec2-user/connect-influxdb.sh
@@ -756,11 +1026,12 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - timestream:GetInfluxDBInstance
                   - secretsmanager:GetSecretValue
-                Resource: 
-                  - !Sub 'arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:influxdb-instance/${InfluxDBInstance}'
-                  - !Ref InfluxDBSecret
+                Resource: !Ref InfluxDBProcessorSecret
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDLQ.Arn
               - Effect: Allow
                 Action:
                   - ec2:CreateNetworkInterface
@@ -781,7 +1052,7 @@ Resources:
   CMCDProcessorLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: cmcd-kinesis-processor
+      FunctionName: !Sub '${AWS::StackName}-cmcd-kinesis-processor'
       Runtime: python3.11
       Handler: index.lambda_handler
       VpcConfig:
@@ -791,7 +1062,7 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Code:
-        ZipFile: !Sub |
+        ZipFile: |
           import json
           import base64
           import boto3
@@ -805,40 +1076,53 @@ Resources:
           logger = logging.getLogger(__name__)
 
           http = urllib3.PoolManager()
+          influxdb_config = None
+
+          def load_influxdb_config():
+              global influxdb_config
+              if influxdb_config is None:
+                  secret_arn = os.environ["INFLUXDB_SECRET_ARN"]
+                  response = boto3.client("secretsmanager").get_secret_value(
+                      SecretId=secret_arn
+                  )
+                  secret = json.loads(response["SecretString"])
+                  required = ("endpoint", "organization", "bucket", "writeToken")
+                  missing = [key for key in required if not secret.get(key)]
+                  if missing:
+                      raise RuntimeError(
+                          f"InfluxDB secret is missing required fields: {', '.join(missing)}"
+                      )
+                  influxdb_config = {
+                      "endpoint": secret["endpoint"],
+                      "organization": secret["organization"],
+                      "bucket": secret["bucket"],
+                      "writeToken": secret["writeToken"],
+                  }
+              return influxdb_config
 
           def lambda_handler(event, context):
               try:
                   logger.info(f"Processing {len(event['Records'])} records")
-                  
-                  # Get InfluxDB endpoint and token
-                  endpoint = os.environ['INFLUXDB_ENDPOINT']
-                  token = os.environ['INFLUXDB_TOKEN']
-                  
-                  logger.info(f"Connecting to InfluxDB at {endpoint}")
-                  
+
+                  config = load_influxdb_config()
+                  logger.info(f"Connecting to InfluxDB at {config['endpoint']}")
+
                   processed_count = 0
-                  error_count = 0
-                  
+
                   for record in event['Records']:
-                      try:
-                          # Decode the base64 data from Kinesis
-                          payload = base64.b64decode(record['kinesis']['data']).decode('utf-8')
-                          log_data = parse_cloudfront_log(payload)
-                          
-                          if log_data:
-                              write_to_influxdb(endpoint, token, log_data)
-                              processed_count += 1
-                              logger.debug(f"Processed record with CMCD data: {log_data.get('cmcd_data', {})}")
-                          else:
-                              logger.debug("Failed to parse CloudFront log record")
-                              
-                      except Exception as e:
-                          error_count += 1
-                          logger.error(f"Error processing record: {str(e)}")
-                  
-                  logger.info(f"Successfully processed {processed_count} records, {error_count} errors")
-                  return {'statusCode': 200, 'body': f'Processed {processed_count} records, {error_count} errors'}
-                  
+                      payload = base64.b64decode(record['kinesis']['data']).decode('utf-8')
+                      log_data = parse_cloudfront_log(payload)
+                      if not log_data:
+                          raise ValueError("CloudFront record could not be parsed")
+                      write_to_influxdb(config, log_data)
+                      processed_count += 1
+                      logger.debug(
+                          f"Processed record with CMCD data: {log_data.get('cmcd_data', {})}"
+                      )
+
+                  logger.info(f"Successfully processed {processed_count} records")
+                  return {'statusCode': 200, 'body': f'Processed {processed_count} records'}
+
               except Exception as e:
                   logger.error(f"Lambda execution error: {str(e)}")
                   raise
@@ -922,7 +1206,7 @@ Resources:
                   logger.error(f"Error parsing CMCD value: {str(e)}")
               return parsed
 
-          def write_to_influxdb(endpoint, token, log_data):
+          def write_to_influxdb(config, log_data):
               try:
                   # Create Telegraf-style line protocol
                   tags = []
@@ -965,16 +1249,25 @@ Resources:
                   logger.debug(f"Line protocol: {line_protocol}")
                   
                   # Write to InfluxDB using v2 API with token
-                  url = f"{endpoint}/api/v2/write"
+                  url = f"{config['endpoint']}/api/v2/write"
                   headers = {
-                      'Authorization': f"Token {token}",
+                      'Authorization': f"Token {config['writeToken']}",
                       'Content-Type': 'text/plain'
                   }
-                  
-                  params = f"org={os.environ['INFLUXDB_ORG']}&bucket={os.environ['INFLUXDB_BUCKET']}"
+
+                  params = urllib.parse.urlencode({
+                      "org": config["organization"],
+                      "bucket": config["bucket"],
+                  })
                   full_url = f"{url}?{params}"
                   
-                  response = http.request('POST', full_url, headers=headers, body=line_protocol)
+                  response = http.request(
+                      'POST',
+                      full_url,
+                      headers=headers,
+                      body=line_protocol,
+                      timeout=urllib3.Timeout(connect=5, read=10),
+                  )
                   
                   if response.status == 204:
                       logger.info("Successfully wrote point to InfluxDB")
@@ -988,10 +1281,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
         Variables:
-          INFLUXDB_ENDPOINT: !Sub 'https://${InfluxDBInstance.Endpoint}:8086'
-          INFLUXDB_ORG: cmcd-org
-          INFLUXDB_BUCKET: !Ref TableName
-          INFLUXDB_TOKEN: !Sub '${AWS::StackName}-token-${AWS::AccountId}'
+          INFLUXDB_SECRET_ARN: !Ref InfluxDBProcessorSecret
       KmsKeyArn: !GetAtt SecretsManagerKMSKey.Arn
       Timeout: 60
 
@@ -999,13 +1289,18 @@ Resources:
   KinesisEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     DependsOn: 
-      - CMCDProcessorLambda
-      - CMCDKinesisStream
+      - UpdateSecretCustomResource
     Properties:
       EventSourceArn: !GetAtt CMCDKinesisStream.Arn
       FunctionName: !Ref CMCDProcessorLambda
       StartingPosition: LATEST
       BatchSize: 100
+      BisectBatchOnFunctionError: true
+      MaximumRecordAgeInSeconds: 3600
+      MaximumRetryAttempts: 3
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt LambdaDLQ.Arn
 
   # IAM Role for Index HTML Deployment Lambda
   IndexHtmlDeploymentRole:
@@ -1047,6 +1342,7 @@ Resources:
   IndexHtmlDeploymentFunction:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: !Sub '${AWS::StackName}-deploy-index-html'
       Handler: index.handler
       Role: !GetAtt IndexHtmlDeploymentRole.Arn
       Runtime: python3.11
@@ -1076,8 +1372,12 @@ Resources:
           <head>
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <link rel="icon" href="data:,">
               <title>HLS Video Player</title>
-              <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+              <script
+                src="https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js"
+                integrity="sha384-5E8B0pTlZZJMabWpC0fyYf6OUpe15jJij34BqBAh4NXoHAlLNOjCPRrwtOXOQFAn"
+                crossorigin="anonymous"></script>
               <style>
                   body {{
                       font-family: Arial, sans-serif;
@@ -1330,12 +1630,6 @@ Outputs:
     Value: !Ref InfluxDBSecret
     Export:
       Name: !Sub '${AWS::StackName}-InfluxDBSecretArn'
-  
-  InfluxDBToken:
-    Description: InfluxDB API token
-    Value: !Sub '${AWS::StackName}-token-${AWS::AccountId}'
-    Export:
-      Name: !Sub '${AWS::StackName}-InfluxDBToken'
   
   InfluxDBOrg:
     Description: InfluxDB organization name

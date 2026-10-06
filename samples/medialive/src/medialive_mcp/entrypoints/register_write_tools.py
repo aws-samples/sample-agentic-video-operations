@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 from fastmcp import FastMCP
 
+from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import (
     APPROVAL_LIFETIME,
     ActionProposal,
@@ -19,7 +20,6 @@ from media_ops_contracts.approved_action import (
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from medialive_mcp.adapters.media_live.create_schedule_action import create_schedule_action
 from medialive_mcp.adapters.media_live.delete_schedule_action import delete_schedule_action
-from medialive_mcp.adapters.media_live.media_live_records import ActionResult
 from medialive_mcp.adapters.media_live.start_channel import start_channel
 from medialive_mcp.adapters.media_live.stop_channel import stop_channel
 from medialive_mcp.adapters.media_live.switch_channel_input import switch_channel_input

@@ -7,7 +7,6 @@
 **/.pytest_cache
 .claude
 .kiro
-images
 samples/hydrolix
 samples/hub/cdk
 samples/medialive/cdk

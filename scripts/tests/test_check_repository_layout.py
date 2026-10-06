@@ -56,10 +56,3 @@ def test_a_cdk_app_is_not_a_web_app_so_its_images_fail():
 def test_a_tracked_plan_file_fails():
     [problem] = problems(".claude/plans/handoff/step-1.md")
     assert problem.startswith("tracked plan file")
-
-
-@pytest.mark.parametrize("legacy", sorted(layout.PENDING_MOVES))
-def test_legacy_folders_are_tolerated_only_while_their_move_is_pending(legacy, monkeypatch):
-    assert problems(f"{legacy}/README.md") == []
-    monkeypatch.setattr(layout, "PENDING_MOVES", {})
-    assert f"root entry not allowed: {legacy}" in problems(f"{legacy}/README.md")

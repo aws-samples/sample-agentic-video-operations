@@ -12,6 +12,7 @@ class MediaLiveClients:
     medialive: Any
     cloudwatch: Any
     logs: Any
+    sts: Any
     bedrock: Any
 
 
@@ -29,5 +30,6 @@ def create_medialive_clients(settings: RuntimeSettings) -> MediaLiveClients:
         medialive=client("medialive"),
         cloudwatch=client("cloudwatch"),
         logs=client("logs"),
+        sts=client("sts"),
         bedrock=client("bedrock-runtime"),
     )

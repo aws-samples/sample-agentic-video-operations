@@ -14,6 +14,7 @@ resolution-markers = [
 members = [
     "cmcd-mcp-server",
     "media-ops-contracts",
+    "media-ops-hub",
     "mediaconnect-mcp-server",
     "medialive-mcp-server",
     "sample-agentic-video-operations",
@@ -1051,6 +1052,38 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.35,<2" },
     { name = "pydantic", specifier = ">=2.9,<3" },
 ]
+
+[[package]]
+name = "media-ops-hub"
+version = "0.1.0"
+source = { editable = "samples/hub" }
+dependencies = [
+    { name = "bedrock-agentcore" },
+    { name = "media-ops-contracts" },
+    { name = "mediaconnect-mcp-server" },
+    { name = "medialive-mcp-server" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "strands-agents" },
+]
+
+[package.optional-dependencies]
+runtime = [
+    { name = "aws-opentelemetry-distro" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aws-opentelemetry-distro", marker = "extra == 'runtime'", specifier = ">=0.10.1,<1" },
+    { name = "bedrock-agentcore", specifier = ">=1.0,<2" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
+    { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
+    { name = "medialive-mcp-server", editable = "samples/medialive" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pydantic-settings", specifier = ">=2.5,<3" },
+    { name = "strands-agents", specifier = ">=1.0,<2" },
+]
+provides-extras = ["runtime"]
 
 [[package]]
 name = "mediaconnect-mcp-server"
@@ -2579,6 +2612,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "cmcd-mcp-server" },
     { name = "media-ops-contracts" },
+    { name = "media-ops-hub" },
     { name = "mediaconnect-mcp-server" },
     { name = "medialive-mcp-server" },
 ]
@@ -2593,6 +2627,7 @@ dev = [
 requires-dist = [
     { name = "cmcd-mcp-server", editable = "samples/cmcd" },
     { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
+    { name = "media-ops-hub", editable = "samples/hub" },
     { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
     { name = "medialive-mcp-server", editable = "samples/medialive" },
 ]

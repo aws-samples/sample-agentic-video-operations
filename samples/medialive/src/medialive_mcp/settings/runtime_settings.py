@@ -1,6 +1,5 @@
 """Validated settings for the medialive sample (build_a_sample.md §5). Read once at startup."""
 
-import secrets
 from pathlib import Path
 
 from pydantic import Field, field_validator
@@ -23,8 +22,9 @@ class RuntimeSettings(BaseSettings):
     demo: bool = Field(default=False)
     demo_scenario: str = Field(default=DEFAULT_DEMO_SCENARIO)
     fixtures_dir: Path = Field(default=Path("fixtures"))
-    # Local MCP runs sign their own approvals; a deployment injects a shared secret.
-    approval_signing_key: str = Field(default_factory=lambda: secrets.token_hex(32))
+    # Empty means one random key per process (resolve_approval_signing_key); a deployment
+    # injects a shared secret.
+    approval_signing_key: str = Field(default="")
 
     @field_validator("demo_scenario", mode="before")
     @classmethod

@@ -2,12 +2,12 @@
 
 from typing import Any
 
+from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import ApprovedAction
 from media_ops_contracts.call_aws_operation import call_aws_operation
 from media_ops_contracts.require_action_approval import require_action_approval
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 from medialive_mcp.adapters.media_live.describe_schedule import describe_schedule
-from medialive_mcp.adapters.media_live.media_live_records import ActionResult
 from medialive_mcp.domain.write_requirements import (
     ApprovalCheck,
     VerificationPolicy,

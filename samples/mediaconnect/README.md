@@ -127,7 +127,7 @@ aws configure get region
    Raw command:
 
    ```bash
-   DEMO=1 DEMO_SCENARIO=srt_packet_loss uv run --env-file .env \
+   DEMO=1 DEMO_SCENARIO=srt_packet_loss ALLOW_WRITES=false uv run \
      --package mediaconnect-mcp-server \
      serve-mediaconnect
    ```
@@ -161,8 +161,6 @@ aws configure get region
            "run",
            "--directory",
            "/absolute/path/to/sample-agentic-video-operations",
-           "--env-file",
-           ".env",
            "--package",
            "mediaconnect-mcp-server",
            "serve-mediaconnect"

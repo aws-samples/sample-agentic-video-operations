@@ -54,13 +54,22 @@ def test_issue_report_names_input_loss_on_pipeline_0(clients):
     assert ("channel_health", "ActiveAlerts", "0") in flagged
     assert not any(issue.pipeline == "1" for issue in report.issues)
     assert report.categories["input_health"].score == 70
-    assert report.status != "HEALTHY"
+    # Pipeline 0 is still on slate and alerting: the channel is degraded, not "good".
+    assert report.status == "DEGRADED"
+    assert report.overall_score == min(health.score for health in report.categories.values())
+    assert severities_of(report)[("InputLossSeconds", "0")] == "HIGH"
+    keys = [(issue.metric, issue.pipeline) for issue in report.issues]
+    assert len(keys) == len(set(keys))
+
+
+def severities_of(report):
+    return {(issue.metric, issue.pipeline): issue.severity for issue in report.issues}
 
 
 def test_logs_carry_the_srt_evidence(clients):
-    events = read_channel_logs(clients.logs, CHANNEL, recent_window(1))
-    assert "no SRT packets" in events[0].message
-    assert events == sorted(events, key=lambda event: event.timestamp)
+    result = read_channel_logs(clients, CHANNEL, recent_window(1), "us-west-2")
+    assert "no SRT packets" in result.events[0].message
+    assert result.events == sorted(result.events, key=lambda event: event.timestamp)
 
 
 def call_tool(settings, name, arguments):

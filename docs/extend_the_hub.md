@@ -12,7 +12,10 @@ Enforces guidelines §3–4 (layers), §7 (typed data), §9 (safety), §11 (prom
   - Only the Bedrock model client is cached across requests. A long-lived agent accumulates stale tool results.
   - `HUB_TOOL_BUDGET` (default 12) caps tool calls per request. Going over it ends the turn with `error(InvalidRequest)` and a next action.
 - **Interrupt state survives between requests** through a Strands session manager keyed by `session_id`: `AgentCoreMemorySessionManager` when `MEMORY_ID` is set, `FileSessionManager` otherwise (local and `DEMO=1`).
+- **One signing key per deployment.** AgentCore pins a session to one microVM only while it lives: after an idle timeout or a restart, the same session resumes in a new container. An approval paused in one container must therefore verify in another, so with `MEMORY_ID` set the hub refuses to start unless `APPROVAL_SIGNING_KEY` is set (the hub CDK injects it from Secrets Manager). Locally, hub and packs share one process, so the per-process key of `resolve_approval_signing_key` is enough.
 - **Entrypoint:** `entrypoints/handle_agentcore_invocation.py` (`BedrockAgentCoreApp`, port 8080). It parses the request, builds the agent and streams events. Nothing else.
+  - **Streaming:** the agent runs on a worker thread, and each `StreamEvent` is yielded as its hook records it, so `task_started` and `tool_called` reach the caller while tools and the model are still running.
+  - **Caller identity fails closed:** a request without the actor header or a session id gets `error(InvalidRequest)` and runs nothing. Only `HUB_LOCAL_MODE=true`, which `just run hub` sets and the deployed runtime never does, substitutes one local operator and session.
 - **Commands:**
   - `just run hub` runs it locally.
   - `just demo` is `DEMO=1 just run hub` with a scripted prompt, and needs no AWS.
@@ -46,7 +49,7 @@ class ApprovalDecision(BaseModel):
     reason: str | None = None
 ```
 
-**Response:** `StreamEvent` from `media_ops_contracts.stream_event`, one JSON object per event, encoded once.
+**Response:** `StreamEvent` from `media_ops_contracts.stream_event`, one JSON object per event, encoded once. The entrypoint yields validated dicts and `BedrockAgentCoreApp` writes each as one SSE `data:` line.
 - `task_started`: one per pack whose tool runs first in a turn.
 - `tool_called`: name and read/write only, never raw output.
 - `approval_requested`
@@ -107,7 +110,7 @@ class DomainPack(Protocol):
 1. **Interrupt.** A `BeforeToolCallEvent` hook runs for every write tool.
    - It builds an `ActionProposal`: action = the tool name, `resource_id` = the input named by `resource_parameter`, and parameters = the other inputs.
    - It sets `expires_at = now + 10 minutes`.
-   - It then calls `event.interrupt("approve-write", reason={"proposal": proposal, "expires_at": expires_at})`. The reason is stored with the interrupt in the session, so the deadline survives between requests.
+   - It then calls `event.interrupt("approve-write", reason={"proposal": proposal, "expires_at": expires_at})`. The reason is stored with the interrupt in the session, and the hook also keeps the pending approval (`approval_id` = the interrupt id, proposal, `expires_at`) in `agent.state` under `pending_approvals`, so the deadline survives between requests and the hub can refuse an unknown id, session or actor before resuming.
 2. **Ask.** The run stops with `result.stop_reason == "interrupt"`. The hub streams `approval_requested` with `approval_id = interrupt.id`, the proposal, `risk` and `expires_at`.
 3. **Resume.** The caller sends `HubRequest(decision=...)` in the same session. The hub resumes with `agent([{"interruptResponse": {"interruptId": approval_id, "response": decision}}])`.
 4. **On resume,** `event.interrupt(...)` returns the decision.
@@ -162,6 +165,6 @@ class DomainPack(Protocol):
 |---|---|
 | `packages/media_ops_contracts/tests/unit/test_domain_pack.py` | Entry-point discovery, selection by `MEDIA_DOMAINS`, and that an unknown pack fails with the list of installed packs |
 | `samples/<key>/tests/unit/test_domain_pack.py` (each pack) | Its tools are the MCP server's adapters. Write tools need `ApprovedAction`. Its skills parse. `iam_permissions.json` covers every AWS operation its adapters call |
-| `samples/hub/tests/contract/verify_approval_flow.py` | With a scripted fake model: no write runs without approval; a rejection cancels; a decision for another approval, session or actor is refused; **a decision after the pending approval's `expires_at` is refused and nothing is signed**; changed action, resource or parameters are refused; an expired `ApprovedAction` is refused by the adapter |
-| `samples/hub/tests/contract/verify_stream_events.py` | Every streamed event validates against `StreamEvent`, and raw tool output never appears |
+| `samples/hub/tests/contract/test_hub_approval_flow.py`, `test_hub_approval_checks.py` | With a scripted fake model: no write runs without approval; a rejection cancels; a decision for another approval, session or actor is refused; **a decision after the pending approval's `expires_at` is refused and nothing is signed**; changed action, resource or parameters are refused; an expired `ApprovedAction` is refused by the adapter |
+| `samples/hub/tests/contract/test_hub_stream_events.py`, `test_hub_entrypoint.py` | Every streamed event validates against `StreamEvent`, and raw tool output never appears |
 | `samples/hub/tests/scenarios/*` | `just eval` scenarios, offline, with recorded metrics |

@@ -60,8 +60,27 @@ def test_demo_server_starts_without_an_env_file(monkeypatch):
     tools = asyncio.run(build_mediaconnect_server(runtime).list_tools())
 
     assert runtime.aws_region is None
-    assert runtime.thumbnail_model_id == "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert runtime.thumbnail_model_id is None
     assert {tool.name for tool in tools} == READ_TOOLS
+
+
+def test_thumbnail_tool_requires_the_root_model_setting(tmp_path):
+    runtime = settings(tmp_path).model_copy(update={"thumbnail_model_id": None})
+
+    async def call_thumbnail():
+        async with Client(build_mediaconnect_server(runtime)) as client:
+            return await client.call_tool(
+                "describe_flow_thumbnail",
+                {"flow_arn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo:flow-1"},
+                raise_on_error=False,
+            )
+
+    result = asyncio.run(call_thumbnail())
+
+    assert result.is_error is True
+    assert "InvalidRequest" in result.content[0].text
+    assert "THUMBNAIL_MODEL_ID is not set" in result.content[0].text
+    assert "Set THUMBNAIL_MODEL_ID in the root .env" in result.content[0].text
 
 
 def test_write_tools_require_explicit_enablement_and_declare_annotations(tmp_path):

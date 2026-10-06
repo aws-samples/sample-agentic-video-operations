@@ -7,7 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from media_ops_contracts.resolve_demo_scenario import resolve_demo_scenario
 
-DEFAULT_THUMBNAIL_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_DEMO_SCENARIO = "srt_packet_loss"
 
 
@@ -15,7 +14,7 @@ class RuntimeSettings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=False, extra="ignore")
 
     aws_region: str | None = None
-    thumbnail_model_id: str = DEFAULT_THUMBNAIL_MODEL_ID
+    thumbnail_model_id: str | None = None
     mediaconnect_flow_arn: str | None = None
     allow_writes: bool = False
     demo: bool = False

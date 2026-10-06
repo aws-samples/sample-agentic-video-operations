@@ -16,9 +16,8 @@ _TIME_RANGE = re.compile(r"^-\d+[smhdw]$")
 
 
 class PlaybackIssueKind(StrEnum):
-    BUFFER_UNDERRUN = "buffer_underrun"
+    BUFFER_STARVATION = "buffer_starvation"
     SUDDEN_BUFFER_DROP = "sudden_buffer_drop"
-    EXCESSIVE_STARTUP_DELAY = "excessive_startup_delay"
 
 
 class PlaybackIssue(BaseModel):
@@ -26,7 +25,8 @@ class PlaybackIssue(BaseModel):
     severity: str
     at: datetime
     session_id: str
-    observed_ms: float
+    observed_ms: float | None = None
+    observed_flag: bool | None = None
     previous_ms: float | None = None
 
 
@@ -35,6 +35,7 @@ class PlaybackErrorAnalysis(BaseModel):
     issues: list[PlaybackIssue]
     time_range: str
     session_id: str | None = None
+    startup_observed: bool
 
 
 def identify_playback_errors(
@@ -43,7 +44,7 @@ def identify_playback_errors(
     *,
     query_influxdb: Callable[[str], list[dict[str, Any]]],
 ) -> PlaybackErrorAnalysis:
-    """Return buffer underruns, sudden drops, and excessive startup delays."""
+    """Return starvation signals and sudden buffer drops with startup context."""
     if not _TIME_RANGE.fullmatch(time_range):
         raise ToolFailure(
             FailureKind.INVALID_REQUEST,
@@ -59,19 +60,23 @@ def identify_playback_errors(
     buffer_records = query_influxdb(
         base + f'and r["_field"] == "cmcd_bl"{sid_filter})\n  |> sort(columns: ["_time"])'
     )
+    starvation_records = query_influxdb(
+        base + f'and r["_field"] == "cmcd_bs"{sid_filter})\n  |> sort(columns: ["_time"])'
+    )
     startup_records = query_influxdb(
         base + f'and r["_field"] == "cmcd_su"{sid_filter})\n  |> sort(columns: ["_time"])'
     )
-    issues = _find_buffer_issues(buffer_records) + _find_startup_issues(startup_records)
+    issues = _find_buffer_drops(buffer_records) + _find_starvation_issues(starvation_records)
     return PlaybackErrorAnalysis(
         total_issues=len(issues),
         issues=issues,
         time_range=time_range,
         session_id=cmcd_sid,
+        startup_observed=any(record.get("_value") is True for record in startup_records),
     )
 
 
-def _find_buffer_issues(records: list[dict[str, Any]]) -> list[PlaybackIssue]:
+def _find_buffer_drops(records: list[dict[str, Any]]) -> list[PlaybackIssue]:
     issues: list[PlaybackIssue] = []
     previous: float | None = None
     for record in records:
@@ -79,15 +84,6 @@ def _find_buffer_issues(records: list[dict[str, Any]]) -> list[PlaybackIssue]:
         if not isinstance(value, int | float) or isinstance(value, bool):
             continue
         current = float(value)
-        if current < 100:
-            issues.append(
-                _issue(
-                    PlaybackIssueKind.BUFFER_UNDERRUN,
-                    "high" if current == 0 else "medium",
-                    record,
-                    current,
-                )
-            )
         if previous is not None and previous > 1000 and current < previous * 0.5:
             issues.append(
                 _issue(
@@ -102,17 +98,16 @@ def _find_buffer_issues(records: list[dict[str, Any]]) -> list[PlaybackIssue]:
     return issues
 
 
-def _find_startup_issues(records: list[dict[str, Any]]) -> list[PlaybackIssue]:
-    issues = []
+def _find_starvation_issues(records: list[dict[str, Any]]) -> list[PlaybackIssue]:
+    issues: list[PlaybackIssue] = []
     for record in records:
-        value = record.get("_value")
-        if isinstance(value, int | float) and not isinstance(value, bool) and value > 2000:
+        if record.get("_value") is True:
             issues.append(
                 _issue(
-                    PlaybackIssueKind.EXCESSIVE_STARTUP_DELAY,
-                    "high" if value > 5000 else "medium",
+                    PlaybackIssueKind.BUFFER_STARVATION,
+                    "high",
                     record,
-                    float(value),
+                    observed_flag=True,
                 )
             )
     return issues
@@ -122,14 +117,16 @@ def _issue(
     kind: PlaybackIssueKind,
     severity: str,
     record: dict[str, Any],
-    observed: float,
+    observed_ms: float | None = None,
     previous: float | None = None,
+    observed_flag: bool | None = None,
 ) -> PlaybackIssue:
     return PlaybackIssue(
         kind=kind,
         severity=severity,
         at=record["_time"],
         session_id=str(record.get("cmcd_sid", "unknown")),
-        observed_ms=observed,
+        observed_ms=observed_ms,
+        observed_flag=observed_flag,
         previous_ms=previous,
     )

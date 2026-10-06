@@ -20,7 +20,7 @@ const WELCOME_MESSAGE = "I'm Gus, your Hydrolix CDN analytics expert. Ask me abo
 // ================================
 
 const MAX_LENGTH_INPUT_SEARCH = 140;
-const MODEL_ID_FOR_CHART = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+const CHART_MODEL_ID = process.env.REACT_APP_CHART_MODEL_ID;
 
 const CHART_PROMPT =
   '\n\
@@ -313,6 +313,6 @@ export {
   
   // System Configuration
   MAX_LENGTH_INPUT_SEARCH,
-  MODEL_ID_FOR_CHART,
+  CHART_MODEL_ID,
   CHART_PROMPT
 };

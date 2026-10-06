@@ -1,17 +1,22 @@
-// import * as cdk from 'aws-cdk-lib/core';
-// import { Template } from 'aws-cdk-lib/assertions';
-// import * as CdkDataAnalystAssistantAgentcoreStrands from '../lib/cdk-data-analyst-assistant-agentcore-strands-stack';
+import * as cdk from "aws-cdk-lib";
+import { Template } from "aws-cdk-lib/assertions";
 
-// example test. To run these tests, uncomment this file along with the
-// example resource in lib/cdk-data-analyst-assistant-agentcore-strands-stack.ts
-test('SQS Queue Created', () => {
-//   const app = new cdk.App();
-//     // WHEN
-//   const stack = new CdkDataAnalystAssistantAgentcoreStrands.CdkDataAnalystAssistantAgentcoreStrandsStack(app, 'MyTestStack');
-//     // THEN
-//   const template = Template.fromStack(stack);
+import { CdkHydrolixDataAssistantAgentcoreStrandsStack } from "../cdklib/cdk-hydrolix-data-assistant-agentcore-strands-stack";
 
-//   template.hasResourceProperties('AWS::SQS::Queue', {
-//     VisibilityTimeout: 300
-//   });
+function synthesizeTemplate(): Template {
+  const app = new cdk.App();
+  const stack = new CdkHydrolixDataAssistantAgentcoreStrandsStack(
+    app,
+    "HydrolixTestStack",
+  );
+  return Template.fromStack(stack);
+}
+
+test("the Hydrolix secret uses a generated physical name", () => {
+  const resources = synthesizeTemplate().findResources(
+    "AWS::SecretsManager::Secret",
+  );
+  const [secret] = Object.values(resources);
+
+  expect(secret.Properties.Name).toBeUndefined();
 });

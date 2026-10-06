@@ -110,7 +110,7 @@ def build_mediaconnect_server(settings: RuntimeSettings | None = None) -> FastMC
             clients["mediaconnect"],
             clients["bedrock-runtime"],
             flow_arn,
-            cast(str, runtime.thumbnail_model_id),
+            runtime.thumbnail_model_id,
         )
 
     _register_metric_tools(server, clients["cloudwatch"])

@@ -13,7 +13,6 @@ EXPECTED_TOOLS = {
     "analyze_buffer_events",
     "identify_playback_errors",
     "list_session_and_content_ids",
-    "execute_flux_query",
 }
 
 
@@ -41,23 +40,6 @@ def test_demo_server_answers_from_root_fixtures():
     result = asyncio.run(call_buffer_tool())
     assert result.structured_content["low_buffer_count"] == 3
     assert result.structured_content["low_buffer_events"][0]["cdn"] == "demo-cdn"
-
-
-def test_mcp_error_keeps_the_recovery_action():
-    async def call_invalid_query():
-        async with Client(demo_server()) as client:
-            return await client.call_tool(
-                "execute_flux_query",
-                {"flux": "writer = to"},
-                raise_on_error=False,
-            )
-
-    result = asyncio.run(call_invalid_query())
-    message = result.content[0].text
-    assert result.is_error is True
-    assert "InvalidRequest" in message
-    assert "Next action:" in message
-    assert "Remove imports, variable assignments" in message
 
 
 def test_live_settings_do_not_require_an_unused_aws_region():

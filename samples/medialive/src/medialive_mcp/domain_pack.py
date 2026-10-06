@@ -1,0 +1,40 @@
+"""The medialive domain pack for the hub (extend_the_hub.md §2).
+
+The pack wraps the same typed functions the MCP server registers, and builds its own
+settings and clients (DEMO replay included). It never imports Strands or the hub.
+"""
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from media_ops_contracts.domain_pack import ReadTool, WriteTool
+from medialive_mcp.bootstrap.create_medialive_clients import create_medialive_clients
+from medialive_mcp.settings.runtime_settings import load_runtime_settings
+from medialive_mcp.tool_surface.create_read_tools import create_read_tools
+from medialive_mcp.tool_surface.create_write_tools import create_write_tools
+
+SKILLS = Path(__file__).with_name("skills")
+
+
+@dataclass(frozen=True)
+class MediaLivePack:
+    reads: list[ReadTool]
+    writes: list[WriteTool]
+    name: str = "medialive"
+    skill_paths: list[Path] = field(default_factory=lambda: sorted(SKILLS.glob("*/SKILL.md")))
+    fixture_scenarios: list[str] = field(default_factory=lambda: ["input_loss", "srt_packet_loss"])
+
+    def read_tools(self) -> list[ReadTool]:
+        return self.reads
+
+    def write_tools(self) -> list[WriteTool]:
+        """All write tools; the hub registers them only with ALLOW_WRITES=true."""
+        return self.writes
+
+
+def create_domain_pack() -> MediaLivePack:
+    settings = load_runtime_settings()
+    clients = create_medialive_clients(settings)
+    return MediaLivePack(
+        reads=create_read_tools(settings, clients), writes=create_write_tools(settings, clients)
+    )

@@ -1,7 +1,7 @@
 """Read MediaLive channel metrics for both pipelines with one GetMetricData call."""
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from media_ops_contracts.call_aws_operation import call_aws_operation
@@ -66,11 +66,15 @@ def _metric_query(query_id: str, metric: str, pipeline: str, channel_id: str) ->
     }
 
 
+def to_utc(timestamp: datetime | str) -> datetime:
+    """boto3 returns local-offset datetimes; every tool reports UTC (serialized with Z)."""
+    if isinstance(timestamp, str):
+        timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return timestamp.astimezone(UTC)
+
+
 def _to_series(metric: str, pipeline: str, points: list) -> MetricSeries:
-    ordered = sorted(
-        (datetime.fromisoformat(str(t).replace("Z", "+00:00")) if isinstance(t, str) else t, v)
-        for t, v in points
-    )
+    ordered = sorted((to_utc(t), v) for t, v in points)
     return MetricSeries(
         metric=metric,
         pipeline=pipeline,

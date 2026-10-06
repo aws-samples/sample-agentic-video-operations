@@ -1,0 +1,13 @@
+{
+  "logStreams": [
+    {
+      "logStreamName": "arn_aws_medialive_us-west-2_111122223333_channel_1234567_0"
+    },
+    {
+      "logStreamName": "arn_aws_medialive_us-west-2_111122223333_channel_1234567_1"
+    },
+    {
+      "logStreamName": "arn_aws_medialive_us-west-2_111122223333_channel_1234567_0_as_run"
+    }
+  ]
+}

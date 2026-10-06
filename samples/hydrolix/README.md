@@ -1,148 +1,385 @@
-# Deploying Hydrolix CDN Insights with Amazon Bedrock AgentCore
+# Hydrolix CDN Insights
+
+Ask natural-language questions about CDN delivery, origin performance, and
+viewer QoE data stored in Hydrolix.
 
 > [!IMPORTANT]
-> **🚀 Ready-to-Deploy Multi-Agent Web Application**: Use this reference solution to build other multi-agent-powered web applications across different industries.
+> This sample is for educational and reference purposes. It is not
+> production-ready without security hardening, testing, and customization.
 
-> [!TIP]
-> Extend the multi-agent system by adding new specialized subagents, custom tools, and automated workflows for Hydrolix analytics and AWS service integrations. See [Example Insights & Actions](#example-insights--actions) for ideas on conversational actions and external triggers you can implement.
+![Hydrolix CDN Insights preview](docs/images/hydrolix-cdn-insights-preview.gif)
 
-This reference solution provides a Generative AI application called **Hydrolix CDN Insights** that allows users to interact with Hydrolix CDN and streaming video data through a natural language interface. The solution leverages **[Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/)**, a managed service that enables you to deploy, run, and scale custom agent applications, along with the **[Strands Agents SDK](https://strandsagents.com/)** to build a multi-agent system that connects to Hydrolix time-series data, providing real-time analytics capabilities through a web application interface.
+## Purpose
 
-<div align="center">
-<img src="./docs/images/hydrolix-cdn-insights-preview.gif" alt="Hydrolix CDN Insights with Amazon Bedrock AgentCore">
-</div>
+Use this sample when an operator or analyst needs to explore high-volume CDN
+and streaming telemetry without writing each SQL query by hand.
 
-🤖 Hydrolix CDN Insights offers a multi-agent approach to CDN and streaming video analytics that enables enterprises to interact with their time-series data through natural language conversations rather than complex SQL queries. An orchestrator routes questions to specialized subagents — each an expert in a specific domain — providing an intuitive question-answering interface for data analysis conversations that can be improved by offering data visualizations to enhance the user experience.
+An orchestrator routes a question to one of three focused Strands subagents:
 
-✨ This solution enables users to:
+| Agent | Focus |
+|---|---|
+| `hydrolix_agent` | General traffic and time-series analysis |
+| `cache_origin_agent` | Cache efficiency, origin latency, errors, and edge locations |
+| `qoe_analysis_agent` | CMCD, rebuffering, bitrate, throughput, and viewer experience |
 
-- Ask questions about CDN performance and streaming video metrics in natural language
-- Receive AI-generated responses based on SQL queries to Hydrolix time-series database
-- View query results in tabular format
-- Explore data through automatically generated visualizations
-- Get insights and analysis from specialized subagents in:
-  - Cache performance and hit rates
-  - Quality of Experience (QoE) metrics
-  - Origin server performance
-  - Edge location analytics
-  - Rebuffering and playback issues
+The first verified result deploys the AgentCore backend, connects it to a
+Hydrolix table, and invokes it directly with the AWS CLI. The React web
+interface is optional and remains a manual setup.
 
-🚀 This reference solution can help you explore use cases like:
+## Architecture
 
-- Monitor real-time CDN performance and cache efficiency
-- Analyze streaming video quality and viewer experience
-- Identify and troubleshoot performance bottlenecks
-- Optimize content delivery across edge locations
-- Track origin server health and latency
+```mermaid
+flowchart LR
+    Operator --> CLI[AWS CLI]
+    Operator --> Web[React web app]
+    CLI --> Runtime[Amazon Bedrock AgentCore Runtime]
+    Web --> Runtime
+    Runtime --> Orchestrator[Strands orchestrator]
+    Orchestrator --> General[General Hydrolix agent]
+    Orchestrator --> Cache[Cache and origin agent]
+    Orchestrator --> QoE[QoE analysis agent]
+    General --> MCP[Hydrolix MCP server]
+    Cache --> MCP
+    QoE --> MCP
+    MCP --> Hydrolix[(Hydrolix)]
+    Runtime --> Memory[AgentCore Memory]
+    Runtime --> Results[(DynamoDB query results)]
+    Runtime --> Bedrock[Amazon Bedrock]
+    Web -. optional charts .-> Bedrock
+```
 
-## Solution Overview
+The CDK stack packages the runtime as a container image, deploys AgentCore
+Runtime and Memory, creates the DynamoDB results table and a generated
+Secrets Manager secret, and passes the selected reasoning model and Hydrolix
+table to the runtime. During deployment, the management script copies the
+Hydrolix MCP package from one pinned upstream commit into the ignored Docker
+build context.
 
-The following architecture diagram illustrates a reference solution for Hydrolix CDN Insights, a generative AI multi-agent system built using Strands Agents SDK and powered by Amazon Bedrock. An orchestrator agent routes user questions to specialized subagents that access time-series CDN and streaming video data stored in Hydrolix through a question-answering interface.
+![Detailed Hydrolix reference architecture](docs/images/gen-ai-assistant-diagram.png)
 
-![Hydrolix CDN Insights](./docs/images/gen-ai-assistant-diagram.png)
+## Prerequisites
 
-> [!IMPORTANT]
-> This sample application is meant for demo purposes and is not production ready. Please make sure to validate the code with your organizations security best practices.
+- Python 3.12 or newer (`uv` installs it from the root `.python-version`).
+- [`uv`](https://docs.astral.sh/uv/).
+- [`just`](https://just.systems/), installed with `uv tool install rust-just`.
+- Node.js 20 or newer and npm.
+- Docker running for the AgentCore container build.
+- Git and network access to fetch the pinned Hydrolix MCP source.
+- AWS CLI credentials for a non-production account.
+- An AWS CDK bootstrap in the target account and region.
+- Access to the Bedrock model selected by `AGENT_MODEL_ID`.
+- A Hydrolix cluster, a table in `database.table` form, and credentials that
+  can query it.
+- For the optional UI: the Amplify Gen 1 CLI and permission to create Amplify
+  and Cognito resources.
 
-### Strands Agent Features
+Check the repository prerequisites:
 
-| Feature | Description |
-|----------|----------|
-| Model Provider | Amazon Bedrock (Claude Haiku 4.5) — Powers the orchestrator and all specialized subagents. |
-| Specialized Subagents | The orchestrator routes user questions to domain-expert subagents, each with its own system prompt, tools, and specialized knowledge:<br><br>🔍 `hydrolix_agent` - **General Data Analyst** — Default subagent for time-series data exploration, traffic overviews, and ad-hoc queries across all dimensions.<br>🗄️ `cache_origin_agent` - **CDN Infrastructure Expert** — Specialized in cache hit/miss analysis, origin server latency, error rates, bandwidth cost, and edge location (POP) performance. Works with CDN access log data (near-100% fill rate).<br>📺 `qoe_analysis_agent` - **Viewer Experience Expert** — Specialized in Quality of Experience (QoE) using CMCD player telemetry: buffer starvation, bitrate adaptation, throughput, startup performance, and geographic QoE breakdown. Validates data quality before analysis.<br><br>💡 *New specialized subagents can be added to extend the system — for example, **an anti-piracy agent for detecting unauthorized content distribution, or a bot-detector agent for identifying suspicious traffic patterns**.* |
-| MCP Integration | **[Hydrolix MCP Server](https://github.com/hydrolix/mcp-hydrolix)** — Model Context Protocol package used by each specialized subagent to query the Hydrolix time-series database, including schema inspection and SQL query execution. Each subagent initializes its own MCP client to run queries independently. |
-| Native Tools | Built-in Strands tools available to the orchestrator and each specialized subagent:<br>`current_time` - Provides current date and time information based on user's timezone.<br>`calculator` - Performs mathematical calculations: percentages, ratios, statistical metrics. |
+```bash
+just doctor
+```
 
-### User Interaction Workflow
+Raw command:
 
-1. The web application sends user questions about CDN performance or streaming metrics to the AgentCore Invoke
-2. The Strands multi-agent system (powered by Claude Haiku 4.5) processes natural language through an orchestrator that routes to specialized subagents (`hydrolix_agent`, `qoe_analysis_agent`, or `cache_origin_agent`)
-3. Each specialized subagent uses MCP Hydrolix tools to execute SQL queries against the Hydrolix time-series database and formulate answers within its domain of expertise
-4. AgentCore Memory captures session interactions and retrieves previous conversations for context
-5. After the agent's response is received by the web application, the raw data query results are retrieved from the DynamoDB table to display both the answer and the corresponding queries
-6. For chart generation, the application invokes a model (powered by Claude Haiku 4.5) to analyze the multi-agent response and raw data query results to generate the necessary data to render an appropriate chart visualization
+```bash
+uv run python scripts/check_prerequisites.py
+```
 
-### Example Insights & Actions
+## Setup and Run
 
-Beyond querying data, the multi-agent system can be extended in two directions: enriching the conversational experience with automated actions across Hydrolix and AWS services, and triggering agents directly from external events to investigate and take action autonomously.
+### Run Locally
 
-#### 💬 From Conversation — Actions triggered by agent insights during a user session
+This sample has no fixture-backed local data mode. The safe local first run
+installs the CDK dependencies, runs the offline tests, and synthesizes the
+backend without creating AWS resources.
 
-| Action | Example |
-|--------|---------|
-| 🔔 Alert & Notify | Detect cache hit rate drops below threshold and send alerts via Slack, PagerDuty, or Amazon SNS. |
-| 📊 Report Generation | Generate periodic CDN performance reports and deliver them via email or push to an S3 bucket. |
-| 🔧 CDN Configuration | Identify underperforming edge locations and trigger cache invalidation requests via CloudFront API. |
-| 🎫 Ticketing Integration | When QoE degradation is detected, automatically create incidents in ServiceNow, Jira, or PagerDuty. |
-| 🔗 Customer API Callback | Send analysis results to customer-facing APIs or webhooks for integration with their own platforms. |
+1. Clone the repository and enter it:
 
-#### ⚡ From External Triggers — Events that invoke the agent to investigate and take action
+   ```bash
+   git clone https://github.com/aws-samples/sample-agentic-video-operations.git
+   cd sample-agentic-video-operations
+   ```
 
-| Trigger | Example |
-|---------|---------|
-| 📺 **Media Workflow Triggers** | A CloudWatch Alarm or EventBridge rule detects a MediaLive channel failure or origin timeout — invokes the agent to diagnose root cause, check QoE impact, and trigger a MediaPackage origin failover or channel restart. |
-| 🚨 CloudWatch Alarm | A cache hit rate alarm fires — the agent is invoked to investigate the drop, correlate with origin errors, and push updated cache rules or notify the on-call team. |
-| 📡 Real-Time Monitoring | Grafana or CloudWatch detects anomalous traffic patterns — triggers the agent to analyze the spike, determine if it's organic or bot-driven, and push custom metrics or WAF rules. |
-| 🛡️ Anti-Piracy Response | An EventBridge event flags suspicious download patterns — the agent investigates token usage, geo-distribution, and triggers token revocation or geo-blocking rules via CDN APIs. |
-| 🤖 Bot Mitigation | A WAF rate-limit threshold is breached — the agent is invoked to analyze traffic signatures, confirm bot behavior, and push updated WAF rules to AWS WAF or third-party providers. |
+2. Install `just` and create the root configuration:
 
-### Infrastructure
+   ```bash
+   uv tool install rust-just
+   cp .env.example .env
+   ```
 
-#### CDK Backend Deployment
+3. Set these values in the root `.env`:
 
-The AWS CDK stack deploys and configures the following managed services:
+   ```dotenv
+   AWS_REGION=us-west-2
+   AGENT_MODEL_ID=us.anthropic.claude-sonnet-4-6
+   CHART_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
+   HYDROLIX_TABLE=your_database.your_table
+   ```
 
-**Amazon Bedrock AgentCore Resources:**
-- **[AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html)**: Provides the managed execution environment with invocation endpoints (`/invocations`) and health monitoring (`/ping`) for your agent instances
-- **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)**: A fully managed service that gives AI agents the ability to remember, learn, and evolve through interactions by capturing events, transforming them into memories, and retrieving relevant context when needed
+   `AGENT_MODEL_ID` powers the orchestrator and all three reasoning agents.
+   `CHART_MODEL_ID` is used only by the optional browser UI.
 
-The AgentCore infrastructure handles all storage complexity and provides efficient retrieval without requiring developers to manage underlying infrastructure, ensuring continuity and traceability across agent interactions.
+4. Run the offline Hydrolix management tests:
 
-**Data and Configuration Infrastructure:**
-- **Amazon DynamoDB**: Stores raw query results for data analysis audit trails
-- **AWS Secrets Manager**: Secure storage for Hydrolix connection credentials (host, port, username, password)
-- **[Hydrolix MCP Server](https://github.com/hydrolix/mcp-hydrolix)**: Model Context Protocol package for querying Hydrolix time-series data
+   ```bash
+   just test hydrolix
+   ```
 
-#### Amplify Front-End Deployment
+   Raw command:
 
-- **React Web Application**: Delivers the user interface for the assistant
-    - Uses Amazon Cognito for user authentication and permissions management
-    - The application invokes the Amazon Bedrock AgentCore for interacting with the assistant
-    - For chart generation, the application directly invokes the Claude Haiku 4.5 model
+   ```bash
+   uv run pytest scripts/tests/test_manage_hydrolix_stack.py
+   ```
 
-> [!NOTE]
-> The React Web Application uses Amazon Cognito for user authentication and permissions management, providing secure access to Amazon Bedrock AgentCore and Amazon DynamoDB services through authenticated user roles.
+5. Synthesize the CDK backend:
 
-> [!IMPORTANT] 
-> Enhance AI safety and compliance by implementing **[Amazon Bedrock Guardrails](https://aws.amazon.com/bedrock/guardrails/)** for your AI applications with the seamless integration offered by **[Strands Agents SDK](https://strandsagents.com/latest/user-guide/safety-security/guardrails/)**.
+   ```bash
+   set -a
+   source .env
+   set +a
+   cd samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands
+   npm ci --no-audit --no-fund
+   npx cdk synth CdkHydrolixDataAssistantAgentcoreStrandsStack \
+     --parameters "BedrockModelId=$AGENT_MODEL_ID" \
+     --parameters "HydrolixTable=$HYDROLIX_TABLE"
+   cd ../../..
+   ```
 
-## Deployment Instructions
+   Success writes a synthesized template under the ignored `cdk.out/`
+   directory and exits with status 0.
 
-The deployment consists of two main steps:
+### Deploy to AWS
 
-1. **[Amazon Bedrock AgentCore Deployment with CDK](./cdk-hydrolix-data-assistant-agentcore-strands/)**
-2. **[Front-End Implementation with Amplify](./amplify-hydrolix-data-assistant-agentcore-strands/)**
+> [!WARNING]
+> Deployment creates billable AgentCore, ECR, DynamoDB, Secrets Manager, and
+> logging resources. Confirm the account and region printed by the command.
 
-> [!NOTE]
-> *It is recommended to use the Oregon (us-west-2) or N. Virginia (us-east-1) regions to deploy the application.*
+1. If the target environment has not been bootstrapped, bootstrap it once:
 
-> [!IMPORTANT] 
-> Remember to clean up resources after testing to avoid unnecessary costs by following the clean-up steps provided.
+   ```bash
+   set -a
+   source .env
+   set +a
+   AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+   samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/node_modules/.bin/cdk \
+     bootstrap "aws://$AWS_ACCOUNT_ID/$AWS_REGION"
+   unset AWS_ACCOUNT_ID
+   ```
 
-## Application Preview
+2. Deploy the backend:
 
-<div align="center">
-<img src="./docs/images/preview1.png" alt="Hydrolix CDN Insights - Application Preview 1" width="100%">
-</div>
+   ```bash
+   just deploy hydrolix
+   ```
 
-<div align="center">
-<img src="./docs/images/preview2.png" alt="Hydrolix CDN Insights - Application Preview 2" width="100%">
-</div>
+   Raw command:
 
-## Thank You
+   ```bash
+   uv run python scripts/manage_hydrolix_stack.py deploy
+   ```
 
-Thanks for checking out Hydrolix CDN Insights.
+   The command asks for confirmation, installs the pinned MCP source and CDK
+   dependencies, then deploys with approval required for IAM broadening.
+   `--yes` skips the repository confirmation and passes CDK
+   `--require-approval never`.
+
+3. Read the generated Hydrolix secret ARN:
+
+   ```bash
+   set -a
+   source .env
+   set +a
+   HYDROLIX_SECRET_ARN="$(
+     aws cloudformation describe-stacks \
+       --stack-name CdkHydrolixDataAssistantAgentcoreStrandsStack \
+       --region "$AWS_REGION" \
+       --query "Stacks[0].Outputs[?OutputKey=='HydrolixSecretArn'].OutputValue" \
+       --output text
+   )"
+   ```
+
+4. In AWS Secrets Manager, open that ARN and replace the placeholder secret
+   with these four fields. Do not paste credentials into a terminal, issue, or
+   chat:
+
+   ```json
+   {
+     "HYDROLIX_HOST": "your-cluster.example.com",
+     "HYDROLIX_PORT": "8088",
+     "HYDROLIX_USER": "your-query-user",
+     "HYDROLIX_PASSWORD": "replace-in-secrets-manager"
+   }
+   ```
+
+### Verify the Deployment
+
+1. Read the runtime ARN and create a session ID:
+
+   ```bash
+   AGENT_RUNTIME_ARN="$(
+     aws cloudformation describe-stacks \
+       --stack-name CdkHydrolixDataAssistantAgentcoreStrandsStack \
+       --region "$AWS_REGION" \
+       --query "Stacks[0].Outputs[?OutputKey=='AgentRuntimeArn'].OutputValue" \
+       --output text
+   )"
+   SESSION_ID="hydrolix-$(uv run python -c 'import uuid; print(uuid.uuid4())')"
+   ```
+
+2. Send a known-good request:
+
+   ```bash
+   aws bedrock-agentcore invoke-agent-runtime \
+     --agent-runtime-arn "$AGENT_RUNTIME_ARN" \
+     --runtime-session-id "$SESSION_ID" \
+     --payload "$(
+       printf '%s' \
+         '{"prompt":"What is the current cache hit rate, and which edge locations need attention?"}' \
+         | base64
+     )" \
+     --region "$AWS_REGION" \
+     --cli-read-timeout 300 \
+     output.json
+   cat output.json
+   ```
+
+   Expected result:
+
+   ```text
+   The orchestrator selects the cache and origin specialist, queries the
+   configured Hydrolix table, and returns evidence about cache efficiency and
+   edge locations. If the table lacks those columns, it explains which schema
+   or data is missing instead of inventing values.
+   ```
+
+### Optional Web Interface
+
+The React application under
+[`amplify-hydrolix-data-assistant-agentcore-strands/`](amplify-hydrolix-data-assistant-agentcore-strands/)
+is not deployed by `just deploy hydrolix`.
+
+To use it, initialize an Amplify Gen 1 project in that directory, add Cognito
+authentication, run `amplify push`, copy `src/sample.env.js` to `src/env.js`,
+and fill in the `QuestionAnswersTableName`, `AgentRuntimeArn`, and
+`AgentEndpointName` stack outputs. Grant the authenticated Cognito role only
+the required DynamoDB query, AgentCore runtime invocation, and chart-model
+invocation permissions.
+
+Start it locally with:
+
+```bash
+cd samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands
+npm install
+set -a
+source ../../../.env
+set +a
+npm start
+```
+
+If you create an Amplify Hosting app, add its app ID to
+`HYDROLIX_AMPLIFY_APP_ID` in the root `.env` so the repository teardown can
+delete it.
+
+## Teardown
+
+Stop local processes with `Ctrl+C`.
+
+From the repository root, destroy the backend and any configured Amplify
+Hosting app:
+
+```bash
+just destroy hydrolix
+```
+
+Raw command:
+
+```bash
+uv run python scripts/manage_hydrolix_stack.py destroy
+```
+
+The confirmed teardown deletes the AgentCore runtime, endpoint and memory,
+DynamoDB table, generated Hydrolix secret, stack roles, and an Amplify app
+named by `HYDROLIX_AMPLIFY_APP_ID`. If you created Cognito or other Amplify
+backend resources manually, run `amplify delete` from the React application
+directory first.
+
+The CDK bootstrap ECR repository can retain the backend asset image after the
+stack is gone. Inspect that shared repository and remove only this sample's
+unused image if you no longer need it.
+
+Confirm the stack is gone:
+
+```bash
+set -a
+source .env
+set +a
+aws cloudformation describe-stacks \
+  --stack-name CdkHydrolixDataAssistantAgentcoreStrandsStack \
+  --region "$AWS_REGION"
+```
+
+The command should report that the stack does not exist. Orphaned AgentCore,
+Amplify, Cognito, ECR, or database resources can continue to incur cost.
+
+## Known Limitations
+
+- This is an educational sample, not a production-ready analytics service.
+- There is no fixture-backed offline Hydrolix demo; agent verification needs a
+  reachable Hydrolix cluster and AWS deployment.
+- The deployment command creates the backend only. Amplify, Cognito, browser
+  configuration, and authenticated-role permissions remain manual.
+- The browser application uses deprecated Create React App tooling.
+- The runtime's Python requirements are not pinned to exact versions.
+- Backend IAM includes broad Bedrock, ECR, CloudWatch, X-Ray, and AgentCore
+  Memory permissions that require production least-privilege review.
+- The generated secret starts with placeholders and must be updated before the
+  first live query.
+- The UI invokes a chart model directly and has no configured Bedrock
+  Guardrail.
+- Model-generated analysis is nondeterministic and must be checked against the
+  returned query evidence.
+- High availability, multi-tenant isolation, load testing, alerting, backup,
+  and complete retry/recovery behavior are outside this sample.
+
+## Development
+
+Run the offline repository checks:
+
+```bash
+just test hydrolix
+just lint
+just docs-check
+```
+
+Validate the CDK app:
+
+```bash
+cd samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands
+npm ci --no-audit --no-fund
+npm test -- --runInBand
+npm run build
+npx cdk synth CdkHydrolixDataAssistantAgentcoreStrandsStack
+```
+
+Keep the deployment wrapper thin, never log secret values, and update this
+README whenever prerequisites, model settings, deployed resources, or
+teardown behavior changes.
+
+## Contributing
+
+Read the root [`AGENTS.md`](../../AGENTS.md) and
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md) before opening a pull request.
+
+## Security
+
+Never commit Hydrolix credentials, `.env` files, account IDs, ARNs, generated
+Amplify configuration, or real customer data. Use a dedicated query-only
+Hydrolix user and a non-production AWS account.
+
+Report security issues through the process in
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md#security-issue-notifications).
 
 ## License
 
-This project is licensed under the Apache-2.0 License.
+This project is licensed under the MIT No Attribution License. See
+[`LICENSE`](../../LICENSE).

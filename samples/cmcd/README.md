@@ -11,7 +11,7 @@ Media Client Data (CMCD) without manually writing InfluxDB queries.
 
 Use this sample when a video operator needs evidence about viewer quality of
 experience: which sessions buffered, where low-buffer events concentrated, and
-whether startup delay or bitrate behavior indicates a playback incident.
+whether startup activity or bitrate behavior provides incident context.
 
 The first successful run uses recorded telemetry, needs no AWS account, and
 lets any MCP-compatible assistant report three low-buffer events concentrated
@@ -30,9 +30,13 @@ flowchart LR
     CF --> Stream[Amazon Kinesis Data Streams]
     Stream --> Processor[AWS Lambda processor]
     Processor --> Influx
+    Processor -->|reads bucket-write token| Secret[Secrets Manager]
 
     Operator --> Manager[Confirmed deploy/destroy command]
     Manager --> Stack[CloudFormation stack]
+    Stack --> Provisioner[Token provisioner and smoke check]
+    Provisioner --> Influx
+    Provisioner -->|stores read and write tokens| Secret
 ```
 
 The MCP entrypoint owns stdio transport and selects either fixtures or an
@@ -42,6 +46,10 @@ tools.
 
 For live use, the database stays in private subnets. The local MCP process
 reaches it through an AWS Systems Manager port-forwarding session. Deployment
+creates separate bucket-scoped read and write tokens, stores both in Secrets
+Manager, and proves the pipeline can write and read a smoke point. The
+processor loads only its write token from the secret; the local MCP command
+copies only the read token into root `.env`. Deployment
 and teardown are separate, confirmed operations; they are not callable through
 MCP.
 
@@ -65,7 +73,8 @@ For the AWS-backed path, also provide:
   Manager, SQS, IAM, and CloudWatch Logs.
 - Service quota for a `db.influx.medium` Timestream for InfluxDB instance and
   the other resources above.
-- An HLS playlist named `master.m3u8` and its media segments.
+- `ffmpeg` to generate the documented test stream, or an existing HLS playlist
+  named `master.m3u8` and its media segments.
 - Region `us-east-1`. The stack is pinned there because its CloudFront-scoped
   WAF web ACL must be created in `us-east-1`.
 
@@ -152,7 +161,9 @@ aws sts get-caller-identity
            "serve-cmcd"
          ],
          "env": {
-           "DEMO": "1"
+           "DEMO": "1",
+           "DEMO_SCENARIO": "cmcd_rebuffering",
+           "ALLOW_WRITES": "false"
          }
        }
      }
@@ -208,7 +219,15 @@ aws sts get-caller-identity
    > This command creates billable AWS resources. Read the printed account,
    > region, stack, and cost-bearing services before confirming.
 
-3. Upload an HLS playlist and its segments to the stack's content bucket:
+3. Generate a 30-second test-pattern HLS stream:
+
+   ```bash
+   mkdir -p hls && ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 -f lavfi -i sine=frequency=1000 -t 30 -c:v libx264 -pix_fmt yuv420p -c:a aac -f hls -hls_time 6 -hls_playlist_type vod -hls_segment_filename 'hls/segment-%03d.ts' hls/master.m3u8
+   ```
+
+   Or use an existing `master.m3u8` playlist and its media segments.
+
+4. Upload the HLS playlist and segments to the stack's content bucket:
 
    ```bash
    CMCD_BUCKET="$(aws cloudformation describe-stacks \
@@ -216,42 +235,107 @@ aws sts get-caller-identity
      --region us-east-1 \
      --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" \
      --output text)"
-   aws s3 cp /path/to/master.m3u8 \
+   aws s3 cp hls/master.m3u8 \
      "s3://${CMCD_BUCKET}/videos/master.m3u8" \
      --region us-east-1
-   aws s3 cp /path/to/hls-segments/ \
+   aws s3 cp hls/ \
      "s3://${CMCD_BUCKET}/videos/" \
      --recursive \
+     --exclude "master.m3u8" \
      --region us-east-1
    ```
 
-4. Print the generated connection commands and keep the printed Systems
+5. Print the generated connection commands and keep the printed Systems
    Manager tunnel running in another terminal:
 
    ```bash
    uv run python scripts/manage_cmcd_stack.py show-next-steps
    ```
 
-5. Follow the printed command to read the InfluxDB admin password, then sign in
-   at `https://localhost:8086`. Under **Load Data → API Tokens**, create a token
-   with read-only access to the `cmcd-metrics` bucket.
+6. With the tunnel running, create or reuse the least-privilege read token and
+   write the live connection settings to the root `.env`:
 
-   Use a least-privilege read-only token for this MCP server. Do not use an
-   all-access token. The stack output named `InfluxDBToken` is setup material,
-   not an InfluxDB API token.
-
-6. Add the live connection to the root `.env`:
-
-   ```dotenv
-   INFLUXDB_URL=https://localhost:8086
-   INFLUXDB_ORG=cmcd-org
-   INFLUXDB_TOKEN=replace-with-the-read-only-api-token
-   VERIFY_SSL=false
+   ```bash
+   just cmcd-token
    ```
 
-   `VERIFY_SSL=false` is only for this local tunnel: the certificate names the
-   private InfluxDB host, not `localhost`. Keep verification enabled for
-   connections whose certificate matches the configured hostname.
+   Raw command:
+
+   ```bash
+   uv run python scripts/manage_cmcd_stack.py create-read-token
+   ```
+
+   The command asks for its own confirmation, reads the admin credentials
+   without printing them, and creates or reuses the token named
+   `cmcd-mcp-server read-only`. That token has exactly one permission: Read on
+   the `cmcd-metrics` bucket in `cmcd-org`. The command proves that a read
+   returns HTTP 200 and a write returns HTTP 403, replaces the root `.env`
+   connection values, and prints only `written` after success. It sets
+   `VERIFY_SSL=false` only for this local tunnel.
+
+   <details>
+   <summary>Manual fallback: create the read-only token in the InfluxDB UI</summary>
+
+   1. Open `https://localhost:8086` while the tunnel is active. Sign in with
+      username `admin` (the secret's `username` field). Read only `.password`:
+
+      ```bash
+      aws secretsmanager get-secret-value \
+        --region us-east-1 \
+        --secret-id <InfluxDBSecretArn> \
+        --query SecretString \
+        --output text |
+        python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])'
+      ```
+
+      ![Sign in to the tunneled InfluxDB instance](docs/images/create-influxdb-read-token-step-1-sign-in.png)
+
+   2. The browser warns about a self-signed certificate for `localhost`
+      because the certificate names the private host. Accept it for this
+      tunnel only.
+
+   3. In the collapsed sidebar, click the unlabelled up-arrow icon for Load
+      Data, then select the **API TOKENS** tab.
+
+      ![Open the API Tokens tab](docs/images/create-influxdb-read-token-step-3-api-tokens.png)
+
+   4. Open **GENERATE API TOKEN**. Its first entry is All Access; choose
+      **Custom API Token**, never All Access.
+
+      ![Choose Custom API Token](docs/images/create-influxdb-read-token-step-4-custom-menu.png)
+
+   5. Enter the description `cmcd-mcp-server read-only`. Expand **Buckets**,
+      then under Individual Bucket Names tick only **Read** on
+      `cmcd-metrics`. Leave All Buckets, Write, `_monitoring`, `_tasks`,
+      Telegrafs, and Other Resources unticked.
+
+      ![Configure custom token permissions](docs/images/create-influxdb-read-token-step-5-permissions.png)
+
+      ![Select only Read for cmcd-metrics](docs/images/create-influxdb-read-token-step-5-read-only-bucket.png)
+
+   6. Generate the token. It is shown once. Paste it directly into
+      `INFLUXDB_TOKEN` in the root `.env`, never into a chat or terminal.
+
+      ![Copy the masked token once](docs/images/create-influxdb-read-token-step-6-copy-once.png)
+
+   7. Do not copy **admin's Token** from the token list. It is the all-access
+      operator token.
+
+   Then verify the manual token while the tunnel remains active:
+
+      ```bash
+      just cmcd-token-verify
+      ```
+
+      Raw command:
+
+      ```bash
+      uv run python scripts/verify_influxdb_read_token.py
+      ```
+
+      The expected result is `read 200; write 403`.
+
+   </details>
 
 7. Open the `VideoPlayerURL` printed after deployment and play the HLS stream
    long enough to generate CMCD telemetry.
@@ -309,9 +393,8 @@ delivered records.
 | `get_average_bitrate` | Read | Calculates mean requested bitrate, optionally by session or content |
 | `get_session_details` | Read | Returns a chronological metric timeline for one session |
 | `analyze_buffer_events` | Read | Finds buffer measurements below a requested threshold |
-| `identify_playback_errors` | Read | Detects buffer underruns, sudden drops, and excessive startup delay |
+| `identify_playback_errors` | Read | Detects buffer-starvation signals and sudden drops, with startup context |
 | `list_session_and_content_ids` | Read | Lists distinct session and content identifiers |
-| `execute_flux_query` | Read | Runs an explicitly read-only Flux query |
 
 ## Teardown
 
@@ -333,16 +416,16 @@ Before confirmation, the command lists the exact S3 bucket, CloudFormation
 stack, retained InfluxDB instance, and Lambda log groups it will remove. It
 then:
 
-1. empties the content bucket;
-2. deletes the `video-ops-cmcd` stack;
-3. explicitly deletes the InfluxDB instance retained as a safety net by the
-   template; and
+1. explicitly deletes the InfluxDB instance retained as a safety net by the
+   template and waits, for at most 30 minutes, until its VPC network
+   interfaces are gone;
+2. empties the content bucket;
+3. deletes the `video-ops-cmcd` stack and waits for completion; and
 4. deletes the stack's Lambda log groups.
 
-If discovery or any deletion fails, the command stops and tells you to fix the
-problem and run it again. InfluxDB deletion takes several minutes. Use the
-identifier and verification command printed by teardown to confirm it reaches
-`ResourceNotFoundException`.
+Each step treats an already-absent resource as complete. If discovery or any
+deletion fails, fix the reported problem and run `just destroy cmcd` again;
+the next run resumes safely instead of repeating a completed deletion.
 
 Confirm the stack and log groups are gone:
 
@@ -360,6 +443,10 @@ The first command should report that the stack does not exist, and the second
 should return an empty list. KMS keys created by the stack remain scheduled for
 AWS-managed deletion for 7–30 days; no manual action is required.
 
+Do not delete the CloudFormation stack manually. The retained InfluxDB
+instance and its network interfaces can block deletion of the VPC, subnets,
+and security groups. `just destroy cmcd` removes and awaits the instance first.
+
 Delete the local `.env` if it is no longer needed because it contains the
 InfluxDB API token. Orphaned infrastructure and retained data can continue to
 incur cost.
@@ -375,8 +462,8 @@ incur cost.
   backup policy, alerting, or complete retry and recovery strategy.
 - The deployment creates long-running cost-bearing resources, especially
   Timestream for InfluxDB and the NAT gateway.
-- The raw Flux tool applies a read-only safety policy, but database permissions
-  remain the primary control; always use a bucket-scoped read-only token.
+- The MCP server intentionally exposes only typed analysis tools, not arbitrary
+  Flux queries. Database permissions remain the primary control.
 - Fixture playback covers one representative rebuffering incident, not every
   InfluxDB or CDN behavior.
 - Tool results are deterministic for a given dataset, but an MCP client's
@@ -434,8 +521,9 @@ Read [`AGENTS.md`](../../AGENTS.md) and
 ## Security
 
 Never commit credentials, `.env` files, API tokens, account IDs, ARNs, or real
-media resource IDs. Keep InfluxDB tokens read-only and bucket-scoped. Report
-security issues through the process in
+media resource IDs. Keep the MCP token bucket-scoped and read-only; keep the
+processor token bucket-scoped and write-only. Report security issues through
+the process in
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md#security-issue-notifications).
 
 ## License

@@ -33,6 +33,7 @@ class PipelineDetail(BaseModel):
 
 class ChannelDetails(ChannelSummary):
     channel_class: str | None = None
+    output_locking_mode: str | None = None
     input_attachments: list[str] = []
     pipelines: list[PipelineDetail] = []
 
@@ -42,14 +43,3 @@ class ScheduleActionSummary(BaseModel):
     action_type: str
     start: str
     input_attachment: str | None = None
-
-
-class ActionResult(BaseModel):
-    """Outcome of an approved write: what it was before, after, and whether that was verified."""
-
-    approval_id: str
-    action: str
-    resource_id: str
-    before_state: str
-    after_state: str
-    verified: bool

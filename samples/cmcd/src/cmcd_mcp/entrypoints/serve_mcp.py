@@ -12,12 +12,6 @@ from cmcd_mcp.adapters.influxdb.analyze_buffer_events import (
 from cmcd_mcp.adapters.influxdb.analyze_buffer_events import (
     analyze_buffer_events as read_buffer_events,
 )
-from cmcd_mcp.adapters.influxdb.execute_flux_query import (
-    FluxQueryResult,
-)
-from cmcd_mcp.adapters.influxdb.execute_flux_query import (
-    execute_flux_query as run_flux_query,
-)
 from cmcd_mcp.adapters.influxdb.get_average_bitrate import (
     AverageBitrate,
 )
@@ -64,7 +58,6 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
     buffer_query = _select_query(runtime, "influxdb.query_buffer_events")
     playback_query = _select_query(runtime, "influxdb.query_playback_errors")
     ids_query = _select_query(runtime, "influxdb.query_session_and_content_ids")
-    raw_query = _select_query(runtime, "influxdb.execute_flux_query")
 
     @server.tool(annotations=READ_ONLY)
     @report_tool_failure
@@ -108,7 +101,7 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
         time_range: str = "-24h",
         cmcd_sid: str | None = None,
     ) -> PlaybackErrorAnalysis:
-        """Detect buffer underruns, sudden drops, and excessive startup delays."""
+        """Detect starvation signals and sudden buffer drops with startup context."""
         return read_playback_errors(time_range, cmcd_sid, query_influxdb=playback_query)
 
     @server.tool(annotations=READ_ONLY)
@@ -119,12 +112,6 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
     ) -> SessionAndContentIds:
         """List distinct CMCD session and content ids."""
         return read_session_and_content_ids(time_range, limit, query_influxdb=ids_query)
-
-    @server.tool(annotations=READ_ONLY)
-    @report_tool_failure
-    def execute_flux_query(flux: str) -> FluxQueryResult:
-        """Execute an explicit read query against CMCD telemetry."""
-        return run_flux_query(flux, query_influxdb=raw_query)
 
     return server
 

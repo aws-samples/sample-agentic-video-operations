@@ -92,6 +92,42 @@ just doctor
    - `medialive-demo` replays fixtures.
    - `medialive` uses your root `.env` and real AWS credentials.
 
+   ```json
+   {
+     "mcpServers": {
+       "medialive": {
+         "command": "uv",
+         "args": [
+           "run",
+           "--directory",
+           "/absolute/path/to/sample-agentic-video-operations",
+           "--env-file",
+           ".env",
+           "--package",
+           "medialive-mcp-server",
+           "serve-medialive"
+         ]
+       },
+       "medialive-demo": {
+         "command": "uv",
+         "args": [
+           "run",
+           "--directory",
+           "/absolute/path/to/sample-agentic-video-operations",
+           "--package",
+           "medialive-mcp-server",
+           "serve-medialive"
+         ],
+         "env": {
+           "DEMO": "1",
+           "DEMO_SCENARIO": "input_loss",
+           "ALLOW_WRITES": "false"
+         }
+       }
+     }
+   }
+   ```
+
 4. Send a known-good request:
 
    ```text
@@ -104,9 +140,12 @@ just doctor
 
 ### Deploy to AWS
 
-`just deploy medialive` arrives with task C3.2. Until then, use the existing CDK app:
+This sample's CDK app deploys its read-only Strands agent. A later release replaces that
+agent with the media ops hub, which loads MediaLive as one of its domains. Until then,
+deploy from the repository root, loading the models and region from your root `.env`:
 
 ```bash
+set -a; source .env; set +a   # exports AGENT_MODEL_ID, THUMBNAIL_MODEL_ID and AWS_REGION
 cd samples/medialive/cdk
 npm ci
 npx cdk deploy \
@@ -127,8 +166,8 @@ npx cdk deploy \
 
 ### Verify the Deployment
 
-Invoke the deployed agent with a known-good request. Use the `AgentRuntimeArn` stack
-output:
+Invoke the deployed agent with a known-good request, in the same shell (so `AWS_REGION`
+is still set). Use the `AgentRuntimeArn` stack output:
 
 ```bash
 export AGENT_RUNTIME_ARN="<AgentRuntimeArn output>"
@@ -186,8 +225,8 @@ Orphaned resources can keep incurring cost.
 - The Strands agent is read-only. It recommends an input switch but cannot apply one.
 - `code_mode` (Strands agent) only exists with `ENABLE_CODE_MODE=true`. It runs model-written Python in the agent process, so enable it only in a sandbox you trust.
 - `DroppedFrames` and `SvqTime` use other dimensions in CloudWatch, so they may show no data.
-- IAM resources are wildcards, and write permissions are granted even though the agent doesn't use them. Task C3.2 tightens this.
-- The tests in `tests/unit`, `tests/local` and `tests/remote` still target the old layout. They move to the new package in task G3.2. `just test medialive` runs `tests/scenarios`.
+- The CDK role uses wildcard resources and includes write permissions the read-only agent doesn't use. Scope both before any production use.
+- `tests/unit`, `tests/local` and `tests/remote` hold the previous layout's tests and aren't run. `just test medialive` runs `tests/scenarios`, which covers the current package.
 - Model output is nondeterministic. Safety comes from the write adapters, not from the prompt.
 
 ## Development

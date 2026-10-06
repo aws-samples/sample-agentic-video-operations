@@ -17,9 +17,6 @@ ALLOWED_ROOT = frozenset(
     }
 )  # fmt: skip
 
-# Task R1 is complete. Future layout migrations must add an explicit temporary exception.
-PENDING_MOVES: dict[str, str] = {}
-
 IMAGE_EXTENSIONS = frozenset(
     {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp", ".tif", ".tiff"}
 )
@@ -27,7 +24,7 @@ DOCS_IMAGES = re.compile(r"^(docs/images/|samples/[^/]+/docs/images/)")
 
 
 def find_layout_problems(tracked_paths: Iterable[str]) -> list[str]:
-    paths = [path for path in tracked_paths if path.split("/", 1)[0] not in PENDING_MOVES]
+    paths = list(tracked_paths)
     web_apps = find_web_apps(paths)
     problems: set[str] = set()
     for path in paths:
@@ -68,9 +65,6 @@ def main() -> int:
     problems = find_layout_problems(list_tracked_paths())
     for problem in problems:
         print(problem)
-    pending = ", ".join(f"{old} -> {new}" for old, new in PENDING_MOVES.items())
-    if PENDING_MOVES:
-        print(f"Pending moves (task R1): {pending}")
     print("Repository layout checks passed." if not problems else f"{len(problems)} problem(s).")
     return 1 if problems else 0
 

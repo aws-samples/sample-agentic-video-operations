@@ -7,19 +7,19 @@ This subagent handles all Hydrolix time-series data analysis tasks including:
 - Time-series data interpretation and insights
 """
 
+import asyncio
 import json
 import os
-import asyncio
-import boto3
 from uuid import uuid4
 
+import boto3
+from mcp import StdioServerParameters, stdio_client
+from src.settings.runtime_settings import load_runtime_settings
+from src.utils import get_request_context, load_file_content, process_agent_stream
 from strands import Agent, tool
-from strands_tools import current_time, calculator
 from strands.models import BedrockModel
-from mcp import stdio_client, StdioServerParameters
 from strands.tools.mcp import MCPClient
-
-from src.utils import load_file_content, get_request_context, process_agent_stream
+from strands_tools import calculator, current_time
 
 
 def _load_hydrolix_system_prompt(user_timezone: str = "US/Pacific") -> str:
@@ -125,10 +125,7 @@ def hydrolix_agent(query: str) -> str:
             tools.append(calculator)
             
             # Initialize model
-            model_id = os.getenv(
-                "BEDROCK_MODEL_ID", 
-                "us.anthropic.claude-sonnet-4-20250514-v1:0"
-            )
+            model_id = load_runtime_settings().agent_model_id
             bedrock_model = BedrockModel(model_id=model_id)
             
             # Load system prompt

@@ -24,7 +24,9 @@
         "serve-medialive"
       ],
       "env": {
-        "DEMO": "1"
+        "DEMO": "1",
+        "DEMO_SCENARIO": "input_loss",
+        "ALLOW_WRITES": "false"
       }
     }
   }

@@ -85,6 +85,24 @@ describe('IAM Execution Role', () => {
       }
     }
   });
+
+  test('policy can read only the ElementalMediaLive log group', () => {
+    const resources = template.toJSON().Resources;
+    const roleKey = Object.keys(resources).find(
+      (k) => resources[k].Type === 'AWS::IAM::Role',
+    )!;
+    const statements = resources[roleKey].Properties.Policies[0].PolicyDocument.Statement;
+    const logsStatement = statements.find((statement: any) => statement.Sid === 'CloudWatchLogs');
+
+    expect(logsStatement.Action).toEqual([
+      'logs:DescribeLogStreams',
+      'logs:FilterLogEvents',
+    ]);
+    expect(JSON.stringify(logsStatement.Resource)).toContain(
+      'log-group:ElementalMediaLive:*',
+    );
+    expect(logsStatement.Resource).not.toEqual('*');
+  });
 });
 
 describe('AgentCore Memory', () => {

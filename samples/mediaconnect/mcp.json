@@ -19,8 +19,6 @@
         "run",
         "--directory",
         "/absolute/path/to/sample-agentic-video-operations",
-        "--env-file",
-        ".env",
         "--package",
         "mediaconnect-mcp-server",
         "serve-mediaconnect"

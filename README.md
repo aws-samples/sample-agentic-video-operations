@@ -63,7 +63,7 @@ For AWS-backed runs and deployments, also install:
 
 - AWS CLI with configured credentials.
 - Docker.
-- Node.js 20 or newer and AWS CDK for CDK-based samples.
+- Node.js 20 or newer; each CDK app installs its local AWS CDK with `npm ci`.
 - Access to the selected Amazon Bedrock models.
 
 Run the repository prerequisite check before starting:
@@ -72,7 +72,15 @@ Run the repository prerequisite check before starting:
 just doctor
 ```
 
-`just doctor` reports a fix command for each missing requirement.
+`just doctor` reports a fix command for each missing requirement. It fails only
+when the offline group (`uv`, `just`, or Python) is incomplete; AWS, Docker,
+Node.js, CDK, and bootstrap gaps are warnings.
+
+Before an AWS-backed run or deployment, make those checks strict:
+
+```bash
+just doctor aws
+```
 
 ### Models
 
@@ -195,9 +203,10 @@ Use the root commands:
 
 ```bash
 just doctor
+just doctor aws
 just test <key>
 just lint
-just eval
+just eval  # from step 4
 ```
 
 Read [`AGENTS.md`](AGENTS.md) before changing code. Sample READMEs follow

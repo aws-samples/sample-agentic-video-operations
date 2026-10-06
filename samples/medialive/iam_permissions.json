@@ -1,0 +1,24 @@
+{
+  "read": [
+    {"actions": ["medialive:ListChannels"], "resources": ["*"]},
+    {
+      "actions": ["medialive:DescribeChannel", "medialive:DescribeSchedule", "medialive:DescribeThumbnails"],
+      "resources": ["arn:aws:medialive:{region}:{account}:channel:*"]
+    },
+    {"actions": ["cloudwatch:GetMetricData"], "resources": ["*"]},
+    {
+      "actions": ["logs:DescribeLogStreams", "logs:FilterLogEvents"],
+      "resources": ["arn:aws:logs:{region}:{account}:log-group:ElementalMediaLive:*"]
+    },
+    {
+      "actions": ["bedrock:InvokeModel"],
+      "resources": ["arn:aws:bedrock:*::foundation-model/*", "arn:aws:bedrock:{region}:{account}:inference-profile/*"]
+    }
+  ],
+  "write": [
+    {
+      "actions": ["medialive:StartChannel", "medialive:StopChannel", "medialive:BatchUpdateSchedule"],
+      "resources": ["arn:aws:medialive:{region}:{account}:channel:*"]
+    }
+  ]
+}
