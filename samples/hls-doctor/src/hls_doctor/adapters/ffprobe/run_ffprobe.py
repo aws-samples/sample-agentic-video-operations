@@ -8,6 +8,8 @@ before ffprobe sees it, rather than relying on ffmpeg's own checks.
 
 import json
 import subprocess
+import tempfile
+from pathlib import Path
 
 from hls_doctor.adapters.ffprobe.locate_ffprobe import locate_ffprobe
 from hls_doctor.adapters.ffprobe.probe_report import (
@@ -47,11 +49,23 @@ def create_live_probe() -> ProbeSegment:
 
 
 def protocol_whitelist(target: str) -> str:
-    """http(s) for URLs, `file` for the workflow's own local temp path."""
-    lowered = target.lower()
-    if lowered.startswith(("http://", "https://")):
+    """http(s) for URLs; `file` only for the workflow's own temp download.
+
+    Local input is an allowlist, not a blocklist: the path must resolve to an
+    hls-doctor media temp file inside the system temp directory, so ffmpeg
+    pseudo-protocols (`concat:`, `subfile,...:`, `data:`) and arbitrary paths
+    never reach ffprobe.
+    """
+    if target.lower().startswith(("http://", "https://")):
         return "http,https,tcp,tls"
-    if "://" in lowered or lowered.startswith(("concat:", "data:", "subfile:", "pipe:")):
+    resolved = Path(target).resolve()
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    is_own_download = (
+        resolved.is_file()
+        and resolved.name.startswith("hls-doctor-media-")
+        and temp_root in resolved.parents
+    )
+    if not is_own_download:
         raise ToolFailure(
             FailureKind.INVALID_REQUEST,
             f"Refusing to probe {target[:80]!r}: only http(s) URLs and the"

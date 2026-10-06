@@ -6,7 +6,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, Field
 
-from hls_doctor.adapters.http.redact_url import redact_url
+from hls_doctor.adapters.http.redact_url import redact_playlist_body, redact_url
 
 # Response headers that may appear in evidence; everything else is dropped.
 # Set-Cookie, Authorization, Cookie and x-amz-* never pass this list.
@@ -62,12 +62,14 @@ class HttpExchange(BaseModel):
         return self.model_copy(update=updates)
 
     def body_policy(self, preview_bytes: int) -> dict[str, object]:
-        if self.body_text is not None and len(self.body_text) > preview_bytes:
-            return {
-                "body_text": self.body_text[:preview_bytes] or None,
-                "body_truncated": True,
-                "body_sha256": hashlib.sha256(self.body_text.encode()).hexdigest(),
-            }
+        if self.body_text is not None:
+            redacted = redact_playlist_body(self.body_text)
+            if len(redacted) > preview_bytes or redacted != self.body_text:
+                return {
+                    "body_text": redacted[:preview_bytes] or None,
+                    "body_truncated": self.body_truncated or len(redacted) > preview_bytes,
+                    "body_sha256": hashlib.sha256(self.body_text.encode()).hexdigest(),
+                }
         if self.body_bytes_b64 is not None:
             raw = base64.b64decode(self.body_bytes_b64)
             if len(raw) > preview_bytes:

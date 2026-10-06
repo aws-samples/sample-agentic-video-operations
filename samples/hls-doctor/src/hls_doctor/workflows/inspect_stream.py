@@ -46,6 +46,7 @@ from hls_doctor.workflows.probe_segment_samples import (
 )
 from hls_doctor.workflows.run_validator_crosscheck import run_validator_crosscheck
 from hls_doctor.workflows.watch_stream import watch_media_playlists
+from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
 
 def inspect_stream(
@@ -146,8 +147,16 @@ def raise_when_entry_transport_failed(
     if node is None or not node.evidence_ids:
         return
     exchange = evidence.exchanges[node.evidence_ids[0]]
-    if exchange.transport_error is not None:
-        raise entry_point_unreachable(entry_url, ConnectionError(exchange.transport_error))
+    if exchange.transport_error is None:
+        return
+    if exchange.transport_error.startswith("RefusedTarget"):
+        raise ToolFailure(
+            FailureKind.INVALID_REQUEST,
+            f"The entry manifest was refused by policy: {exchange.transport_error}.",
+            "Public streams only; set HLS_ALLOW_PRIVATE_TARGETS=true locally to"
+            " diagnose a private one.",
+        )
+    raise entry_point_unreachable(entry_url, ConnectionError(exchange.transport_error))
 
 
 def validate_playlists(graph: PresentationGraph) -> list[Finding]:

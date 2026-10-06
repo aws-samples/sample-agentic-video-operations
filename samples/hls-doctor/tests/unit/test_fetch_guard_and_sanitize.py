@@ -147,3 +147,73 @@ def test_report_json_never_contains_the_key_bytes() -> None:
     )
     dumped = json.dumps(store.model_dump(mode="json"))
     assert base64.b64encode(key_bytes).decode() not in dumped
+
+
+KEYED_PLAYLIST = (
+    "#EXTM3U\n"
+    '#EXT-X-KEY:METHOD=AES-128,URI="key?secret=topsecretvalue&hdnts=exp123~hmac456"\n'
+    "#EXTINF:6.0,\n"
+    "seg1.ts?token=credential-like-value&_HLS_msn=5\n"
+)
+
+
+def test_stored_playlist_bodies_carry_no_query_tokens() -> None:
+    exchange = HttpExchange(
+        url="https://cdn.example/prog.m3u8",
+        requested_url="https://cdn.example/prog.m3u8",
+        at_ms=0,
+        status=200,
+        headers={"content-type": "application/vnd.apple.mpegurl"},
+        body_text=KEYED_PLAYLIST,
+    )
+    stored = EvidenceStore()
+    evidence_id = stored.record_exchange(exchange, "media_playlist")
+    body = stored.exchanges[evidence_id].body_text or ""
+    for secret in ("topsecretvalue", "hmac456", "credential-like-value"):
+        assert secret not in body
+    assert "secret=REDACTED" in body and "token=REDACTED" in body
+    assert "_HLS_msn=5" in body  # structural directives survive
+    assert stored.exchanges[evidence_id].body_sha256 is not None
+
+
+def test_entry_policy_refusal_names_the_policy() -> None:
+    from hls_doctor.domain.graph.build_presentation_graph import PresentationGraph
+    from hls_doctor.domain.graph.presentation_node import PresentationNode
+    from hls_doctor.workflows.inspect_stream import raise_when_entry_transport_failed
+
+    url = "http://127.0.0.1/master.m3u8"
+    evidence = EvidenceStore()
+    evidence_id = evidence.record_exchange(
+        HttpExchange(
+            url=url,
+            requested_url=url,
+            at_ms=0,
+            transport_error="RefusedTarget: it resolves to the non-global address 127.0.0.1",
+        )  # fmt: skip
+    )
+    graph = PresentationGraph(entry_url=url)
+    graph.nodes[url] = PresentationNode(
+        url=url, node_type="media_playlist", evidence_ids=[evidence_id]
+    )
+    with pytest.raises(ToolFailure) as failure:
+        raise_when_entry_transport_failed(url, graph, evidence)
+    assert "refused by policy" in failure.value.message
+    assert "RefusedTarget" in failure.value.message
+
+
+def test_ffprobe_local_input_is_an_allowlist(tmp_path) -> None:
+    import tempfile
+
+    from hls_doctor.adapters.ffprobe.run_ffprobe import protocol_whitelist
+
+    assert protocol_whitelist("https://cdn.example/seg.m4s") == "http,https,tcp,tls"
+    with tempfile.NamedTemporaryFile(prefix="hls-doctor-media-", suffix=".bin") as own:
+        assert protocol_whitelist(own.name) == "file"
+    for hostile in (
+        "subfile,,start,0,end,100,,:/etc/passwd",
+        "concat:/etc/passwd",
+        "/etc/passwd",
+        str(tmp_path / "other.bin"),
+    ):
+        with pytest.raises(ToolFailure):
+            protocol_whitelist(hostile)
