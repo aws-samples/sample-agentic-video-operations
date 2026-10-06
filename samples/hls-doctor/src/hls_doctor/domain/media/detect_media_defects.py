@@ -24,16 +24,17 @@ def check_timestamp_regression(probe: SegmentProbe, findings: list[Finding]) -> 
             create_finding(
                 "Video timestamps go backwards inside a segment",
                 Severity.ERROR,
-                Confidence.CONFIRMED,
+                Confidence.HIGH,
                 "media-timeline",
                 [probe.url],
                 [
                     observe(
-                        f"{len(analysis.regressions)} PTS regression(s) across"
-                        f" {analysis.packet_count} probed packets: {shown}"
+                        f"{len(analysis.regressions)} {analysis.clock.upper()} regression(s)"
+                        f" across {analysis.packet_count} probed packets: {shown}"
                     )
                 ],
-                "Presentation timestamps must be monotonic within a segment.",
+                "Decode timestamps must be monotonic within a segment; B-frame"
+                " presentation reordering is expected and not flagged.",
                 "Decoders drop or re-order frames; players may stall or glitch.",
                 likely_causes=["encoder timestamp wrap", "bad splice or re-mux"],
                 next_probe="Probe the neighbouring segments to see where monotonicity breaks.",

@@ -59,10 +59,38 @@ def test_monotonic_timestamps_are_clean() -> None:
     assert analysis.regressions == [] and analysis.packet_count == 3
 
 
-def test_a_pts_regression_becomes_an_error_finding() -> None:
+def test_without_dts_a_pts_regression_becomes_an_error_finding() -> None:
     findings = detect_media_defects([probe("u", [0.0, 0.1, 0.05])])
     assert findings[0].title == "Video timestamps go backwards inside a segment"
     assert findings[0].severity.value == "ERROR"
+    assert findings[0].confidence.value == "high"
+
+
+def bframe_probe(url: str):
+    payload = {
+        "streams": [{"index": 0, "codec_type": "video", "codec_name": "h264"}],
+        "packets": [
+            {"codec_type": "video", "dts_time": "0.000", "pts_time": "0.000"},
+            {"codec_type": "video", "dts_time": "0.033", "pts_time": "0.100"},
+            {"codec_type": "video", "dts_time": "0.066", "pts_time": "0.033"},
+            {"codec_type": "video", "dts_time": "0.099", "pts_time": "0.066"},
+        ],
+        "format": {"format_name": "mov,mp4,m4a"},
+    }
+    return parse_ffprobe_output(url, payload)
+
+
+def test_bframe_reordering_is_not_a_regression() -> None:
+    analysis = analyze_timestamps(bframe_probe("u"))
+    assert analysis.clock == "dts" and analysis.regressions == []
+    assert detect_media_defects([bframe_probe("u")]) == []
+
+
+def test_a_dts_regression_is_an_error_even_with_bframes() -> None:
+    broken = bframe_probe("u")
+    broken.packets[3].dts_time = 0.01
+    findings = detect_media_defects([broken])
+    assert findings[0].title == "Video timestamps go backwards inside a segment"
 
 
 class FakeExchange:

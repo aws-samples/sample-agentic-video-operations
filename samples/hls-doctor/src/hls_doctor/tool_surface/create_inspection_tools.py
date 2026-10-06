@@ -107,10 +107,16 @@ def create_inspection_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
             nodes=list(graph.nodes.values()),
         )
 
-    def probe_http(url: str) -> HttpExchange:
-        """One GET with timings and headers; an error status is evidence, not failure."""
+    def probe_http(url: str, include_body_bytes: int = 1024) -> HttpExchange:
+        """One GET with timings and headers; an error status is evidence, not failure.
+
+        The body is returned as a preview of at most `include_body_bytes`
+        (capped at 65536) with its sha256; probe again with a larger value
+        for deeper inspection.
+        """
         require_usable_entry_url(url)
-        return build_probe_context(settings).fetch(url)
+        preview = max(0, min(include_body_bytes, 65536))
+        return build_probe_context(settings).fetch(url).with_preview(preview)
 
     def inspect_stream(url: str = "") -> InspectionReport:
         """Run the full inspection: graph, validation, delivery probes, findings.

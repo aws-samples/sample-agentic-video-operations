@@ -176,7 +176,7 @@ def signaled_gap(files: ScenarioFiles) -> ScenarioFiles:
 
 
 def pts_regression(files: ScenarioFiles) -> ScenarioFiles:
-    """The last probed 1080p segment carries a mid-segment PTS regression."""
+    """The last probed 1080p segment's decode clock regresses mid-segment."""
     mutated = copy.deepcopy(files)
     base = "https://demo.example/vod/v1080"
     normal = [
@@ -187,6 +187,7 @@ def pts_regression(files: ScenarioFiles) -> ScenarioFiles:
     broken = copy.deepcopy(normal)
     for index in range(6, 12):
         broken[index]["pts_time"] = f"{(index - 6) * 0.0333:.4f}"
+        broken[index]["dts_time"] = f"{(index - 6) * 0.0333:.4f}"
     streams = [{
         "index": 0, "codec_type": "video", "codec_name": "h264", "profile": "High",
         "width": 1920, "height": 1080, "avg_frame_rate": "30000/1001",

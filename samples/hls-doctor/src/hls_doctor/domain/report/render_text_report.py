@@ -36,7 +36,8 @@ def render_overview(report: InspectionReport) -> list[str]:
 
 
 def render_critical(finding: Finding) -> list[str]:
-    lines = ["Critical finding", "----------------", finding.title, "", finding.interpretation, ""]
+    title = finding.title + resource_note(finding)
+    lines = ["Critical finding", "----------------", title, "", finding.interpretation, ""]
     if finding.observations:
         lines.extend(["Evidence", "--------"])
         lines.extend(observation.statement for observation in finding.observations)
@@ -50,6 +51,14 @@ def render_other_findings(findings: list[Finding], skip: list[Finding]) -> list[
     if not remaining:
         return []
     lines = ["Other findings", "--------------"]
-    lines.extend(f"{finding.severity.value:<8} {finding.title}" for finding in remaining)
+    lines.extend(
+        f"{finding.severity.value:<8} {finding.title}{resource_note(finding)}"
+        for finding in remaining
+    )
     lines.append("")
     return lines
+
+
+def resource_note(finding: Finding) -> str:
+    count = len(finding.affected_resources)
+    return f" (across {count} resources)" if count > 1 else ""

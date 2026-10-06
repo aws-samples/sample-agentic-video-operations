@@ -13,15 +13,23 @@ class ToolRun(BaseModel):
     summary: str
 
 
+EVIDENCE_BODY_PREVIEW_BYTES = 1024
+
+
 class EvidenceStore(BaseModel):
     exchanges: dict[str, HttpExchange] = Field(default_factory=dict)
     tool_runs: list[ToolRun] = Field(default_factory=list)
     redact_all_query: bool = False
 
     def record_exchange(self, exchange: HttpExchange) -> str:
-        """Store a redacted copy; the id is stable for findings to reference."""
+        """Store a redacted, body-trimmed copy; findings reference the stable id.
+
+        The stored copy keeps the first kilobyte of the body plus its sha256,
+        so reports stay small while the evidence remains verifiable; callers
+        keep the untrimmed exchange for parsing.
+        """
         evidence_id = f"e{len(self.exchanges) + 1}"
-        redacted = exchange.model_copy(
+        redacted = exchange.with_preview(EVIDENCE_BODY_PREVIEW_BYTES).model_copy(
             update={
                 "url": redact_url(exchange.url, redact_all_query=self.redact_all_query),
                 "requested_url": redact_url(

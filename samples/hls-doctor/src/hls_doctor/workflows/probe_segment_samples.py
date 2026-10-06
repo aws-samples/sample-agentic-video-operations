@@ -1,12 +1,22 @@
-"""Probe representative resources beneath each media playlist (spec §19 default)."""
+"""Probe representative resources beneath each media playlist (spec §19 default).
 
-from hls_doctor.adapters.http.http_exchange import FetchUrl
+Segment delivery is checked with a Range request for the first 64 KiB - the
+status, timing and headers prove availability without downloading the media -
+and live probes run concurrently. Replay stays sequential so the virtual
+clock remains deterministic.
+"""
+
+from concurrent.futures import ThreadPoolExecutor
+
+from hls_doctor.adapters.http.http_exchange import FetchUrl, HttpExchange
 from hls_doctor.domain.evidence.evidence_store import EvidenceStore
 from hls_doctor.domain.graph.build_presentation_graph import ParsedPlaylist, PresentationGraph
 from hls_doctor.domain.playlist.media_playlist_model import MediaSegment
 from hls_doctor.domain.playlist.resolve_uri import resolve_uri
 
 SEGMENT_SAMPLE_COUNT = 3
+SEGMENT_RANGE_HEADER = "bytes=0-65535"
+MAX_CONCURRENT_PROBES = 8
 
 
 class SamplePlan:
@@ -48,7 +58,17 @@ def sampled_segments(segments: list[MediaSegment]) -> list[MediaSegment]:
     return segments[:SEGMENT_SAMPLE_COUNT] + segments[-SEGMENT_SAMPLE_COUNT:]
 
 
-def probe_samples(plan: SamplePlan, fetch: FetchUrl, evidence: EvidenceStore) -> None:
-    for url in plan.resource_types:
-        exchange = fetch(url)
-        evidence.record_exchange(exchange)
+def probe_samples(
+    plan: SamplePlan, fetch: FetchUrl, evidence: EvidenceStore, *, concurrent: bool = False
+) -> None:
+    def probe(url: str) -> HttpExchange:
+        range_header = SEGMENT_RANGE_HEADER if plan.resource_types[url] == "segment" else None
+        return fetch(url, range_header=range_header)
+
+    if not concurrent:
+        for url in plan.resource_types:
+            evidence.record_exchange(probe(url))
+        return
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_PROBES) as executor:
+        for exchange in executor.map(probe, list(plan.resource_types)):
+            evidence.record_exchange(exchange)

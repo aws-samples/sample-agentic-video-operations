@@ -60,7 +60,7 @@ def inspect_stream(
     graph = build_presentation_graph(entry_url, context.fetch, evidence)
     raise_when_entry_transport_failed(entry_url, graph, evidence)
     plan = plan_default_samples(graph)
-    probe_samples(plan, context.fetch, evidence)
+    probe_samples(plan, context.fetch, evidence, concurrent=not context.demo)
     findings = correlate_findings(
         [
             validate_playlists(graph),
