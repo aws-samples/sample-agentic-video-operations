@@ -15,9 +15,9 @@ The sample key is the argument to every `just` recipe.
 | Key | Use case | Deploys with (existing material) | Former folder |
 |---|---|---|---|
 | `cmcd` | Viewer QoE from CMCD data in InfluxDB | `cloudfront-cmcd-kinesis.yaml` (CloudFormation) | `cmcd-mcp-server/` |
-| `mediaconnect` | MediaConnect flow health and control | No own deploy. Runs in the cloud as a domain pack of `hub` | `mediaconnect-mcp-server/` |
-| `medialive` | MediaLive channel health and control | No own deploy. Runs in the cloud as a domain pack of `hub`; its former `cdk/` is now the hub's | `medialive-mcp-server/` |
-| `hub` | One agent that investigates across the selected media domains (extend_the_hub.md) | `samples/hub/cdk/` | consolidates the earlier multi-runtime sample |
+| `mediaconnect` | MediaConnect flow health and control | No own deploy. Runs in the cloud as a domain pack of `agentic-iops-streaming` | `mediaconnect-mcp-server/` |
+| `medialive` | MediaLive channel health and control | No own deploy. Runs in the cloud as a domain pack of `agentic-iops-streaming`; its former `cdk/` is now agentic-iops-streaming's | `medialive-mcp-server/` |
+| `agentic-iops-streaming` | One agent that investigates across the selected media domains (extend_agentic_iops_streaming.md) | `samples/agentic-iops-streaming/cdk/` | consolidates the earlier multi-runtime sample |
 | `hydrolix` | CDN analytics with a web UI | Its existing CDK + Amplify | `hydrolix-cdn-insights/` |
 | `hls-doctor` | HLS stream diagnostics from a manifest URL | No own deploy. Runs locally (CLI and MCP stdio) | new in this repository |
 
@@ -44,7 +44,7 @@ samples/<key>/
     unit/               # offline, no AWS credentials, no network
     pack/               # domain-pack contract and IAM coverage
     scenarios/          # replays fixtures end to end (agents)
-  iam_permissions.json  # domain packs only: IAM the hub grants for this pack (extend_the_hub.md §1)
+  iam_permissions.json  # domain packs only: IAM agentic-iops-streaming grants for this pack (extend_agentic_iops_streaming.md §1)
   docs/                 # optional; the sample's own images go in docs/images/
   cdk/ | *.yaml         # existing deploy material stays where it is
 ```
@@ -54,7 +54,7 @@ samples/<key>/
 | `samples/cmcd` | `cmcd-mcp-server` | `cmcd_mcp` | `serve-cmcd` |
 | `samples/mediaconnect` | `mediaconnect-mcp-server` | `mediaconnect_mcp` | `serve-mediaconnect` |
 | `samples/medialive` | `medialive-mcp-server` | `medialive_mcp` | `serve-medialive` |
-| `samples/hub` | `media-ops-hub` | `media_ops_hub` | `serve-hub` |
+| `samples/agentic-iops-streaming` | `agentic-iops-streaming` | `agentic_iops_streaming` | `serve-agentic-iops-streaming` |
 | `samples/hls-doctor` | `hls-doctor` | `hls_doctor` | `serve-hls-doctor`, plus the `hls-doctor` CLI |
 | `packages/media_ops_contracts` | `media-ops-contracts` | `media_ops_contracts` | none |
 
@@ -108,18 +108,19 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | `just smoke aws` | Run one live list and health read per converted MCP sample | `uv run python scripts/smoke_aws_servers.py` |
 | `just docs-check` | README structure, repository layout, documentation claims and model ids | `uv run python scripts/check_readme_structure.py && uv run python scripts/check_repository_layout.py && uv run python scripts/check_docs_claims.py && uv run python scripts/check_model_ids.py` |
 | `just run cmcd\|mediaconnect\|medialive` | Run one MCP stdio server | `uv run --package <distribution> serve-<key>` |
-| `just run hub` | Run the hub server locally | `HUB_LOCAL_MODE=true uv run --package media-ops-hub serve-hub` |
-| `just test` | All offline unit and scenario tests | `uv run pytest` |
+| `just run agentic-iops-streaming` | Run the agentic-iops-streaming server locally | `AGENTIC_IOPS_LOCAL_MODE=true uv run --package agentic-iops-streaming serve-agentic-iops-streaming` |
+| `just test` | All offline unit and scenario tests, except those that start real processes | `uv run pytest` |
+| `just test-slow` | The tests that start real processes (MCP servers, a hung server the deadline must kill); CI runs them | `uv run pytest -m slow` |
 | `just test contracts` | Shared contract tests | `uv run pytest packages/media_ops_contracts/tests` |
 | `just test cmcd` | CMCD tests | `uv run pytest samples/cmcd/tests` |
 | `just test mediaconnect` | MediaConnect tests | `uv run pytest samples/mediaconnect/tests` |
 | `just test medialive` | MediaLive scenario and pack tests | `uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack` |
-| `just test hub` | Hub contract tests | `uv run pytest samples/hub/tests/contract` |
+| `just test agentic-iops-streaming` | Contract tests of agentic-iops-streaming | `uv run pytest samples/agentic-iops-streaming/tests/contract` |
 | `just test hydrolix` | Hydrolix deployment-management tests | `uv run pytest scripts/tests/test_manage_hydrolix_stack.py` |
 | `just lint` | ruff check + format check | `uv run ruff check . && uv run ruff format --check .` |
 | `just typecheck` | Static type check with the repository ratchet | `uv run mypy` |
 | `just eval` | Replay the fixture scenarios and score them | `uv run pytest -m eval` |
-| `just demo` | Hub on fixtures, with no AWS account | `uv run --package media-ops-hub demo-hub` |
+| `just demo` | The agent on fixtures, with no AWS account | `uv run --package agentic-iops-streaming demo-agentic-iops-streaming` |
 | `just cmcd-token` | Create or reuse a CMCD bucket-read token | `uv run python scripts/manage_cmcd_stack.py create-read-token` |
 | `just cmcd-token-verify` | Verify that the CMCD token can read but cannot write | `uv run python scripts/verify_influxdb_read_token.py` |
 | `just deploy <key>` | Deploy with the sample's existing material | per sample, see section 1 |
@@ -148,7 +149,7 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | `DEMO_SCENARIO` | per sample | Which `fixtures/<scenario>/` to replay |
 | `FIXTURES_DIR` | `fixtures` (relative to the repo root, where `just` runs) | Fixture root override |
 | `APPROVAL_SIGNING_KEY` | random per process locally; from Secrets Manager when deployed | HMAC key for `ApprovedAction` |
-| `MEDIA_DOMAINS` | `medialive,mediaconnect` | Domain packs the hub loads (extend_the_hub.md §2) |
+| `MEDIA_DOMAINS` | `medialive,mediaconnect` | Domain packs the coordinator loads (extend_agentic_iops_streaming.md §2) |
 
 **Names that are retired**, replaced by the shared ones above:
 - `BEDROCK_AGENTCORE_MEMORY_ID` → `MEMORY_ID`.
@@ -157,6 +158,10 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 Sample runtime variables keep their current names: `INFLUXDB_URL`, `INFLUXDB_TOKEN`, `INFLUXDB_ORG`, `VERIFY_SSL` (default now `true`), `HYDROLIX_*`, and `MEDIALIVE_CHANNEL_ID`. The live AWS smoke script also requires `MEDIACONNECT_FLOW_ARN` to choose the flow it probes; MediaConnect tools themselves require `flow_arn` in each applicable call.
 
 **One root `.env`.** `just` loads only the root `.env` (`set dotenv-load`).
+A script under `scripts/` that reads settings calls `load_root_env(os.environ)` at entry
+(`scripts/read_root_env.py`), so its raw `uv run python scripts/...` command reads the
+same file; values already in the environment win, as with `just`. A missing setting
+names the file that was read.
 The root `.env.example` is the only configuration template: shared defaults
 are active, and each sample's optional settings live in a clearly labelled,
 commented section. A sample README tells the user which section to uncomment.
@@ -169,17 +174,19 @@ The root `.env` is never committed. The root `.env.example` is always committed.
 
 The user chooses models **once**, in the root `.env`. Every `just run` and `just deploy` uses that choice. No model id is hardcoded anywhere else.
 
-| Role | Env var | CDK parameter | Default | Used by |
+| Role | Env var | CDK input | Default | Used by |
 |---|---|---|---|---|
-| Reasoning agent | `AGENT_MODEL_ID` | `BedrockModelId` | `us.anthropic.claude-sonnet-4-6` | the hub · hydrolix orchestrator and its 3 sub-agents |
-| Thumbnail vision | `THUMBNAIL_MODEL_ID` | `ThumbnailModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | medialive and mediaconnect thumbnail adapters (in the MCP servers and the hub) |
+| Reasoning agent | `AGENT_MODEL_ID` | `-c agentModelId` (hydrolix: the default of its `BedrockModelId` parameter) | `us.anthropic.claude-sonnet-4-6` | agentic-iops-streaming · hydrolix orchestrator and its 3 sub-agents |
+| Thumbnail vision | `THUMBNAIL_MODEL_ID` | `-c thumbnailModelId` (agentic-iops-streaming only) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | medialive and mediaconnect thumbnail adapters (in the MCP servers and agentic-iops-streaming) |
 | Chart generation | `CHART_MODEL_ID` | Amplify build env | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | hydrolix web UI only |
 
 **Rules:**
-- Every CDK stack exposes the same parameter names and passes the same env var names into the runtime.
+- Every CDK stack passes the same env var names into the runtime.
   - Hydrolix's `BEDROCK_MODEL_ID` is renamed to `AGENT_MODEL_ID`.
-  - Each `just deploy <key>` passes `--parameters BedrockModelId="$AGENT_MODEL_ID"` (and `ThumbnailModelId` where it exists).
-- **Defaults live in exactly two places:** the root `.env.example`, and the CDK parameter default, which must match it. Python reads the value through settings and has no fallback model ids.
+  - Both deploys pass the models as CDK context (`-c agentModelId=...`, and for agentic-iops-streaming `-c thumbnailModelId=...`) to the security diff and to the deploy alike, because `cdk diff` takes no `--parameters` and the diff shown before approval must synthesize the same template as the deploy. Each stack derives the foundation model from the profile id.
+  - The agentic-iops-streaming stack writes the models into its IAM directly. Hydrolix keeps its `BedrockModelId` parameter, whose default the context sets; `just deploy hydrolix` passes `--no-previous-parameters`, so an existing stack takes that default instead of its last value. Its security diff shows the grant as a reference to the parameter, so the confirmation also names the model ("Bedrock model granted").
+- **Defaults live in exactly two places:** the root `.env.example`, and the CDK default (parameter or context), which must match it. Python reads the value through settings and has no fallback model ids.
+- **One id rule:** `scripts/model_id_rule.json` defines a valid id: a bare `provider.model`, or a cross-Region profile `<prefix>.provider.model`. The deploy scripts check `AGENT_MODEL_ID` (and agentic-iops-streaming's `THUMBNAIL_MODEL_ID`) with it before anything is installed, built or diffed, and both CDK stacks enforce the same file at synth or deploy.
 - **A reasoning agent never runs on Haiku** (`.claude/CLAUDE.md` "Model Selection"). Haiku is only for the thumbnail and chart roles.
 - **To switch models for one deploy,** set the variable on the command: `AGENT_MODEL_ID=<id> just deploy hydrolix`.
 - **Before any deploy, `just doctor` checks access** to `AGENT_MODEL_ID` and `THUMBNAIL_MODEL_ID` in `AWS_REGION`.

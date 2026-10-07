@@ -143,6 +143,7 @@ def test_switch_channel_input_uses_replay_and_verifies_both_pipelines(tmp_path):
         ]
     }
     (scenario / "medialive.describe_channel.json").write_text(json.dumps(states))
+    (scenario / "medialive.describe_schedule.json").write_text(json.dumps({"ScheduleActions": []}))
     (scenario / "medialive.batch_update_schedule.json").write_text("{}")
     client = ReplayFixtureClient("medialive", scenario="switch", fixtures_dir=tmp_path)
 
@@ -165,6 +166,111 @@ def test_switch_channel_input_uses_replay_and_verifies_both_pipelines(tmp_path):
     }
 
 
+def test_switch_channel_input_is_a_verified_no_op_when_every_pipeline_is_already_there(
+    tmp_path,
+):
+    scenario = tmp_path / "already_switched"
+    scenario.mkdir()
+    state = channel_state("demo-backup-srt")
+    (scenario / "medialive.describe_channel.json").write_text(
+        json.dumps({"sequence": [state, state]})
+    )
+    # No batch_update_schedule fixture: a call would fail the test.
+    client = ReplayFixtureClient("medialive", scenario="already_switched", fixtures_dir=tmp_path)
+
+    result = switch_channel_input(
+        client,
+        approve("switch_channel_input", parameters=SWITCH_PARAMETERS),
+        ApprovalCheck(KEY, NOW),
+        NO_WAIT,
+    )
+
+    assert result.verified is True
+    assert result.before_state == "demo-backup-srt,demo-backup-srt"
+    assert result.after_state == "demo-backup-srt,demo-backup-srt"
+    assert [operation for operation, _ in client.calls] == [
+        "describe_channel",
+        "describe_channel",
+    ]
+
+
+def test_switch_channel_input_waits_when_the_same_action_is_already_scheduled(tmp_path):
+    scenario = tmp_path / "switch_pending"
+    scenario.mkdir()
+    states = {
+        "sequence": [
+            channel_state("demo-primary-srt"),
+            channel_state("demo-backup-srt"),
+        ]
+    }
+    (scenario / "medialive.describe_channel.json").write_text(json.dumps(states))
+    (scenario / "medialive.describe_schedule.json").write_text(
+        json.dumps(
+            {"ScheduleActions": [schedule_input_switch("switch-to-backup", "demo-backup-srt")]}
+        )
+    )
+    # No batch_update_schedule fixture: a retry must wait, not submit the action twice.
+    client = ReplayFixtureClient("medialive", scenario="switch_pending", fixtures_dir=tmp_path)
+
+    result = switch_channel_input(
+        client,
+        approve("switch_channel_input", parameters=SWITCH_PARAMETERS),
+        ApprovalCheck(KEY, NOW),
+        NO_WAIT,
+    )
+
+    assert result.verified is True
+    assert [operation for operation, _ in client.calls] == [
+        "describe_channel",
+        "describe_schedule",
+        "describe_channel",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("scheduled_target", "start"),
+    [
+        ("demo-other-input", "immediate"),
+        ("demo-backup-srt", "2026-10-06T13:00:00Z"),
+    ],
+)
+def test_switch_channel_input_rejects_a_reused_name_for_another_operation(
+    tmp_path, scheduled_target, start
+):
+    scenario = tmp_path / "switch_name_collision"
+    scenario.mkdir()
+    (scenario / "medialive.describe_channel.json").write_text(
+        json.dumps(channel_state("demo-primary-srt"))
+    )
+    (scenario / "medialive.describe_schedule.json").write_text(
+        json.dumps(
+            {
+                "ScheduleActions": [
+                    schedule_input_switch("switch-to-backup", scheduled_target, start)
+                ]
+            }
+        )
+    )
+    client = ReplayFixtureClient(
+        "medialive", scenario="switch_name_collision", fixtures_dir=tmp_path
+    )
+
+    with pytest.raises(ToolFailure) as failure:
+        switch_channel_input(
+            client,
+            approve("switch_channel_input", parameters=SWITCH_PARAMETERS),
+            ApprovalCheck(KEY, NOW),
+            NO_WAIT,
+        )
+
+    assert failure.value.kind is FailureKind.INVALID_REQUEST
+    assert "switch-to-backup" in failure.value.message
+    assert [operation for operation, _ in client.calls] == [
+        "describe_channel",
+        "describe_schedule",
+    ]
+
+
 def channel_state(active_input):
     return {
         "Id": CHANNEL,
@@ -174,4 +280,21 @@ def channel_state(active_input):
             {"PipelineId": "0", "ActiveInputAttachmentName": active_input},
             {"PipelineId": "1", "ActiveInputAttachmentName": active_input},
         ],
+    }
+
+
+def schedule_input_switch(action_name, input_attachment, start="immediate"):
+    start_settings = (
+        {"ImmediateModeScheduleActionStartSettings": {}}
+        if start == "immediate"
+        else {"FixedModeScheduleActionStartSettings": {"Time": start}}
+    )
+    return {
+        "ActionName": action_name,
+        "ScheduleActionStartSettings": start_settings,
+        "ScheduleActionSettings": {
+            "InputSwitchSettings": {
+                "InputAttachmentNameReference": input_attachment,
+            }
+        },
     }

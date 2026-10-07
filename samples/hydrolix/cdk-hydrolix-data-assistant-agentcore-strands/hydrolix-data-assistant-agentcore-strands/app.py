@@ -13,7 +13,7 @@ Available Subagents:
 import asyncio
 import json
 import logging
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from bedrock_agentcore import BedrockAgentCoreApp
 from src.settings.runtime_settings import load_runtime_settings
@@ -25,7 +25,7 @@ from src.utils import (
     set_request_context,
 )
 from src.utils.identify_caller import CallerRefused, identify_caller
-from src.utils.request_context import REQUEST_TIMEOUT_SECONDS
+from src.utils.request_context import REQUEST_TIMEOUT_SECONDS, RequestContext
 from src.utils.resolve_user_timezone import DEFAULT_TIMEZONE, resolve_user_timezone
 from strands import Agent
 from strands.hooks import HookCallback, HookProvider
@@ -80,6 +80,24 @@ STOPPED_AT_DEADLINE = (
 )
 
 
+def bounded_prompt_uuid(value: object) -> str:
+    """The client's prompt_uuid in canonical form if it is a UUID; a new one otherwise. It is
+    stored with every query record, so an unbounded value could push an item past 400 KB."""
+    if isinstance(value, str) and len(value) <= 36:
+        try:
+            return str(UUID(value))
+        except ValueError:
+            pass
+    return str(uuid4())
+
+
+def query_results_record(request: RequestContext) -> str:
+    """The queries this request ran, for its own caller (T41): the web app shows them from
+    the response, so no browser role reads the results table."""
+    records = [record.as_stream_item() for record in request.query_records]
+    return json.dumps({"query_results": records}) + "\n"
+
+
 @app.entrypoint
 async def agent_invocation(payload, context):
     """
@@ -110,12 +128,16 @@ async def agent_invocation(payload, context):
         yield json.dumps({"error": str(refusal)}) + "\n"
         return
 
+    # Every outcome after the request context exists ends with its query_results record, the
+    # stream's last record: on success, at the deadline and after any failure, an error
+    # record comes first, so a caller always gets the queries that ran (T41).
+    request: RequestContext | None = None
     try:
         user_message = payload.get(
             "prompt",
             "No prompt found. Please provide a 'prompt' key in your request.",
         )
-        prompt_uuid = payload.get("prompt_uuid", str(uuid4()))
+        prompt_uuid = bounded_prompt_uuid(payload.get("prompt_uuid"))
         # It goes into the system prompts: a real zone name, or UTC.
         user_timezone = resolve_user_timezone(payload.get("user_timezone", DEFAULT_TIMEZONE))
         last_k_turns = int(payload.get("last_k_turns", 20))
@@ -125,7 +147,9 @@ async def agent_invocation(payload, context):
         print(f"🎯 Orchestrator request (prompt length={len(user_message)}, {mode})")
 
         # This request's context for its subagents, with its own tool-call budget.
-        request = set_request_context(prompt_uuid=prompt_uuid, user_timezone=user_timezone)
+        request = set_request_context(
+            prompt_uuid=prompt_uuid, user_timezone=user_timezone, actor_id=caller.actor_id
+        )
 
         bedrock_model = BedrockModel(model_id=bedrock_model_id)
 
@@ -199,6 +223,8 @@ async def agent_invocation(payload, context):
         # The class name only: an exception message can quote the question or the data.
         logger.error("Orchestrator request failed: %s", type(e).__name__)
         yield json.dumps({"error": "The assistant could not finish this request. Retry."}) + "\n"
+    if request is not None:
+        yield query_results_record(request)
 
 
 if __name__ == "__main__":

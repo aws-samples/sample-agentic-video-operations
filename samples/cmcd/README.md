@@ -342,7 +342,10 @@ cd sample-agentic-video-operations
    The command asks for its own confirmation, reads the admin credentials
    without printing them, and creates or reuses the token named
    `cmcd-mcp-server read-only`. That token has exactly one permission: Read on
-   the `cmcd-metrics` bucket in `cmcd-org`. The command proves that a read
+   the deployed `INFLUXDB_BUCKET` in `cmcd-org`. Both deploy and token commands
+   read that bucket from the stack's `InfluxDBBucketName` output and write it
+   to the root `.env`; an unset value falls back to the template default,
+   `cmcd-metrics`. The command proves that a read
    returns HTTP 200 and a write returns HTTP 403, replaces the root `.env`
    connection values, and prints only `written` after success. It sets
    `VERIFY_SSL=false` only for this local tunnel.
@@ -380,7 +383,8 @@ cd sample-agentic-video-operations
 
    5. Enter the description `cmcd-mcp-server read-only`. Expand **Buckets**,
       then under Individual Bucket Names tick only **Read** on
-      `cmcd-metrics`. Leave All Buckets, Write, `_monitoring`, `_tasks`,
+      the bucket named by `INFLUXDB_BUCKET` in the root `.env`. Leave All
+      Buckets, Write, `_monitoring`, `_tasks`,
       Telegrafs, and Other Resources unticked.
 
       ![Configure custom token permissions](docs/images/create-influxdb-read-token-step-5-permissions.png)

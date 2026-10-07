@@ -24,7 +24,7 @@ def start_flow(
     now: datetime,
     poller: FlowPoller = DEFAULT_FLOW_POLLER,
 ) -> FlowActionResult:
-    """Start is idempotent; validate approval, act, then verify ACTIVE."""
+    """Idempotent: a flow already ACTIVE is a verified no-op, and MediaConnect isn't called."""
     flow_arn = approved_action.resource_id if approved_action else ""
     require_action_approval(
         approved_action,

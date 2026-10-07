@@ -9,6 +9,8 @@ from medialive_mcp.adapters.media_live.media_live_records import (
     PipelineDetail,
 )
 
+THUMBNAIL_STATES = {"AUTO": True, "DISABLED": False}
+
 
 def describe_channel(medialive: Any, channel_id: str) -> ChannelDetails:
     channel = call_aws_operation(medialive, "describe_channel", ChannelId=channel_id)
@@ -29,6 +31,7 @@ def describe_channel(medialive: Any, channel_id: str) -> ChannelDetails:
         audio_descriptions=[
             audio["Name"] for audio in encoder.get("AudioDescriptions", []) if audio.get("Name")
         ],
+        thumbnails=THUMBNAIL_STATES.get(encoder.get("ThumbnailConfiguration", {}).get("State", "")),
         pipelines=[
             PipelineDetail(
                 pipeline_id=str(pipeline.get("PipelineId", index)),

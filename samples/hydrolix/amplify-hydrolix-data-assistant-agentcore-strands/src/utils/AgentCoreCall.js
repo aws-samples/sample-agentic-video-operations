@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getAccessToken } from "./AwsAuth";
 import { logEvent, logFailure } from "./logMetadata";
 import { createSseParser } from "./sseRecords";
-import { getQueryResults } from "./AwsCalls";
+import { createRuntimeOutcome } from "./runtimeOutcome";
 import { AGENT_RUNTIME_ARN, AGENT_ENDPOINT_NAME } from "../env";
 
 export const getAnswer = async (
@@ -87,6 +87,9 @@ export const getAnswer = async (
     let records = 0;
     let unknownEvents = 0;
     let currentToolName = "";
+    // The request's error and the queries it ran: the runtime's last record is always the
+    // query records, after any error, so they are decided once the stream ends (T41).
+    const outcome = createRuntimeOutcome();
 
     // One record's text (what the runtime yielded) into the answer being built.
     const handleText = (text) => {
@@ -101,8 +104,8 @@ export const getAnswer = async (
         logFailure("parse runtime record", error);
         return;
       }
-      if (jsonData.error) {
-        throw new Error(jsonData.error);
+      if (outcome.take(jsonData)) {
+        return;
       }
       if (jsonData.event?.contentBlockStart?.start?.toolUse) {
         // Add accumulated text before tool block
@@ -203,26 +206,24 @@ export const getAnswer = async (
       return newAnswers;
     });
 
-    // After streaming is complete, fetch query results for charts/tables
-    try {
-      const queryResults = await getQueryResults(queryUuid);
-      logEvent("query results loaded", { results: queryResults.length });
-
-      if (queryResults.length > 0) {
-        // Update the answer with query results
-        setAnswers((prev) => {
-          const newAnswers = [...prev];
-          const lastIndex = newAnswers.length - 1;
-          newAnswers[lastIndex] = {
-            ...newAnswers[lastIndex],
-            queryResults: queryResults,
-            chart: "loading", // Indicate chart generation is starting
-          };
-          return newAnswers;
-        });
-      }
-    } catch (queryError) {
-      logFailure("load query results", queryError);
+    // The runtime streamed this request's queries; the browser reads no results table.
+    const queryResults = outcome.queryResults;
+    logEvent("query results received", { results: queryResults.length, failed: !!outcome.error });
+    if (queryResults.length > 0) {
+      setAnswers((prev) => {
+        const newAnswers = [...prev];
+        const lastIndex = newAnswers.length - 1;
+        newAnswers[lastIndex] = {
+          ...newAnswers[lastIndex],
+          queryResults: queryResults,
+          // No chart for a request that failed: the queries are shown, the answer isn't whole.
+          ...(outcome.error ? {} : { chart: "loading" }),
+        };
+        return newAnswers;
+      });
+    }
+    if (outcome.error) {
+      throw new Error(outcome.error); // after the queries are kept, so they stay visible
     }
 
     setLoading(false);

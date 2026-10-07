@@ -13,6 +13,7 @@ ALLOWED_ROOT = frozenset(
         "README.md", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md",
         "CODE_OF_CONDUCT.md", "LICENSE",
         "justfile", "pyproject.toml", "uv.lock", ".env.example", ".python-version",
+        "conftest.py",  # the offline guard every test suite runs under
         ".gitignore", ".gitleaksignore", ".pre-commit-config.yaml", ".dockerignore", ".github",
         "docs", "samples", "packages", "fixtures", "scripts",
         ".claude",  # Claude Code instructions; .claude/plans/ is never tracked
@@ -35,10 +36,11 @@ RETIRED_PATHS = frozenset(
     }
 )
 RETIRED_PATH_PREFIXES = (
-    "samples/hub/coordinator/",
-    "samples/hub/eml/",
-    "samples/hub/emx/",
-    "samples/hub/shared/",
+    "samples/hub/",  # renamed to samples/agentic-iops-streaming/ (REN1)
+    "samples/agentic-iops-streaming/coordinator/",
+    "samples/agentic-iops-streaming/eml/",
+    "samples/agentic-iops-streaming/emx/",
+    "samples/agentic-iops-streaming/shared/",
     "samples/medialive/cdk/",
     "samples/medialive/src/medialive_mcp/code_interpreter/",
     "samples/medialive/src/medialive_mcp/strands_agent/",

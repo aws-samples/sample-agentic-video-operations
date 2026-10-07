@@ -1,7 +1,8 @@
-"""Pluggable media domains for the hub (extend_the_hub.md §2). Framework-free.
+"""Pluggable media domains for the coordinator (extend_agentic_iops_streaming.md §2).
+Framework-free.
 
 A sample package exports `create_domain_pack() -> DomainPack` under the entry-point
-group `media_ops.domain_packs`; `MEDIA_DOMAINS` selects which packs the hub loads.
+group `media_ops.domain_packs`; `MEDIA_DOMAINS` selects which packs the coordinator loads.
 """
 
 import inspect

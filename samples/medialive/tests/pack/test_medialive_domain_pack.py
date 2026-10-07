@@ -1,4 +1,5 @@
-"""The medialive domain pack (extend_the_hub.md §2, §7): entry point, tools, skills and IAM."""
+"""The medialive domain pack (extend_agentic_iops_streaming.md §2, §7): entry point, tools, skills
+and IAM."""
 
 import ast
 import asyncio

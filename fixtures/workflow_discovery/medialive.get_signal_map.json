@@ -1,0 +1,92 @@
+{
+  "sequence": [
+    {
+      "Arn": "arn:aws:medialive:us-west-2:111122223333:signal-map:smwfdemo01",
+      "CreatedAt": "2026-10-06T12:00:00Z",
+      "DiscoveryEntryPointArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+      "FailedMediaResourceMap": {},
+      "Id": "smwfdemo01",
+      "MediaResourceMap": {},
+      "ModifiedAt": "2026-10-06T12:00:00Z",
+      "MonitorChangesPendingDeployment": false,
+      "Name": "agentic-iops-workflow-discovery",
+      "Status": "CREATE_IN_PROGRESS",
+      "Tags": {
+        "managed-by": "agentic-iops-streaming"
+      }
+    },
+    {
+      "Arn": "arn:aws:medialive:us-west-2:111122223333:signal-map:smwfdemo01",
+      "CreatedAt": "2026-10-06T12:00:00Z",
+      "DiscoveryEntryPointArn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+      "FailedMediaResourceMap": {},
+      "Id": "smwfdemo01",
+      "LastDiscoveredAt": "2026-10-06T12:00:10Z",
+      "MediaResourceMap": {
+        "arn:aws:cloudfront::111122223333:distribution/E123DEMO456": {
+          "Destinations": [],
+          "Name": "demo-distribution",
+          "Sources": [
+            {
+              "Arn": "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint",
+              "Name": "demo-origin-endpoint"
+            }
+          ]
+        },
+        "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1": {
+          "Destinations": [
+            {
+              "Arn": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+              "Name": "demo-downstream-channel"
+            }
+          ],
+          "Name": "demo-contribution",
+          "Sources": []
+        },
+        "arn:aws:medialive:us-west-2:111122223333:channel:1234567": {
+          "Destinations": [
+            {
+              "Arn": "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint",
+              "Name": "demo-origin-endpoint"
+            }
+          ],
+          "Name": "demo-downstream-channel",
+          "Sources": [
+            {
+              "Arn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+              "Name": "demo-contribution"
+            }
+          ]
+        },
+        "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint": {
+          "Destinations": [
+            {
+              "Arn": "arn:aws:cloudfront::111122223333:distribution/E123DEMO456",
+              "Name": "demo-distribution"
+            }
+          ],
+          "Name": "demo-origin-endpoint",
+          "Sources": [
+            {
+              "Arn": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+              "Name": "demo-downstream-channel"
+            }
+          ]
+        }
+      },
+      "ModifiedAt": "2026-10-06T12:00:10Z",
+      "MonitorChangesPendingDeployment": false,
+      "Name": "agentic-iops-workflow-discovery",
+      "Status": "CREATE_COMPLETE",
+      "Tags": {
+        "managed-by": "agentic-iops-streaming"
+      }
+    },
+    {
+      "error": {
+        "Code": "NotFoundException",
+        "Message": "Signal map smwfdemo01 was not found"
+      }
+    }
+  ]
+}

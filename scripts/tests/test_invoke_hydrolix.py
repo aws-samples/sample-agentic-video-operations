@@ -126,3 +126,12 @@ def test_a_failed_call_never_prints_the_bearer_token(failure, monkeypatch, capsy
     assert status == 1
     assert DISTINCT_TOKEN not in out.out + out.err
     assert ("HTTP 401" if failure == "http" else "could not be reached") in out.out
+
+
+def test_the_query_records_at_the_end_of_the_stream_are_summarised(capsys):
+    records = [{"query": "SELECT 1", "status": "success"}, {"query": "x", "status": "error"}]
+
+    status = invoke_hydrolix.print_chunks([{"data": "42"}, {"query_results": records}])
+
+    assert status == 0
+    assert "[queries] 2 ran: success, error" in capsys.readouterr().out

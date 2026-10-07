@@ -1,4 +1,3 @@
-import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
 import { applyChartFormatters } from "./chartFormatters";
 import { logEvent, logFailure } from "./logMetadata";
 import {
@@ -10,66 +9,8 @@ import {
   extractBetweenTags,
   removeCharFromStartAndEnd,
 } from "./Utils.js";
-import { QUESTION_ANSWERS_TABLE_NAME, CHART_MODEL_ID } from "../env.js";
+import { CHART_MODEL_ID } from "../env.js";
 import { CHART_PROMPT } from "../prompts/chartPrompt.js";
-
-/**
- * Query data from DynamoDB
- *
- * @param {string} id - The ID to query
- * @returns {Promise<Object>} - The query response
- */
-export const getQueryResults = async (queryUuid = "") => {
-  let queryResults = [];
-  try {
-    const dynamodb = await createAwsClient(DynamoDBClient);
-    const input = {
-      TableName: QUESTION_ANSWERS_TABLE_NAME,
-      KeyConditionExpression: "id = :queryUuid",
-      ExpressionAttributeValues: {
-        ":queryUuid": {
-          S: queryUuid,
-        },
-      },
-      ConsistentRead: true,
-    };
-    const command = new QueryCommand(input);
-    const response = await dynamodb.send(command);
-    if (response.hasOwnProperty("Items")) {
-      for (let i = 0; i < response.Items.length; i++) {
-        const parsedData = JSON.parse(response.Items[i].data.S);
-        queryResults.push({
-          query: response.Items[i].sql_query.S,
-          query_results: parsedData.result || [],
-          query_description: response.Items[i].sql_query_description.S,
-          agent_name: response.Items[i].agent_name?.S || "",
-          user_prompt: response.Items[i].user_prompt?.S || "",
-          my_timestamp: parseInt(response.Items[i].my_timestamp?.N || "0", 10),
-        });
-      }
-
-      // Sort ascending by timestamp
-      queryResults.sort((a, b) => a.my_timestamp - b.my_timestamp);
-
-      // Group by agent_name while preserving order
-      const grouped = [];
-      const agentMap = {};
-      for (const qr of queryResults) {
-        const key = qr.agent_name;
-        if (!agentMap[key]) {
-          agentMap[key] = [];
-          grouped.push(key);
-        }
-        agentMap[key].push(qr);
-      }
-      queryResults = grouped.flatMap((key) => agentMap[key]);
-    }
-    return queryResults;
-  } catch (error) {
-    logFailure("query results table", error);
-    throw error;
-  }
-};
 
 /**
  * Generates a chart based on answer and data

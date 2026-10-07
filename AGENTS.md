@@ -9,8 +9,8 @@ workflows with AI agents. Use the root `justfile` for every common command.
 |---|---|---|---|
 | `cmcd` | [`samples/cmcd/`](samples/cmcd/) | Investigate viewer QoE from CMCD data | `just run cmcd` · `just test cmcd` · `just deploy cmcd` |
 | `mediaconnect` | [`samples/mediaconnect/`](samples/mediaconnect/) | Inspect MediaConnect transport health | `just run mediaconnect` · `just test mediaconnect` |
-| `medialive` | [`samples/medialive/`](samples/medialive/) | Inspect MediaLive channel health | `just run medialive` · `just test medialive` · deploys through `hub` |
-| `hub` | [`samples/hub/`](samples/hub/) | Investigate across MediaConnect and MediaLive; writes need approval | `just demo` · `just run hub` · `just test hub` · `just deploy hub` |
+| `medialive` | [`samples/medialive/`](samples/medialive/) | Inspect MediaLive channel health | `just run medialive` · `just test medialive` · deploys through `agentic-iops-streaming` |
+| `agentic-iops-streaming` | [`samples/agentic-iops-streaming/`](samples/agentic-iops-streaming/) | Investigate across MediaConnect and MediaLive; writes need approval | `just demo` · `just run agentic-iops-streaming` · `just test agentic-iops-streaming` · `just deploy agentic-iops-streaming` |
 | `hydrolix` | [`samples/hydrolix/`](samples/hydrolix/) | Explore CDN and streaming analytics in a web UI | `just deploy hydrolix` · `just destroy hydrolix` |
 
 ## Read Before Editing
@@ -19,7 +19,7 @@ Read these sources in order:
 
 1. [`build_a_sample.md`](docs/build_a_sample.md)
 2. [`write_safe_tools.md`](docs/write_safe_tools.md)
-3. [`extend_the_hub.md`](docs/extend_the_hub.md)
+3. [`extend_agentic_iops_streaming.md`](docs/extend_agentic_iops_streaming.md)
 4. [`follow_development_guidelines.md`](docs/follow_development_guidelines.md)
 5. [`CLAUDE.md`](.claude/CLAUDE.md)
 
@@ -36,7 +36,7 @@ operational safety win over both.
 
 Run `just` with no arguments to list all recipes. Deployments create billable
 AWS resources; use `just destroy <key>` when finished.
-`just eval` replays the hub's scenarios offline and is part of the gate.
+`just eval` replays the agentic-iops-streaming scenarios offline and is part of the gate. `just test` skips the tests that start real processes; `just test-slow` runs them, and CI runs both. Every suite runs offline: the root `conftest.py` fails any test that connects off the machine.
 For changed deploy material, also run `cdk synth` or `cfn-lint`, as applicable.
 
 ## Change Rules

@@ -1,4 +1,5 @@
-"""All skills the hub loaded: metadata for the prompt, bodies on demand (extend_the_hub.md §3)."""
+"""All skills the coordinator loaded: metadata for the prompt, bodies on demand
+(extend_agentic_iops_streaming.md §3)."""
 
 from collections.abc import Iterable
 from pathlib import Path

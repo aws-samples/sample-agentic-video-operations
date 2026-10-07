@@ -54,6 +54,22 @@ def test_an_active_alert_degrades_the_channel():
     assert report.status is Status.DEGRADED
 
 
+@pytest.mark.parametrize(
+    "metric",
+    ("MqcsFillFrameInsertion", "MqcsSvq", "MqcsVideoFrameDrops"),
+)
+def test_each_additional_mqcs_fault_is_an_issue_only_below_100(metric):
+    healthy = identify_channel_issues("1", [series(metric, [100, 100])])
+    degraded = identify_channel_issues("1", [series(metric, [100, 75])])
+
+    assert healthy.issues == []
+    assert healthy.categories["content_quality"].status is Status.HEALTHY
+    assert severities(degraded) == {(metric, "0"): "HIGH"}
+    assert degraded.issues[0].description == (
+        f"{metric} below 100 (worst 75) on pipeline 0, still failing in the latest period"
+    )
+
+
 def test_overall_rating_is_the_worst_finding_not_an_average():
     report = identify_channel_issues(
         "1", [series("ActiveAlerts", [1]), series("Output5xxErrors", [3])]

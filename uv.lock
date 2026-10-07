@@ -1,10 +1,10 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version >= '3.15' and sys_platform != 'win32'",
     "python_full_version == '3.14.*' and sys_platform == 'win32'",
+    "python_full_version >= '3.15' and sys_platform != 'win32'",
     "python_full_version == '3.14.*' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform != 'win32'",
@@ -14,15 +14,51 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "agentic-iops-streaming",
     "cmcd-mcp-server",
     "hls-doctor",
     "media-ops-contracts",
-    "media-ops-hub",
     "media-ops-video-quality",
     "mediaconnect-mcp-server",
     "medialive-mcp-server",
     "sample-agentic-video-operations",
 ]
+
+[[package]]
+name = "agentic-iops-streaming"
+version = "0.1.0"
+source = { editable = "samples/agentic-iops-streaming" }
+dependencies = [
+    { name = "bedrock-agentcore" },
+    { name = "hls-doctor" },
+    { name = "media-ops-contracts" },
+    { name = "mediaconnect-mcp-server" },
+    { name = "medialive-mcp-server" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "strands-agents" },
+]
+
+[package.optional-dependencies]
+runtime = [
+    { name = "aws-opentelemetry-distro" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aws-opentelemetry-distro", marker = "extra == 'runtime'", specifier = ">=0.10.1,<1" },
+    { name = "bedrock-agentcore", specifier = ">=1.0,<2" },
+    { name = "hls-doctor", editable = "samples/hls-doctor" },
+    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
+    { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
+    { name = "medialive-mcp-server", editable = "samples/medialive" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pydantic-settings", specifier = ">=2.5,<3" },
+    { name = "pyjwt", specifier = ">=2.10,<3" },
+    { name = "strands-agents", specifier = ">=1.0,<2" },
+]
+provides-extras = ["runtime"]
 
 [[package]]
 name = "aiofile"
@@ -1178,42 +1214,6 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.35,<2" },
     { name = "pydantic", specifier = ">=2.9,<3" },
 ]
-
-[[package]]
-name = "media-ops-hub"
-version = "0.1.0"
-source = { editable = "samples/hub" }
-dependencies = [
-    { name = "bedrock-agentcore" },
-    { name = "hls-doctor" },
-    { name = "media-ops-contracts" },
-    { name = "mediaconnect-mcp-server" },
-    { name = "medialive-mcp-server" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyjwt" },
-    { name = "strands-agents" },
-]
-
-[package.optional-dependencies]
-runtime = [
-    { name = "aws-opentelemetry-distro" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aws-opentelemetry-distro", marker = "extra == 'runtime'", specifier = ">=0.10.1,<1" },
-    { name = "bedrock-agentcore", specifier = ">=1.0,<2" },
-    { name = "hls-doctor", editable = "samples/hls-doctor" },
-    { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
-    { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
-    { name = "medialive-mcp-server", editable = "samples/medialive" },
-    { name = "pydantic", specifier = ">=2.9,<3" },
-    { name = "pydantic-settings", specifier = ">=2.5,<3" },
-    { name = "pyjwt", specifier = ">=2.10,<3" },
-    { name = "strands-agents", specifier = ">=1.0,<2" },
-]
-provides-extras = ["runtime"]
 
 [[package]]
 name = "media-ops-video-quality"
@@ -2880,10 +2880,10 @@ name = "sample-agentic-video-operations"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "agentic-iops-streaming" },
     { name = "cmcd-mcp-server" },
     { name = "hls-doctor" },
     { name = "media-ops-contracts" },
-    { name = "media-ops-hub" },
     { name = "media-ops-video-quality" },
     { name = "mediaconnect-mcp-server" },
     { name = "medialive-mcp-server" },
@@ -2900,10 +2900,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agentic-iops-streaming", editable = "samples/agentic-iops-streaming" },
     { name = "cmcd-mcp-server", editable = "samples/cmcd" },
     { name = "hls-doctor", editable = "samples/hls-doctor" },
     { name = "media-ops-contracts", editable = "packages/media_ops_contracts" },
-    { name = "media-ops-hub", editable = "samples/hub" },
     { name = "media-ops-video-quality", editable = "packages/media_ops_video_quality" },
     { name = "mediaconnect-mcp-server", editable = "samples/mediaconnect" },
     { name = "medialive-mcp-server", editable = "samples/medialive" },
@@ -2923,8 +2923,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

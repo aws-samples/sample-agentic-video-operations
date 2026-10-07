@@ -1,4 +1,4 @@
-"""The HLS domain pack for the media operations hub. Read-only: no write tools."""
+"""The HLS domain pack for agentic-iops-streaming. Read-only: no write tools."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field

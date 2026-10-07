@@ -1,7 +1,7 @@
-"""The medialive domain pack for the hub (extend_the_hub.md §2).
+"""The medialive domain pack for the coordinator (extend_agentic_iops_streaming.md §2).
 
 The pack wraps the same typed functions the MCP server registers, and builds its own
-settings and clients (DEMO replay included). It never imports Strands or the hub.
+settings and clients (DEMO replay included). It never imports Strands or the coordinator.
 """
 
 from collections.abc import Callable
@@ -33,7 +33,7 @@ class MediaLivePack:
         return self.reads
 
     def write_tools(self) -> list[WriteTool]:
-        """All write tools; the hub registers them only with ALLOW_WRITES=true."""
+        """All write tools; the coordinator registers them only with ALLOW_WRITES=true."""
         return self.writes
 
 

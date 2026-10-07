@@ -22,5 +22,5 @@ metadata field.
 6. Answer impact first, then cite the metric names, peaks, time window, and affected path.
    End with the smallest next diagnostic or operational action.
 
-Never call `start_flow` or `stop_flow` unless the operator asked for that change. The hub
+Never call `start_flow` or `stop_flow` unless the operator asked for that change. The coordinator
 handles approval; this skill never grants permission.

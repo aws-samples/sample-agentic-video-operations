@@ -1,0 +1,5 @@
+{
+  "_comment": "One rule for Bedrock model ids, read by scripts/model_id_rule.py, the agentic-iops-streaming stack and the Hydrolix stack (T72). A cross-Region profile is <prefix>.<provider>.<model>; a bare id is <provider>.<model> and can't start with a prefix. The pattern works the same in Python, JavaScript and CloudFormation's Java regex.",
+  "profile_prefixes": ["us", "eu", "apac", "us-gov", "jp", "au", "ca", "global"],
+  "pattern": "^(?:(?:us|eu|apac|us-gov|jp|au|ca|global)\\.[a-z0-9-]+\\.[A-Za-z0-9:-]+|(?!(?:us|eu|apac|us-gov|jp|au|ca|global)\\.)[a-z0-9-]+\\.[A-Za-z0-9:-]+)$"
+}

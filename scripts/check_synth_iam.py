@@ -1,10 +1,12 @@
 """Release gate: the default synth grants no write action and no `Resource: "*"` beyond need.
 
-uv run python scripts/check_synth_iam.py samples/hub/cdk/cdk.out/MediaOpsHubStack.template.json
+uv run python scripts/check_synth_iam.py
+samples/agentic-iops-streaming/cdk/cdk.out/AgenticIopsStreamingStack.template.json
 
 - A write is an action whose verb mutates (Create, Delete, Update, Put, Start, Stop, ...).
   Only the runtime's own telemetry and memory writes below are allowed, each with a reason,
-  and each on its own resource where the API allows: an account-wide scope fails.
+  and each on its own resource where the API allows: an account-wide scope fails. Signal-map
+  writes are allowed only on the app's own tagged maps.
 - `Resource: "*"` is allowed only for the actions below, whose APIs have no resource-level
   permissions. Every other statement must name ARNs.
 - NEVER_GRANT actions (workload identity tokens) fail on any resource; iam:PassRole and
@@ -29,8 +31,8 @@ ALLOWED_WRITES = {
     "xray:PutTraceSegments": "the runtime's traces",
     "xray:PutTelemetryRecords": "the runtime's traces",
     "cloudwatch:PutMetricData": "runtime metrics, conditioned on the bedrock-agentcore namespace",
-    "bedrock-agentcore:CreateEvent": "the hub's own session memory",
-    "bedrock-agentcore:DeleteMemoryRecord": "the hub's own session memory",
+    "bedrock-agentcore:CreateEvent": "the agent's own session memory",
+    "bedrock-agentcore:DeleteMemoryRecord": "the agent's own session memory",
     "dynamodb:PutItem": "the app's own table",
     "dynamodb:UpdateItem": "the app's own table",
 }
@@ -43,6 +45,16 @@ ACCOUNT_WIDE_SCOPE = {
 STACK_RESOURCE_WRITES = {
     "dynamodb:PutItem": "AWS::DynamoDB::Table",
     "dynamodb:UpdateItem": "AWS::DynamoDB::Table",
+}
+TAG_SCOPED_WRITES = {
+    "medialive:CreateSignalMap": ("aws:RequestTag/managed-by", True),
+    "medialive:CreateTags": ("aws:RequestTag/managed-by", True),
+    "medialive:DeleteSignalMap": ("aws:ResourceTag/managed-by", False),
+}
+MANAGED_BY_VALUE = "agentic-iops-streaming"
+MANAGED_BY_TAG_KEYS = ["managed-by"]
+SIGNAL_MAP_RESOURCE = {
+    "Fn::Sub": ("arn:${AWS::Partition}:medialive:${AWS::Region}:${AWS::AccountId}:signal-map:*")
 }
 
 # Never granted, whatever the verb or resource: caller-selectable identity tokens (ForUserId
@@ -75,6 +87,7 @@ def find_iam_problems(template: dict[str, Any]) -> list[str]:
     never_grant = lowercase_keys(NEVER_GRANT)
     never_on_star = lowercase_keys(NEVER_ON_STAR)
     allowed_writes = lowercase_keys(ALLOWED_WRITES)
+    tag_scoped_writes = {name.lower(): rule for name, rule in TAG_SCOPED_WRITES.items()}
     star_allowed = lowercase_keys(STAR_RESOURCE_ALLOWED)
     problems = []
     for logical_id, statement in allow_statements(template):
@@ -96,12 +109,24 @@ def find_iam_problems(template: dict[str, Any]) -> list[str]:
                 continue
             if "*" in key or "?" in key:  # IAM action wildcards
                 problems.append(f"{logical_id}: wildcard action {action}")
-            elif WRITE_VERB.match(verb) and key not in allowed_writes:
+            elif (
+                WRITE_VERB.match(verb)
+                and key not in allowed_writes
+                and key not in tag_scoped_writes
+            ):
                 problems.append(f"{logical_id}: write action {action} in the default synth")
             if "*" in resources and key not in star_allowed:
                 problems.append(f'{logical_id}: {action} on Resource "*"')
             if key in allowed_writes:
                 problems += account_wide_scopes(logical_id, action, resources)
+            if key in tag_scoped_writes:
+                problems += tag_scoped_write_problems(
+                    logical_id,
+                    action,
+                    resources,
+                    statement,
+                    tag_scoped_writes[key],
+                )
             if action in STACK_RESOURCE_WRITES and (
                 not resources
                 or not all(
@@ -114,6 +139,37 @@ def find_iam_problems(template: dict[str, Any]) -> list[str]:
                     f"{STACK_RESOURCE_WRITES[action]}"
                 )
     return sorted(set(problems))
+
+
+def tag_scoped_write_problems(
+    logical_id: str,
+    action: str,
+    resources: list[Any],
+    statement: dict[str, Any],
+    rule: tuple[str, bool],
+) -> list[str]:
+    """Require the exact resource and tag condition for the app's signal-map writes."""
+    condition_key, require_tag_keys = rule
+    condition = statement.get("Condition")
+    condition = condition if isinstance(condition, dict) else {}
+    string_equals = condition.get("StringEquals")
+    string_equals = string_equals if isinstance(string_equals, dict) else {}
+    problems = []
+    if string_equals.get(condition_key) != MANAGED_BY_VALUE:
+        problems.append(
+            f"{logical_id}: {action} requires StringEquals {condition_key}={MANAGED_BY_VALUE}"
+        )
+    if require_tag_keys:
+        all_values = condition.get("ForAllValues:StringEquals")
+        all_values = all_values if isinstance(all_values, dict) else {}
+        if all_values.get("aws:TagKeys") != MANAGED_BY_TAG_KEYS:
+            problems.append(
+                f"{logical_id}: {action} requires ForAllValues:StringEquals "
+                'aws:TagKeys=["managed-by"]'
+            )
+    if not resources or any(resource != SIGNAL_MAP_RESOURCE for resource in resources):
+        problems.append(f"{logical_id}: {action} is not scoped to this stack's signal-map ARN")
+    return problems
 
 
 def lowercase_keys(table: dict[str, str]) -> dict[str, str]:

@@ -8,6 +8,7 @@ programme video, so no footage is checked in. Each sequence degrades it one way.
 """
 
 import base64
+import functools
 import io
 import json
 import random
@@ -90,7 +91,8 @@ def text_card_frame(index: int) -> Image.Image:
 
 def broad_text_card_frame(index: int) -> Image.Image:
     """A card whose background spreads luma over every bin, with large injected text: the
-    documented residual palette_concentration does not detect (extend_the_hub.md §8)."""
+    documented residual palette_concentration does not detect
+    (extend_agentic_iops_streaming.md §7)."""
     width, height = SIZE
     image = Image.new("RGB", SIZE)
     draw = ImageDraw.Draw(image)
@@ -108,17 +110,26 @@ def broad_text_card_frame(index: int) -> Image.Image:
 
 
 def synthetic_sequences(frames: int = FRAMES) -> dict[str, list[bytes]]:
-    """name -> JPEG frames. `frozen` repeats one frame; the others move."""
+    """name -> JPEG frames. `frozen` repeats one frame; the others move.
+
+    Drawing takes about a second and the frames are deterministic, so each count is drawn
+    once per process; callers get their own lists of the same immutable frames.
+    """
+    return {name: list(sequence) for name, sequence in draw_sequences(frames).items()}
+
+
+@functools.cache
+def draw_sequences(frames: int) -> dict[str, tuple[bytes, ...]]:
     patterns = [draw_pattern(index) for index in range(frames)]
     return {
-        "sharp": [encode(p) for p in patterns],
-        "blurred": [encode(p.filter(ImageFilter.GaussianBlur(4))) for p in patterns],
-        "blocky": [encode(p, quality=5) for p in patterns],
-        "black": [encode(black_frame(index)) for index in range(frames)],
-        "slate": [encode(slate_frame(index)) for index in range(frames)],
-        "frozen": [encode(patterns[0])] * frames,
-        "text_card": [encode(text_card_frame(index)) for index in range(frames)],
-        "broad_text_card": [encode(broad_text_card_frame(index)) for index in range(frames)],
+        "sharp": tuple(encode(p) for p in patterns),
+        "blurred": tuple(encode(p.filter(ImageFilter.GaussianBlur(4))) for p in patterns),
+        "blocky": tuple(encode(p, quality=5) for p in patterns),
+        "black": tuple(encode(black_frame(index)) for index in range(frames)),
+        "slate": tuple(encode(slate_frame(index)) for index in range(frames)),
+        "frozen": (encode(patterns[0]),) * frames,
+        "text_card": tuple(encode(text_card_frame(index)) for index in range(frames)),
+        "broad_text_card": tuple(encode(broad_text_card_frame(index)) for index in range(frames)),
     }
 
 

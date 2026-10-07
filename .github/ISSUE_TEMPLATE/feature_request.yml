@@ -10,7 +10,7 @@ body:
         - medialive
         - mediaconnect
         - cmcd
-        - hub
+        - agentic-iops-streaming
         - hydrolix
         - new sample
         - repository / tooling

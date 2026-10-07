@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
+from .quote_flux_string import quote_flux_string
+
 _TIME_RANGE = re.compile(r"^-\d+[smhdw]$")
 
 
@@ -23,6 +25,7 @@ def list_session_and_content_ids(
     time_range: str = "-24h",
     limit: int = 100,
     *,
+    bucket: str,
     query_influxdb: Callable[[str], list[dict[str, Any]]],
 ) -> SessionAndContentIds:
     """Return distinct session and content ids observed in the time range."""
@@ -33,7 +36,7 @@ def list_session_and_content_ids(
             "For example, use time_range=-24h and limit=100.",
         )
     prefix = (
-        'from(bucket: "cmcd-metrics")\n'
+        f"from(bucket: {quote_flux_string(bucket)})\n"
         f"  |> range(start: {time_range})\n"
         '  |> filter(fn: (r) => r["_measurement"] == "cloudfront_logs")\n'
     )

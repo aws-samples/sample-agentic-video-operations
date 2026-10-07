@@ -3,16 +3,24 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
+
 from medialive_mcp.adapters.cloudwatch.read_channel_metrics import (
     MetricScope,
     read_channel_metrics,
 )
 from medialive_mcp.domain.identify_channel_issues import identify_channel_issues
+from medialive_mcp.domain.metric_catalog import ALL_METRICS, CATEGORY_METRICS
 from medialive_mcp.domain.metric_series import MetricSeries
 from medialive_mcp.workflows.check_channel_health import build_metrics_table, check_channel_issues
 
 START = datetime(2026, 10, 5, 11, 0, tzinfo=UTC)
 WINDOW = (START, START + timedelta(hours=1))
+ADDITIONAL_MQCS_PORTIONS = (
+    "MqcsFillFrameInsertion",
+    "MqcsSvq",
+    "MqcsVideoFrameDrops",
+)
 
 
 class RecordingCloudWatch:
@@ -129,6 +137,26 @@ def test_a_full_mqcs_score_is_healthy_and_a_lower_one_is_an_issue():
     assert "below 100 (worst 40)" in report.issues[0].description
 
 
+@pytest.mark.parametrize("metric", ADDITIONAL_MQCS_PORTIONS)
+def test_each_additional_mqcs_portion_uses_channel_pipeline_and_minimum(metric):
+    cloudwatch = RecordingCloudWatch()
+
+    series = read_channel_metrics(cloudwatch, "1", (metric,), WINDOW)
+
+    queries = queries_for(cloudwatch, metric)
+    assert [dimensions(query) for query in queries] == [
+        {"ChannelId": "1", "Pipeline": "0"},
+        {"ChannelId": "1", "Pipeline": "1"},
+    ]
+    assert {query["MetricStat"]["Stat"] for query in queries} == {"Minimum"}
+    assert {measured.metric for measured in series} == {metric}
+
+
+def test_channel_health_collects_every_additional_mqcs_portion():
+    assert set(ADDITIONAL_MQCS_PORTIONS) <= set(CATEGORY_METRICS["content_quality"])
+    assert set(ADDITIONAL_MQCS_PORTIONS) <= set(ALL_METRICS)
+
+
 def test_pipelines_locked_uses_the_minimum_statistic():
     cloudwatch = RecordingCloudWatch()
 
@@ -168,16 +196,18 @@ def test_audio_levels_are_queried_per_audio_description():
     assert names == {"audio_1", "audio_2"}
 
 
-def test_a_region_wide_issue_says_it_is_not_specific_to_the_channel():
+def test_a_region_wide_reading_says_it_is_not_specific_to_the_channel():
     dropped = MetricSeries(
         metric="DroppedFrames", pipeline="0", statistic="Sum", values=[0, 3],
         dimensions={"Region": "us-west-2"},
     )  # fmt: skip
 
-    [issue] = identify_channel_issues("1", [dropped]).issues
+    report = identify_channel_issues("1", [dropped])
 
-    assert "region-wide metric: all channels in us-west-2 combined" in issue.description
-    assert issue.dimensions == {"Region": "us-west-2"}
+    assert report.issues == []  # context only (T64): never a channel issue
+    [reading] = report.region_wide
+    assert "all channels in us-west-2 combined" in reading.description
+    assert reading.region == "us-west-2"
 
 
 def test_metrics_without_datapoints_are_not_emitted_never_healthy():

@@ -157,3 +157,21 @@ def test_start_flow_returns_unverified_last_observation_after_deadline(tmp_path)
     assert result.after.state is FlowState.STANDBY
     assert result.verified is False
     assert ("start_flow", {"FlowArn": FLOW_ARN}) in client.calls
+
+
+@pytest.mark.parametrize(
+    ("write", "action", "state"),
+    [(start_flow, "start", "ACTIVE"), (stop_flow, "stop", "STANDBY")],
+)
+def test_a_flow_already_in_the_target_state_is_a_verified_no_op(tmp_path, write, action, state):
+    """T62: idempotent means MediaConnect isn't called when there's nothing to do."""
+    client = replay_write(tmp_path, action, state, state)
+
+    result = write(approve(f"{action}_flow"), client, KEY, NOW)
+
+    assert (result.before.state, result.after.state, result.verified) == (
+        FlowState(state),
+        FlowState(state),
+        True,
+    )
+    assert [call for call, _ in client.calls] == ["describe_flow", "describe_flow"]

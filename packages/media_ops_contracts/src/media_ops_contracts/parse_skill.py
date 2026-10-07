@@ -1,4 +1,5 @@
-"""Read one SKILL.md: front-matter metadata, plus the body on demand (extend_the_hub.md §3)."""
+"""Read one SKILL.md: front-matter metadata, plus the body on demand
+(extend_agentic_iops_streaming.md §3)."""
 
 import re
 from pathlib import Path
@@ -28,7 +29,7 @@ class Skill(BaseModel):
 
 
 class SkillError(ValueError):
-    """A SKILL.md that the hub must refuse at startup."""
+    """A SKILL.md that the coordinator must refuse at startup."""
 
 
 def parse_skill(path: Path) -> Skill:

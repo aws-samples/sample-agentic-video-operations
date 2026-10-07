@@ -51,6 +51,18 @@ class FakeAgent:
         yield {"data": SECRET_ANSWER}
 
 
+class OfflineMemoryClient:
+    """The memory hook's AgentCore client, offline. A real one resolves AWS credentials when
+    it is built, down to the EC2 metadata endpoint, which off AWS costs about a second per
+    request and makes the test reach the network."""
+
+    def __init__(self) -> None:
+        self.saved: list[dict] = []
+
+    def save_conversation(self, **kwargs) -> None:
+        self.saved.append(kwargs)
+
+
 @pytest.fixture
 def app(monkeypatch):
     monkeypatch.setenv("AGENT_MODEL_ID", "us.anthropic.claude-sonnet-4-6")
@@ -75,6 +87,8 @@ def app(monkeypatch):
         return []
 
     monkeypatch.setattr(module, "get_agentcore_memory_messages", read_memory)
+    hooks = importlib.import_module("src.utils.MemoryHookProvider")
+    monkeypatch.setattr(hooks, "MemoryClient", OfflineMemoryClient)
     monkeypatch.setattr(module, "BedrockModel", lambda **_: object())
     monkeypatch.setattr(module, "Agent", FakeAgent)
     FakeAgent.built = []
@@ -182,8 +196,6 @@ def test_logs_carry_no_prompt_answer_user_or_session(app, monkeypatch, capsys):
 
 def test_the_subagent_stream_logs_no_question_sql_or_answer(app, monkeypatch, capsys):
     stream = importlib.import_module("src.utils.stream_processor")
-    saved = []
-    monkeypatch.setattr(stream, "save_raw_query_result", lambda **item: saved.append(item))
     sql = "SELECT secret_column FROM video.cmcd WHERE viewer = 'SQL-THAT-MUST-NOT-BE-LOGGED'"
     tool_use = {"toolUseId": "tool-1", "name": "run_select_query"}
 
@@ -198,7 +210,7 @@ def test_the_subagent_stream_logs_no_question_sql_or_answer(app, monkeypatch, ca
     answer = asyncio.run(stream.process_agent_stream(Subagent(), SECRET_PROMPT, "qoe_agent"))
 
     logged = capsys.readouterr().out
-    assert answer == SECRET_ANSWER and saved[0]["sql_query"] == sql
+    assert answer == SECRET_ANSWER
     assert "query length=" in logged
     for secret in (SECRET_PROMPT, SECRET_ANSWER, "SQL-THAT-MUST-NOT-BE-LOGGED"):
         assert secret not in logged

@@ -3,7 +3,7 @@
 MediaConnect pictures one source per flow (DescribeFlowSourceThumbnail), so the flow gets
 one window and one finding. The flow is never HEALTHY without thumbnails and a trusted
 vision verdict, and an independent transport or content-quality signal that contradicts
-the picture caps it at UNVERIFIED (fuse_with_telemetry, extend_the_hub.md §8).
+the picture caps it at UNVERIFIED (fuse_with_telemetry, extend_agentic_iops_streaming.md §7).
 """
 
 from collections.abc import Callable
@@ -88,15 +88,15 @@ def assess_flow_visual_quality(
     note, fused = None, finding.status
     if not sampled.frames:
         note = (
-            f"no thumbnails: {sampled.unavailable_reason or 'none returned'}. Enable source "
-            "thumbnails in the flow's source monitoring, or start the flow."
+            f"no thumbnails: {reason(sampled.unavailable_reason or 'none returned')}. "
+            "Enable source thumbnails in the flow's source monitoring, or start the flow."
         )
     elif sampled.unavailable_reason:
         # The frames before the outage are measured, but the picture now is unknown.
         fused = max(fused, Status.UNVERIFIED, key=SEVERITY.index)
         note = (
-            f"the window ended without thumbnails: {sampled.unavailable_reason}. The earlier "
-            "frames are measured; the picture's current state is unknown."
+            f"the window ended without thumbnails: {reason(sampled.unavailable_reason)}. "
+            "The earlier frames are measured; the picture's current state is unknown."
         )
     return FlowVisualQuality(
         flow_arn=monitoring.flow_arn,
@@ -109,6 +109,11 @@ def assess_flow_visual_quality(
         note=note,
         telemetry_note=telemetry_note,
     )
+
+
+def reason(text: str) -> str:
+    """A reason to quote mid-sentence: a service sentence's own full stop is dropped."""
+    return text.rstrip(". ")
 
 
 def sample_or_explain(
@@ -194,6 +199,7 @@ def read_signals(
             "flow"
         ),
         active_input=monitoring.source_name,
+        source_connected=None if connected is None else connected > 0,
     )
     return signals, note
 

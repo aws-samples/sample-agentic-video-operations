@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          fetch-depth: 0 # gitleaks-ignore tests validate commits against every published ref
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.8.4"
@@ -32,6 +33,7 @@ jobs:
       - run: just lint
       - run: just typecheck
       - run: just test
+      - run: just test-slow
       - run: just smoke
       - run: just eval
       - run: just docs-check
@@ -61,7 +63,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - app: samples/hub/cdk
+          - app: samples/agentic-iops-streaming/cdk
             iam: required
           - app: samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands
             iam: required
@@ -83,7 +85,19 @@ jobs:
       - name: Default-synth IAM gate
         if: matrix.iam == 'required'
         run: python3 "$GITHUB_WORKSPACE/scripts/check_synth_iam.py" cdk.out/*.template.json
+      # RB14: an AgentCore runtime must wait for every policy on its role, in every variant.
+      - name: Default-synth runtime dependencies
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_runtime_dependencies.py" cdk.out/*.template.json
       - run: npx cdk synth --quiet -c allowWrites=true
+      - name: allowWrites-synth runtime dependencies
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_runtime_dependencies.py" cdk.out/*.template.json
+      - name: JWT synth (placeholder pool and client)
+        run: >-
+          npx cdk synth --quiet
+          -c jwtDiscoveryUrl=https://cognito-idp.us-west-2.amazonaws.com/us-west-2_EXAMPLE/.well-known/openid-configuration
+          -c jwtClientIds=example-client
+      - name: JWT-synth runtime dependencies
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_runtime_dependencies.py" cdk.out/*.template.json
 
   hydrolix-web:
     # The Amplify app: production build with warnings as errors (CI=true), the no-eval lint
@@ -179,6 +193,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0 # full history so leaks in past commits are caught too
+      - name: Validate gitleaks suppressions belong to published history
+        run: python3 scripts/check_gitleaks_ignore.py
       - name: Install gitleaks (pinned, checksum-verified)
         run: |
           curl -sSfL -o gitleaks.tar.gz \
@@ -194,7 +210,7 @@ jobs:
       matrix:
         # Container images built by this repository.
         dockerfile:
-          - samples/hub/Dockerfile
+          - samples/agentic-iops-streaming/Dockerfile
           - samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/hydrolix-data-assistant-agentcore-strands/Dockerfile
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

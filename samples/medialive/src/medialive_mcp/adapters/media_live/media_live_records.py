@@ -38,6 +38,8 @@ class ChannelDetails(ChannelSummary):
     output_groups: list[str] = []
     audio_descriptions: list[str] = []
     pipelines: list[PipelineDetail] = []
+    # EncoderSettings.ThumbnailConfiguration: True (AUTO), False (DISABLED), None (not set)
+    thumbnails: bool | None = None
 
 
 class ScheduleActionSummary(BaseModel):

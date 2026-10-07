@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 NO_CREDENTIALS_FIX = "No valid AWS credentials. Fix: aws configure sso  # or export AWS_PROFILE"
+NO_TERMINAL = "No terminal: re-run with --yes after reviewing the plan above."
 
 
 @dataclass(frozen=True)
@@ -30,9 +31,17 @@ def read_account_id() -> str | None:
 
 
 def ask_to_continue(
-    prompt: ConfirmationPrompt, *, assume_yes: bool, ask: Callable[[str], str] = input
+    prompt: ConfirmationPrompt,
+    *,
+    assume_yes: bool,
+    ask: Callable[[str], str] = input,
+    interactive: bool = True,
 ) -> bool:
-    """Print what is about to happen; return True only on --yes or an explicit "y"."""
+    """Print what is about to happen; return True only on --yes or an explicit "y".
+
+    Without a terminal (`interactive` False) there is nobody to answer, so it refuses at
+    once, rather than leaving a later tool to block or abort halfway through.
+    """
     print(f"{prompt.action} {prompt.target}")
     print(f"  account: {prompt.account}")
     print(f"  region:  {prompt.region}")
@@ -40,6 +49,9 @@ def ask_to_continue(
         print(f"  {name}: {value}")
     if assume_yes:
         return True
+    if not interactive:
+        print(NO_TERMINAL)
+        return False
     if ask("Continue? [y/N] ").strip().lower() == "y":
         return True
     print("Cancelled.")
@@ -62,7 +74,8 @@ def main(argv: list[str]) -> int:
         print(NO_CREDENTIALS_FIX)
         return 1
     prompt = ConfirmationPrompt(arguments.action, arguments.target, arguments.region, account)
-    return 0 if ask_to_continue(prompt, assume_yes=arguments.yes) else 1
+    confirmed = ask_to_continue(prompt, assume_yes=arguments.yes, interactive=sys.stdin.isatty())
+    return 0 if confirmed else 1
 
 
 if __name__ == "__main__":

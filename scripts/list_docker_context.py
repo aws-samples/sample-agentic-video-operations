@@ -1,6 +1,6 @@
 """List the files a `docker build` would send, using the same .dockerignore rules.
 
-uv run python scripts/list_docker_context.py samples/hub/Dockerfile .
+uv run python scripts/list_docker_context.py samples/agentic-iops-streaming/Dockerfile .
 
 Rules, as in Docker: patterns are relative to the context root; `*` and `?` stay within one
 path segment and `**` spans any number of segments; a path is excluded when it or a parent
@@ -42,24 +42,31 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
 
 
 def is_excluded(path: str, rules: list[tuple[bool, re.Pattern[str]]]) -> bool:
-    parts = path.split("/")
-    candidates = ["/".join(parts[: n + 1]) for n in range(len(parts))]
     excluded = False
     for negated, pattern in rules:
-        if any(pattern.match(candidate) for candidate in candidates):
+        if matches_path_or_parent(path, [pattern]):
             excluded = not negated
     return excluded
+
+
+def matches_path_or_parent(path: str, patterns: list[re.Pattern[str]]) -> bool:
+    parts = path.split("/")
+    candidates = ["/".join(parts[: n + 1]) for n in range(len(parts))]
+    return any(pattern.match(candidate) for pattern in patterns for candidate in candidates)
 
 
 def list_context(dockerfile: Path, context: Path) -> Iterator[str]:
     patterns = read_ignore_patterns(dockerfile, context)
     rules = [(p.startswith("!"), compile_pattern(p.removeprefix("!"))) for p in patterns]
+    # A rule after the last `!` that matches a directory matches everything inside it (rules
+    # match a path's parents too), and no later rule can re-include anything: prune the tree.
+    last_negation = max((n for n, (negated, _) in enumerate(rules) if negated), default=-1)
+    final_exclusions = [pattern for _, pattern in rules[last_negation + 1 :]]
     for root, directories, files in os.walk(context):
         relative = Path(root).relative_to(context).as_posix()
         prefix = "" if relative == "." else f"{relative}/"
-        has_negation = any(negated for negated, _ in rules)
-        directories[:] = [  # prune excluded trees unless a `!` rule could re-include inside
-            d for d in directories if has_negation or not is_excluded(prefix + d, rules)
+        directories[:] = [
+            d for d in directories if not matches_path_or_parent(prefix + d, final_exclusions)
         ]
         for name in files:
             path = prefix + name
@@ -69,7 +76,7 @@ def list_context(dockerfile: Path, context: Path) -> Iterator[str]:
 
 FORBIDDEN = re.compile(
     r"(^|/)(\.env(?!\.example$)[^/]*|\.claude|\.git|cdk\.out|\.venv|node_modules|__pycache__"
-    r"|\.cache|\.mypy_cache|\.ruff_cache|\.pytest_cache|eval-results\.json)(/|$)"
+    r"|\.cache|\.mypy_cache|\.ruff_cache|\.pytest_cache|\.hub-sessions|eval-results\.json)(/|$)"
 )
 
 

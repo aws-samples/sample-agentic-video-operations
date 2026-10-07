@@ -24,6 +24,7 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from read_root_env import describe_root_env, load_root_env
 
 STACK = "CdkHydrolixDataAssistantAgentcoreStrandsStack"
 SESSION_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"
@@ -57,6 +58,9 @@ def print_chunks(chunks: Iterable[dict[str, Any]]) -> int:
         elif "error" in chunk:
             print(f"[error] {chunk['error']}")
             status = 1
+        elif "query_results" in chunk:  # this request's own queries, as they ran (T41)
+            statuses = [str(query.get("status")) for query in chunk["query_results"]]
+            print(f"\n[queries] {len(statuses)} ran: {', '.join(statuses) or 'none'}")
     print()
     return status
 
@@ -115,7 +119,7 @@ def invoke_hydrolix(
 ) -> int:
     region = os.environ.get("AWS_REGION", "")
     if not region:
-        print("Missing AWS_REGION. Add it to the root .env.")
+        print(f"Missing AWS_REGION: not set in the environment or in {describe_root_env()}.")
         return 1
     try:
         return send(arguments, region, create_client, open_url)
@@ -145,4 +149,5 @@ def parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    load_root_env(os.environ)
     sys.exit(invoke_hydrolix(parse_arguments(sys.argv[1:])))

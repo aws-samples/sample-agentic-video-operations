@@ -62,3 +62,54 @@ def test_empty_or_non_list_sequence_is_an_invalid_request(fixtures_dir, sequence
     with pytest.raises(ToolFailure) as failure:
         client.describe_input(InputId="1")
     assert failure.value.kind is FailureKind.INVALID_REQUEST
+
+
+# A recorded AWS error (extend_agentic_iops_streaming.md §8.3):
+# {"error": {"Code": ..., "Message": ...}}, as the whole fixture or one sequence element, raises
+# the ClientError AWS would have raised, so adapters classify it exactly as the real one.
+def write_fixture(tmp_path, operation, body):
+    scenario = tmp_path / "workflow"
+    scenario.mkdir(exist_ok=True)
+    (scenario / f"medialive.{operation}.json").write_text(json.dumps(body))
+    return ReplayFixtureClient("medialive", scenario="workflow", fixtures_dir=tmp_path)
+
+
+def test_a_recorded_error_in_a_sequence_raises_the_aws_client_error(tmp_path):
+    from botocore.exceptions import ClientError
+
+    from media_ops_contracts.classify_aws_error import classify_aws_error
+
+    client = write_fixture(tmp_path, "get_signal_map", {"sequence": [
+        {"Id": "sm-1", "Status": "CREATE_COMPLETE"},
+        {"error": {"Code": "NotFoundException", "Message": "Signal map not found"}},
+    ]})  # fmt: skip
+
+    assert client.get_signal_map(Identifier="sm-1")["Status"] == "CREATE_COMPLETE"
+    with pytest.raises(ClientError) as raised:
+        client.get_signal_map(Identifier="sm-1")
+    assert raised.value.response["Error"] == {
+        "Code": "NotFoundException",
+        "Message": "Signal map not found",
+    }
+    assert raised.value.operation_name == "GetSignalMap"
+    failure = classify_aws_error(raised.value, operation="Get signal map")
+    assert failure.kind is FailureKind.RESOURCE_NOT_FOUND
+    assert client.calls == [("get_signal_map", {"Identifier": "sm-1"})] * 2
+
+
+def test_a_whole_fixture_can_be_a_recorded_error_and_the_last_one_repeats(tmp_path):
+    from botocore.exceptions import ClientError
+
+    denied = {"error": {"Code": "AccessDeniedException"}}
+    client = write_fixture(tmp_path, "delete_signal_map", denied)
+    for _ in range(2):
+        with pytest.raises(ClientError) as raised:
+            client.delete_signal_map(Identifier="sm-1")
+        assert raised.value.response["Error"]["Code"] == "AccessDeniedException"
+
+
+def test_an_error_entry_without_a_code_is_an_invalid_fixture(tmp_path):
+    client = write_fixture(tmp_path, "get_signal_map", {"sequence": [{"error": {"Message": "x"}}]})
+    with pytest.raises(ToolFailure) as failure:
+        client.get_signal_map(Identifier="sm-1")
+    assert failure.value.kind is FailureKind.INVALID_REQUEST

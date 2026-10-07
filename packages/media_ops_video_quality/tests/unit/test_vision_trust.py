@@ -49,7 +49,7 @@ def test_one_injected_card_among_programme_frames_is_enough_to_withhold_healthy(
 
 
 def test_residual_a_broad_palette_card_is_not_detected_and_reads_healthy():
-    """The documented residual (extend_the_hub.md §8): palette_concentration detects
+    """The documented residual (extend_agentic_iops_streaming.md §7): palette_concentration detects
     concentrated cards and never proves programme. This card spreads its luma, so at
     640x360 it measures clean, isn't a graphic, and the fooled verdict makes it HEALTHY;
     at the 320x180 thumbnail size it isn't detected either."""

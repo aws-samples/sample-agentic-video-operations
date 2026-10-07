@@ -3,7 +3,7 @@ from .file_utils import load_file_content
 from .MemoryHookProvider import MemoryHookProvider
 from .request_context import RequestContext, get_request_context, set_request_context
 from .stream_processor import process_agent_stream
-from .utils import save_raw_query_result
+from .utils import save_query_record
 
 __all__ = [
     # File utilities
@@ -19,5 +19,5 @@ __all__ = [
     # Stream processing
     "process_agent_stream",
     # Query result storage
-    "save_raw_query_result",
+    "save_query_record",
 ]

@@ -17,6 +17,7 @@ from cmcd_mcp.adapters.influxdb.replay_influxdb_query import replay_influxdb_que
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
 
 FIXTURES_DIR = Path(__file__).parents[4] / "fixtures"
+DEFAULT_BUCKET = "cmcd-metrics"
 
 
 def test_get_average_bitrate_returns_a_typed_mean():
@@ -28,6 +29,7 @@ def test_get_average_bitrate_returns_a_typed_mean():
     result = get_average_bitrate(
         "-1h",
         "demo-session-west",
+        bucket=DEFAULT_BUCKET,
         query_influxdb=query,
     )
     assert result.average_bitrate_kbps == 4200
@@ -45,9 +47,11 @@ def test_query_filters_disable_flux_interpolation_for_untrusted_ids():
     get_average_bitrate(
         cmcd_sid="${dangerous.session}",
         cmcd_cid="${dangerous.content}",
+        bucket='custom") |> drop(columns: ["_value"])',
         query_influxdb=query_influxdb,
     )
 
+    assert r'from(bucket: "custom\") |> drop(columns: [\"_value\"])")' in captured_flux
     assert r'"\${dangerous.session}"' in captured_flux
     assert r'"\${dangerous.content}"' in captured_flux
 
@@ -63,6 +67,7 @@ def test_get_average_bitrate_filters_non_positive_values_and_keeps_optional_ids(
     result = get_average_bitrate(
         cmcd_sid="session-1",
         cmcd_cid="content-1",
+        bucket=DEFAULT_BUCKET,
         query_influxdb=query_influxdb,
     )
 
@@ -76,7 +81,10 @@ def test_get_average_bitrate_filters_non_positive_values_and_keeps_optional_ids(
 @pytest.mark.parametrize("placeholder", [0, -1, 0.0])
 def test_get_average_bitrate_reports_non_positive_results_as_missing(placeholder):
     with pytest.raises(ToolFailure) as failure:
-        get_average_bitrate(query_influxdb=lambda _: [{"_value": placeholder}])
+        get_average_bitrate(
+            bucket=DEFAULT_BUCKET,
+            query_influxdb=lambda _: [{"_value": placeholder}],
+        )
 
     assert failure.value.kind is FailureKind.RESOURCE_NOT_FOUND
     assert failure.value.message == "No bitrate data matched the requested criteria."
@@ -88,7 +96,11 @@ def test_get_session_details_sorts_interleaved_flux_tables():
         "cmcd_rebuffering",
         "influxdb.query_session_details",
     )
-    result = get_session_details("demo-session-west", query_influxdb=query)
+    result = get_session_details(
+        "demo-session-west",
+        bucket=DEFAULT_BUCKET,
+        query_influxdb=query,
+    )
 
     assert set(result.metrics) == {"cmcd_br", "cmcd_bl"}
     assert result.start_time == datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
@@ -109,7 +121,11 @@ def test_get_session_details_omits_missing_and_non_positive_placeholders():
             {"_time": "2026-10-05T12:00:03Z", "_field": "cmcd_br", "_value": 2500},
         ]
 
-    result = get_session_details("session-1", query_influxdb=query)
+    result = get_session_details(
+        "session-1",
+        bucket=DEFAULT_BUCKET,
+        query_influxdb=query,
+    )
 
     assert "cmcd_tb" not in result.metrics
     assert "cmcd_mtp" not in result.metrics
@@ -126,7 +142,11 @@ def test_get_session_details_reports_placeholder_only_session_as_missing():
         ]
 
     with pytest.raises(ToolFailure) as failure:
-        get_session_details("session-1", query_influxdb=query)
+        get_session_details(
+            "session-1",
+            bucket=DEFAULT_BUCKET,
+            query_influxdb=query,
+        )
 
     assert failure.value.kind is FailureKind.RESOURCE_NOT_FOUND
     assert failure.value.message == "No usable CMCD metrics were found for session session-1."
@@ -138,7 +158,7 @@ def test_analyze_buffer_events_replays_the_regional_incident_fixture():
         "cmcd_rebuffering",
         "influxdb.query_buffer_events",
     )
-    result = analyze_buffer_events(query_influxdb=query)
+    result = analyze_buffer_events(bucket=DEFAULT_BUCKET, query_influxdb=query)
     assert result.total_events == 5
     assert result.low_buffer_count == 3
     assert {event.edge_location for event in result.low_buffer_events} == {"demo-edge-west"}
@@ -151,7 +171,7 @@ def test_identify_playback_errors_uses_starvation_and_boolean_startup_signals():
         "cmcd_rebuffering",
         "influxdb.query_playback_errors",
     )
-    result = identify_playback_errors(query_influxdb=query)
+    result = identify_playback_errors(bucket=DEFAULT_BUCKET, query_influxdb=query)
     kinds = {issue.kind for issue in result.issues}
     assert PlaybackIssueKind.BUFFER_STARVATION in kinds
     assert PlaybackIssueKind.SUDDEN_BUFFER_DROP in kinds
@@ -169,6 +189,6 @@ def test_list_session_and_content_ids_deduplicates_values():
         "cmcd_rebuffering",
         "influxdb.query_session_and_content_ids",
     )
-    result = list_session_and_content_ids(query_influxdb=query)
+    result = list_session_and_content_ids(bucket=DEFAULT_BUCKET, query_influxdb=query)
     assert result.session_ids == ["demo-session-west", "demo-session-east"]
     assert result.content_ids == ["demo-content", "demo-live-event"]

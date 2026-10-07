@@ -16,6 +16,7 @@ from medialive_mcp.domain.write_requirements import (
 
 ACTION = "start_channel"
 TARGET_STATE = ChannelState.RUNNING
+IN_PROGRESS_STATE = ChannelState.STARTING
 
 
 def start_channel(
@@ -24,13 +25,14 @@ def start_channel(
     check: ApprovalCheck,
     policy: VerificationPolicy,
 ) -> ActionResult:
-    """Idempotent in MediaLive: a channel already RUNNING needs no idempotency key."""
+    """Idempotent: RUNNING or STARTING channels are verified without another start call."""
     require_action_approval(
         approved_action, action=ACTION, signing_key=check.signing_key, now=check.now
     )
     channel_id = approved_action.resource_id
     before = describe_channel(medialive, channel_id).state
-    call_aws_operation(medialive, ACTION, ChannelId=channel_id)
+    if before not in (TARGET_STATE, IN_PROGRESS_STATE):
+        call_aws_operation(medialive, ACTION, ChannelId=channel_id)
     after = wait_for_condition(
         lambda: describe_channel(medialive, channel_id).state,
         lambda state: state is TARGET_STATE,

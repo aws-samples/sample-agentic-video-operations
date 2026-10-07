@@ -2,7 +2,7 @@
 # show that raw command too. Contract: docs/build_a_sample.md §4.
 #
 # Install once:  uv tool install rust-just
-# Sample keys:   cmcd · mediaconnect · medialive · hub · hydrolix
+# Sample keys:   cmcd · mediaconnect · medialive · agentic-iops-streaming · hydrolix
 
 set dotenv-load
 set shell := ["bash", "-euo", "pipefail", "-c"]
@@ -25,7 +25,7 @@ run sample *args:
       cmcd)         uv run --package cmcd-mcp-server serve-cmcd {{ args }} ;;
       mediaconnect) uv run --package mediaconnect-mcp-server serve-mediaconnect {{ args }} ;;
       medialive)    uv run --package medialive-mcp-server serve-medialive {{ args }} ;;
-      hub)          HUB_LOCAL_MODE=true uv run --package media-ops-hub serve-hub {{ args }} ;;
+      agentic-iops-streaming)          AGENTIC_IOPS_LOCAL_MODE=true uv run --package agentic-iops-streaming serve-agentic-iops-streaming {{ args }} ;;
       hls-doctor)   uv run --package hls-doctor serve-hls-doctor {{ args }} ;;
       hydrolix)     just _pending hydrolix ;;
       *)            just _unknown "{{ sample }}" ;;
@@ -43,11 +43,16 @@ test sample="":
       cmcd)      uv run pytest samples/cmcd/tests ;;
       mediaconnect) uv run pytest samples/mediaconnect/tests ;;
       medialive) uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack ;;
-      hub)       uv run pytest samples/hub/tests/contract ;;
+      agentic-iops-streaming)       uv run pytest samples/agentic-iops-streaming/tests/contract ;;
       hls-doctor) uv run pytest samples/hls-doctor/tests ;;
       hydrolix)  uv run pytest scripts/tests/test_manage_hydrolix_stack.py ;;
       *)         just _unknown "{{ sample }}" ;;
     esac
+
+# The tests that start real processes (MCP servers, a hung server the deadline must kill)
+[group('develop')]
+test-slow:
+    uv run pytest -m slow
 
 # Lint and format check
 [group('develop')]
@@ -65,10 +70,10 @@ typecheck:
 eval:
     uv run pytest -m eval
 
-# The hub on a recorded incident with a scripted model: no AWS account, no Bedrock
+# The agent on a recorded incident with a scripted model: no AWS account, no Bedrock
 [group('develop')]
 demo:
-    uv run --package media-ops-hub demo-hub
+    uv run --package agentic-iops-streaming demo-agentic-iops-streaming
 
 # Start every converted MCP server on fixtures, or probe live read paths with `just smoke aws`
 [group('develop')]
@@ -103,8 +108,8 @@ deploy sample *flags:
     case "{{ sample }}" in
       cmcd)     uv run python scripts/manage_cmcd_stack.py deploy {{ flags }} ;;
       hydrolix) uv run python scripts/manage_hydrolix_stack.py deploy {{ flags }} ;;
-      hub)      uv run python scripts/manage_hub_stack.py deploy {{ flags }} ;;
-      medialive|mediaconnect) echo "{{ sample }} deploys as a hub domain: set MEDIA_DOMAINS, then just deploy hub" >&2; exit 1 ;;
+      agentic-iops-streaming)      uv run python scripts/manage_agentic_iops_streaming_stack.py deploy {{ flags }} ;;
+      medialive|mediaconnect) echo "{{ sample }} deploys as a domain pack of agentic-iops-streaming: set MEDIA_DOMAINS, then just deploy agentic-iops-streaming" >&2; exit 1 ;;
       *) just _unknown "{{ sample }}" ;;
     esac
 
@@ -126,8 +131,8 @@ destroy sample *flags:
     case "{{ sample }}" in
       cmcd)     uv run python scripts/manage_cmcd_stack.py destroy {{ flags }} ;;
       hydrolix) uv run python scripts/manage_hydrolix_stack.py destroy {{ flags }} ;;
-      hub)      uv run python scripts/manage_hub_stack.py destroy {{ flags }} ;;
-      medialive|mediaconnect) echo "{{ sample }} deploys as a hub domain: set MEDIA_DOMAINS, then just destroy hub" >&2; exit 1 ;;
+      agentic-iops-streaming)      uv run python scripts/manage_agentic_iops_streaming_stack.py destroy {{ flags }} ;;
+      medialive|mediaconnect) echo "{{ sample }} deploys as a domain pack of agentic-iops-streaming: set MEDIA_DOMAINS, then just destroy agentic-iops-streaming" >&2; exit 1 ;;
       *) just _unknown "{{ sample }}" ;;
     esac
 
@@ -137,4 +142,4 @@ _pending sample step="":
 
 [private]
 _unknown sample:
-    @echo "Unknown sample '{{ sample }}'. Use: cmcd mediaconnect medialive hub hydrolix" >&2; exit 1
+    @echo "Unknown sample '{{ sample }}'. Use: cmcd mediaconnect medialive agentic-iops-streaming hydrolix" >&2; exit 1

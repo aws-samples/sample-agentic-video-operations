@@ -47,8 +47,13 @@ def _read_account_id(runner: Runner) -> str | None:
     )
 
 
-def _read_stack_secret_arn(runner: Runner, stack: str, region: str) -> str | None:
-    query = "Stacks[0].Outputs[?OutputKey=='InfluxDBSecretArn'].OutputValue"
+def _read_stack_output(
+    runner: Runner,
+    stack: str,
+    region: str,
+    output_key: str,
+) -> str | None:
+    query = f"Stacks[0].Outputs[?OutputKey=='{output_key}'].OutputValue"
     return _look_up(
         runner,
         [
@@ -107,11 +112,22 @@ def create_cmcd_read_token(
 ) -> int:
     """Confirm, create one least-privilege token, and silently update root .env."""
     account = _read_account_id(dependencies.runner)
-    secret_arn = _read_stack_secret_arn(dependencies.runner, request.stack, request.region)
-    if account is None or secret_arn is None:
+    secret_arn = _read_stack_output(
+        dependencies.runner,
+        request.stack,
+        request.region,
+        "InfluxDBSecretArn",
+    )
+    bucket = _read_stack_output(
+        dependencies.runner,
+        request.stack,
+        request.region,
+        "InfluxDBBucketName",
+    )
+    if account is None or secret_arn is None or bucket is None:
         print(
             f"Stack {request.stack} not found in {request.region}, "
-            "or AWS credentials are unavailable."
+            "its CMCD bucket output is unavailable, or AWS credentials are unavailable."
         )
         return 1
     if (
@@ -130,6 +146,13 @@ def create_cmcd_read_token(
             secret_arn,
             request.region,
         )
+        credentials = InfluxAdminCredentials(
+            username=credentials.username,
+            password=credentials.password,
+            organization=credentials.organization,
+            bucket=bucket,
+            read_token=credentials.read_token,
+        )
         token = dependencies.token_creator(request.tunnel_url, credentials)
         write_root_env_values(
             request.env_path,
@@ -137,6 +160,7 @@ def create_cmcd_read_token(
             {
                 "INFLUXDB_URL": request.tunnel_url,
                 "INFLUXDB_ORG": credentials.organization,
+                "INFLUXDB_BUCKET": credentials.bucket,
                 "INFLUXDB_TOKEN": token,
                 "VERIFY_SSL": "false",
             },

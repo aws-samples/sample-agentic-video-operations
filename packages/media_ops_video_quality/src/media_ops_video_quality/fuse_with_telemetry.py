@@ -55,6 +55,9 @@ class EncoderSignals(BaseModel):
     picture_location: str  # where the sampled picture is: what a bad picture there implicates
     failover_phrase: str  # what a healthy alternative looks like for this service
     active_input: str | None = None
+    # False when the service reports no sender connected at some point in the window (a
+    # MediaConnect source's SourceConnected at 0); None where the service has no such signal.
+    source_connected: bool | None = None
 
 
 class PipelineTelemetry(BaseModel):
@@ -213,7 +216,8 @@ def signal_checks(finding: Finding, s: EncoderSignals) -> dict[str, bool | None]
 
 def evidence(a: WindowAssessment, s: EncoderSignals) -> list[str]:
     lines = [
-        f"{a.sampled_frames} of {a.requested_frames} frames sampled; score {a.score} ({a.basis})"
+        f"{a.sampled_frames} of {a.requested_frames} frames sampled; "
+        + (f"score {a.score} ({a.basis})" if a.score is not None else f"no score ({a.basis})")
     ]
     if a.frozen_seconds:
         lines.append(f"picture unchanged for {a.frozen_seconds:g} s")
@@ -277,6 +281,13 @@ def next_action(
             f"check whether {source} itself is degraded."
         )
     if finding is Finding.UNVERIFIED:
+        if a.sampled_frames < 2 and s.source_connected is False:
+            # No sender explains the missing picture; enabling thumbnails would not.
+            return (
+                f"No sender was connected to the source within {window} (SourceConnected "
+                "fell to 0): check the sender and the source's ingest settings, then re-run "
+                "to judge the picture."
+            )
         if a.sampled_frames < 2:
             return (
                 f"Enable thumbnails (or start the {s.resource_term}), then re-run to judge "

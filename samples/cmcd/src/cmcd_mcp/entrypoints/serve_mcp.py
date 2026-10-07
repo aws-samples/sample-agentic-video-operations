@@ -72,6 +72,7 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
             time_range,
             cmcd_sid,
             cmcd_cid,
+            bucket=runtime.influxdb_bucket,
             query_influxdb=average_query,
         )
 
@@ -79,7 +80,12 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
     @report_tool_failure
     def get_session_details(cmcd_sid: str, time_range: str = "-24h") -> SessionDetails:
         """Get chronological CMCD metrics for one playback session."""
-        return read_session_details(cmcd_sid, time_range, query_influxdb=session_query)
+        return read_session_details(
+            cmcd_sid,
+            time_range,
+            bucket=runtime.influxdb_bucket,
+            query_influxdb=session_query,
+        )
 
     @server.tool(annotations=READ_ONLY)
     @report_tool_failure
@@ -93,6 +99,7 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
             time_range,
             cmcd_sid,
             threshold_ms,
+            bucket=runtime.influxdb_bucket,
             query_influxdb=buffer_query,
         )
 
@@ -103,7 +110,12 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
         cmcd_sid: str | None = None,
     ) -> PlaybackErrorAnalysis:
         """Detect starvation signals and sudden buffer drops with startup context."""
-        return read_playback_errors(time_range, cmcd_sid, query_influxdb=playback_query)
+        return read_playback_errors(
+            time_range,
+            cmcd_sid,
+            bucket=runtime.influxdb_bucket,
+            query_influxdb=playback_query,
+        )
 
     @server.tool(annotations=READ_ONLY)
     @report_tool_failure
@@ -112,7 +124,12 @@ def build_cmcd_server(settings: RuntimeSettings | None = None) -> FastMCP:
         limit: int = 100,
     ) -> SessionAndContentIds:
         """List distinct CMCD session and content ids."""
-        return read_session_and_content_ids(time_range, limit, query_influxdb=ids_query)
+        return read_session_and_content_ids(
+            time_range,
+            limit,
+            bucket=runtime.influxdb_bucket,
+            query_influxdb=ids_query,
+        )
 
     return server
 

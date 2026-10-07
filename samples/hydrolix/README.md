@@ -69,17 +69,26 @@ or bearer tokens, never both.
 | Who may call | Holders of a current Cognito access token from that user pool, issued to one of those app clients. AgentCore verifies the signature, issuer, expiry and `client_id` before the request reaches the agent. | Principals your IAM allows to invoke the runtime. |
 | Who the actor is | The token's `sub`. The runtime forwards only the `Authorization` header; a `user_id` in the request is ignored. | Nobody. There is no verified identity, so **memory is off**: no history is read or kept, and every response starts with a notice saying so. |
 | Which conversation | The AgentCore runtime session id, never a request field. The first user a session's microVM serves owns it; another user's token on that session is refused. Memory is also keyed by user and session, so a session id reused later reaches only its own user's history. | The runtime session id; memory is off. |
-| Logs | Counts and lengths only: no question, answer, SQL, user id or session id, in the runtime and in the browser console (the web app logs through `src/utils/logMetadata.js` only). | Same. |
+| Logs | Counts and lengths only: no question, answer, SQL, user id or session id, in the runtime and in the browser console (the web app logs through `samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/src/utils/logMetadata.js` only). | Same. |
 | What the model may query | Only `HYDROLIX_TABLE`, which can't be in `system` or `information_schema`. The subagents get `run_select_query` and `get_table_info`, not `list_databases` or `list_tables`. Before a call reaches the cluster, the runtime parses its SQL (sqlglot 26.33.0, pinned, ClickHouse dialect) and refuses anything but one `SELECT` that reads that table: every `SELECT` reads `FROM` the table, a subquery, or a CTE that itself reads the table. Functions must be on an allowlist of aggregates, date and time, math, string and URL, conditional, conversion, array and JSON functions, so server introspection such as `currentUser()` or `getSetting()` is refused. Also refused: another database or table, table functions (`url`, `s3`, `remote`, `file`, `cluster`, …), `VALUES`, `IN <table>`, `joinGet`/`dictGet`, a `SETTINGS` clause, a second statement, or SQL it can't parse. A refused query never runs and isn't saved to the results table. | Same. |
+| Which Bedrock model the runtime may call | Only `AGENT_MODEL_ID`: for a cross-Region profile id (`us.`, `eu.`, `apac.`, `global.` …), that profile in this account and region plus the foundation model behind it in any region, as cross-Region inference requires; for a bare model id, that model only. The stack derives the model from the one `BedrockModelId` parameter, which accepts only `provider.model` or `<prefix>.provider.model`, so no value can name another model or a wildcard. `just deploy hydrolix` sets it from `AGENT_MODEL_ID` as the parameter's default (`-c agentModelId`), for the security diff and the deploy alike, and the confirmation names the model it grants. | Same. |
 | How much the model may do | 16 tool calls and 180 seconds per request, counted from when the request arrives, for the orchestrator and its subagents together. The Secrets Manager read, the MCP start, every subagent run and the orchestrator's own answer all count against the 180 seconds. At the deadline the response ends with a "stopped" error and each subagent's Hydrolix MCP process is ended (terminated, or killed if its client can't stop it). Not everything stops at that instant: a model call or Secrets Manager read already in flight runs on in the background until that one call returns, and its result is never used. An MCP call that has already started is counted once and then cancelled when its client closes. Any tool call after the deadline is refused. The request's `user_timezone` goes into the system prompts only if it is a real IANA zone name, UTC otherwise. | Same. |
 
 - **The agent doesn't re-verify the token signature.** AgentCore already has, and the
   agent reads the claims only when `HYDROLIX_JWT_ISSUER` is set, which only the CDK sets,
   and only on a JWT-authorized runtime. It still re-checks the issuer, client, expiry and
   subject, and fails closed if they disagree with its settings.
-- **The query-results table is not per user.** Each item is keyed by the request's random
-  `prompt_uuid`, and the browser reads it with the authenticated Cognito role, which can
-  read any item whose id it knows.
+- **Query records are per user and only written.** Each query a subagent ran is recorded
+  after it ran, with its status (a refused query never ran, so it isn't recorded). The
+  response stream's last record is always that request's `{"query_results": [...]}`, also
+  when the request stopped at its deadline or failed (the error comes just before it); the
+  web app shows those queries and then the error. No browser role reads the results table.
+  The runtime writes each record under the verified `sub` (partition key) with a
+  millisecond timestamp and a unique suffix (sort key), and its role can only `PutItem`. In
+  IAM mode nothing is written, as with memory. SQL is capped at 16,000 characters and the
+  purpose and question at 4,000; a cut is recorded as `truncated` and `omitted_characters`,
+  never as text in the value. A `prompt_uuid` that isn't a UUID is replaced by one, so a
+  record always fits one item; a failed write is logged by class and the answer goes on.
 
 ## Prerequisites
 
@@ -233,10 +242,15 @@ cd sample-agentic-video-operations
    uv run python scripts/manage_hydrolix_stack.py deploy
    ```
 
-   The command asks for confirmation, installs the pinned MCP source and CDK
-   dependencies, then deploys with approval required for IAM broadening.
-   `--yes` skips the repository confirmation and passes CDK
-   `--require-approval never`.
+   The command checks the CDK bootstrap (the CDKToolkit stack, its qualifier against the
+   app's and its version), installs the CDK dependencies and prints the security changes
+   the deploy makes (`cdk diff --security-only`, from templates: no image is built). The
+   deploy stops unless CDK printed its result for this stack: the changes, or "no
+   security-related changes". It then asks once. Only after that does it fetch the pinned
+   MCP source, build and deploy, with CDK set to `--require-approval never`, so nothing stops halfway
+   to ask again. `--yes` answers that one prompt, and the plan says so. Without a terminal
+   and without `--yes`, it stops at the prompt: "No terminal: re-run with --yes after
+   reviewing the plan above".
 
 5. Read the generated Hydrolix secret ARN:
 
@@ -305,10 +319,13 @@ The React application under
 is not deployed by `just deploy hydrolix`.
 
 Its Cognito sign-in is the one created in Deploy to AWS step 3. Copy
-`src/sample.env.js` to `src/env.js` and fill in the `QuestionAnswersTableName`,
-`AgentRuntimeArn` and `AgentEndpointName` stack outputs. The app calls the runtime over
-HTTPS with the signed-in user's access token, so the authenticated Cognito role needs only
-the DynamoDB query and chart-model invocation permissions, not runtime invocation.
+`samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/src/sample.env.js`
+to an `env.js` file in the same directory and fill in the `AgentRuntimeArn` and
+`AgentEndpointName` stack outputs. The app calls the runtime over HTTPS with the signed-in
+user's access token and gets the queries it ran in the same response, so the
+authenticated Cognito role needs only the chart-model invocation permission: no runtime
+invocation and no DynamoDB access. Remove any DynamoDB permission an earlier version of
+this README had you add to that role.
 
 Start it locally with:
 
@@ -343,8 +360,9 @@ uv run python scripts/manage_hydrolix_stack.py destroy
 ```
 
 The confirmed teardown deletes the AgentCore runtime, endpoint and memory,
-DynamoDB table, generated Hydrolix secret, stack roles, and an Amplify app
-named by `HYDROLIX_AMPLIFY_APP_ID`. If you created Cognito or other Amplify
+the query-records DynamoDB table, generated Hydrolix secret, stack roles, and an Amplify app
+named by `HYDROLIX_AMPLIFY_APP_ID`. It leaves the earlier results table in place by design
+(see below) and prints the command to delete it. If you created Cognito or other Amplify
 backend resources manually, run `amplify delete` from the React application
 directory first.
 
@@ -366,6 +384,38 @@ aws cloudformation describe-stacks \
 The command should report that the stack does not exist. Orphaned AgentCore,
 Amplify, Cognito, ECR, or database resources can continue to incur cost.
 
+### The earlier results table
+
+Versions before per-user query records kept the results in a table keyed by
+`prompt_uuid`. Upgrading never deletes it, in two steps:
+
+1. **This version** keeps that table in the stack exactly as it was (logical id
+   `RawQueryResults82B00746`, same keys, so it is not replaced), changes only its deletion
+   policy to `Retain`, and grants it to no role. Nothing writes or reads it any more; the new
+   per-user table is separate.
+2. **A later version** drops it from the template, and CloudFormation then removes it
+   from the stack without deleting it. (CloudFormation applies the deletion policy of the
+   template that is already deployed, which is why step 1 comes first.)
+
+`just destroy hydrolix` leaves it in place too. Its name follows
+`CdkHydrolixDataAssistantAgentcoreStrandsStack-RawQueryResults82B00746-<suffix>` and is the
+stack's `RetiredQueryResultsTableName` output. When you no longer need its history, delete
+it yourself; no script in this repository does:
+
+```bash
+RETIRED_TABLE="$(
+  aws cloudformation describe-stacks \
+    --stack-name CdkHydrolixDataAssistantAgentcoreStrandsStack \
+    --region "$AWS_REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='RetiredQueryResultsTableName'].OutputValue" \
+    --output text
+)"
+aws dynamodb delete-table --region "$AWS_REGION" --table-name "$RETIRED_TABLE"
+```
+
+After the stack is destroyed, `just destroy hydrolix` prints this delete command with the
+table's name filled in.
+
 ## Known Limitations
 
 - This is an educational sample, not a production-ready analytics service.
@@ -373,13 +423,11 @@ Amplify, Cognito, ECR, or database resources can continue to incur cost.
   reachable Hydrolix cluster and AWS deployment.
 - The deployment command creates the backend only. Amplify, Cognito, browser
   configuration, and authenticated-role permissions remain manual.
-- **Not yet proven live:** the browser's direct HTTPS call to the AgentCore runtime with
+- **Live verification pending:** the browser's direct HTTPS call to the AgentCore runtime with
   a bearer token (CORS). If a browser can't make it, the fallback is to keep SigV4 for the
   call and verify the Cognito token in the agent instead, as a separate change.
 - With IAM authorization the assistant has no memory: there is no verified identity to
   keep a conversation under.
-- The query-results table is readable by any signed-in user who knows an item's
-  `prompt_uuid` (see the trust model).
 - The browser application uses deprecated Create React App tooling.
 - The runtime's Python requirements are not pinned to exact versions. The
   Hydrolix MCP dependencies follow the version ranges of the pinned release.
@@ -388,7 +436,7 @@ Amplify, Cognito, ECR, or database resources can continue to incur cost.
   They still work over stdio.
 - Bedrock model invocation remains broad across foundation models and inference
   profiles; production deployments should restrict it to the selected model.
-- Runtime writes are limited to its own DynamoDB table, AgentCore memory, and
+- Runtime writes are limited to its own DynamoDB table (`PutItem` only), AgentCore memory, and
   runtime log groups. The runtime can pull only from the CDK asset repository
   and has no ECR push permissions.
 - The generated secret starts with placeholders and must be updated before the
@@ -396,8 +444,11 @@ Amplify, Cognito, ECR, or database resources can continue to incur cost.
 - The UI invokes a chart model directly and has no configured Bedrock
   Guardrail.
 - The chart model's output is data, never code: a chart formatter must be one of the
-  names `src/utils/chartFormatters.js` implements, anything else is dropped. Answers are
-  sanitized before they render (`src/utils/markdownSchema.js`): no scripts or frames, no
+  names
+  `samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/src/utils/chartFormatters.js`
+  implements; anything else is dropped. Answers are sanitized before they render
+  (`samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/src/utils/markdownSchema.js`):
+  no scripts or frames, no
   images (a markdown image would send data to its host with no click), and links only to
   http(s) pages, opened with `rel="noopener noreferrer"`.
 - The runtime's SQL check is a parser allowlist on what the model sends, not the

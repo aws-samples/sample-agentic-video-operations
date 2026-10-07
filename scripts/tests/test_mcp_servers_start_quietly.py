@@ -19,6 +19,7 @@ SERVERS = (
 BANNER_TEXT = ("╭", "FastMCP", "pip install --upgrade", "horizon.prefect.io", "gofastmcp.com")
 
 
+@pytest.mark.slow  # starts the real server process
 @pytest.mark.parametrize("module", SERVERS)
 def test_a_server_writes_no_banner_to_stderr(module):
     environment = {

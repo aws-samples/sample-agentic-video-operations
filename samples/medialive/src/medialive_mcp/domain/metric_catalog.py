@@ -1,4 +1,11 @@
-"""Which MediaLive CloudWatch metrics belong to which health category."""
+"""Which MediaLive CloudWatch metrics belong to which health category.
+
+Statistics and dimension sets follow the MediaLive user guide, "Monitor channels with
+metrics", checked on 2026-10-06:
+- https://docs.aws.amazon.com/medialive/latest/ug/eml-metrics-alpha-list.html
+- https://docs.aws.amazon.com/medialive/latest/ug/eml-metrics-quality-score.html (MQCS)
+- https://docs.aws.amazon.com/medialive/latest/ug/eml-metrics-output-metrics.html
+"""
 
 CATEGORY_METRICS: dict[str, tuple[str, ...]] = {
     "channel_health": (
@@ -21,7 +28,8 @@ CATEGORY_METRICS: dict[str, tuple[str, ...]] = {
     ),
     "content_quality": (
         "MinMQCS", "MqcsBlackFrameDetected", "MqcsFreezeFrameDetected",
-        "MqcsContinuityCounterErrors", "FillMsec", "InputLossSeconds", "DroppedFrames",
+        "MqcsContinuityCounterErrors", "MqcsFillFrameInsertion", "MqcsSvq",
+        "MqcsVideoFrameDrops", "FillMsec", "InputLossSeconds", "DroppedFrames",
     ),
 }  # fmt: skip
 
@@ -37,7 +45,14 @@ TABLE_METRICS: dict[str, tuple[str, ...]] = {
     "input_health": ("NetworkIn", "InputLossSeconds", "RtpPacketsLost"),
     "output_health": ("NetworkOut", "Output4xxErrors", "Output5xxErrors"),
     "media_health": ("ChannelInputErrorSeconds", "FillMsec"),
-    "content_quality": ("MqcsBlackFrameDetected", "MqcsFreezeFrameDetected", "InputLossSeconds"),
+    "content_quality": (
+        "MqcsBlackFrameDetected",
+        "MqcsFreezeFrameDetected",
+        "MqcsFillFrameInsertion",
+        "MqcsSvq",
+        "MqcsVideoFrameDrops",
+        "InputLossSeconds",
+    ),
 }
 
 ALL_METRICS = tuple(dict.fromkeys(m for metrics in CATEGORY_METRICS.values() for m in metrics))
@@ -71,12 +86,17 @@ STATISTIC_BY_METRIC: dict[str, str] = {
     "MqcsBlackFrameDetected": "Minimum",
     "MqcsFreezeFrameDetected": "Minimum",
     "MqcsContinuityCounterErrors": "Minimum",
+    "MqcsFillFrameInsertion": "Minimum",
+    "MqcsSvq": "Minimum",
+    "MqcsVideoFrameDrops": "Minimum",
 }
 DEFAULT_STATISTIC = "Average"
 
 # The dimension set MediaLive publishes each metric with (same reference). Querying any other
 # set returns no datapoints. OutputGroupName and AudioDescriptionName take every name the
-# channel defines; DroppedFrames and SvqTime are published per pipeline and Region only.
+# channel defines. MQCS: MinMQCS is per ChannelId, Pipeline and OutputGroupName; every
+# Mqcs* portion is per ChannelId and Pipeline (the default). DroppedFrames and SvqTime are
+# published per Pipeline and Region only ("Supported dimensions sets: Pipeline, Region").
 CHANNEL_DIMENSIONS = ("ChannelId", "Pipeline")
 DIMENSIONS_BY_METRIC: dict[str, tuple[str, ...]] = {
     "MinMQCS": ("ChannelId", "Pipeline", "OutputGroupName"),
@@ -88,6 +108,12 @@ DIMENSIONS_BY_METRIC: dict[str, tuple[str, ...]] = {
     "DroppedFrames": ("Pipeline", "Region"),
     "SvqTime": ("Pipeline", "Region"),
 }
+
+# Metrics with no ChannelId dimension: all channels in the Region combined. They are shown as
+# context and never scored against one channel (T64).
+REGION_WIDE_METRICS = frozenset(
+    metric for metric, dimensions in DIMENSIONS_BY_METRIC.items() if "ChannelId" not in dimensions
+)
 
 # Dimensions whose values come from the channel's configuration, one query per value.
 CHANNEL_CONFIGURED_DIMENSIONS = frozenset({"OutputGroupName", "AudioDescriptionName"})

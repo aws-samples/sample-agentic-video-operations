@@ -4,6 +4,8 @@
 - A static black frame counts as black and a static flat one as flat, never also as frozen.
 - Without a trusted vision verdict the result is never HEALTHY: a clean deterministic view
   becomes UNVERIFIED, so an unavailable vision pass can never read as healthy.
+- Without frames nothing was measured: both scores are None, never a perfect 100, and
+  confidence is 0, so no reader of the score or the confidence mistakes it for a picture.
 - A trusted vision verdict agreeing with the measurements raises confidence and one
   disagreeing lowers it; an untrusted verdict can only lower it.
 - The frames reach the vision model as pictures, on-screen text included, and one rubric
@@ -11,7 +13,8 @@
   So if any frame is a detectable graphic (a card, slate or caption screen: a concentrated
   palette), a clean window stays UNVERIFIED whatever the verdict says. This withholds
   HEALTHY only and never lowers the score. It does not prove the other frames natural: a
-  card with a broad palette passes it (see extend_the_hub.md §8 for what this covers).
+  card with a broad palette passes it (see extend_agentic_iops_streaming.md §7 for what this
+  covers).
 """
 
 from datetime import datetime
@@ -72,10 +75,10 @@ class WindowAssessment(BaseModel):
     shares: dict[str, float]  # share of frames per finding: frozen, black, flat, blurred, blocky
     frozen_seconds: float  # longest run of unchanged frames
     graphic_share: float  # share of graphic frames; any at all withholds HEALTHY
-    deterministic_score: float
+    deterministic_score: float | None  # None when no frame was sampled
     vision_status: VisionStatus
     vision: VisionScores | None
-    score: float
+    score: float | None  # None when no frame was sampled
     status: Status
     confidence: float
     basis: str  # what the status rests on, in words
@@ -109,6 +112,7 @@ def assess_window(
     status, basis = decide_status(
         len(assessed), score, trusted, vision_status, graphic_share, thresholds
     )
+    measured = bool(assessed)
     return WindowAssessment(
         requested_frames=requested_frames,
         sampled_frames=len(assessed),
@@ -116,12 +120,12 @@ def assess_window(
         shares=shares,
         frozen_seconds=longest_frozen_seconds(assessed),
         graphic_share=graphic_share,
-        deterministic_score=round(deterministic, 1),
+        deterministic_score=round(deterministic, 1) if measured else None,
         vision_status=vision_status,
         vision=vision,
-        score=round(score, 1),
+        score=round(score, 1) if measured else None,
         status=status,
-        confidence=confidence(deterministic, trusted, vision, thresholds),
+        confidence=confidence(deterministic, trusted, vision, thresholds) if measured else 0.0,
         basis=basis,
     )
 
@@ -193,6 +197,8 @@ def decide_status(
     graphic_share: float,
     thresholds: QualityThresholds,
 ) -> tuple[Status, str]:
+    if sampled == 0:
+        return Status.UNVERIFIED, "no frames sampled: nothing was measured"
     if sampled < 2:
         return Status.UNVERIFIED, "fewer than 2 distinct frames: freeze and change are unknown"
     status = status_for(score, thresholds)

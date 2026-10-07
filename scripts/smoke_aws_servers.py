@@ -16,6 +16,7 @@ from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from read_root_env import describe_root_env, load_root_env
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 TIMEOUT_SECONDS = 180
@@ -33,7 +34,7 @@ class AwsSmokeCase:
 def require_environment(environ: dict[str, str], name: str) -> str:
     value = environ.get(name, "").strip()
     if not value:
-        raise RuntimeError(f"{name} is not set in the root .env")
+        raise RuntimeError(f"{name} is not set in the environment or in {describe_root_env()}")
     return value
 
 
@@ -241,4 +242,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    load_root_env(os.environ)
     raise SystemExit(main())

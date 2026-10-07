@@ -1,12 +1,14 @@
 """analyze_channel_visual_quality: sampling, frozen output, and the honest unknown states."""
 
 import base64
+import dataclasses
 from pathlib import Path
 
 import pytest
 
 from media_ops_contracts.tool_failure import ToolFailure
 from media_ops_video_quality.assess_window import Status
+from media_ops_video_quality.quality_thresholds import DEFAULT_THRESHOLDS
 from medialive_mcp.adapters.media_live.sample_channel_frames import sample_channel_frames
 from medialive_mcp.bootstrap.create_medialive_clients import create_medialive_clients
 from medialive_mcp.settings.runtime_settings import RuntimeSettings
@@ -250,3 +252,78 @@ def test_an_encoder_freeze_keeps_a_clean_channel_from_reading_healthy(monkeypatc
         Status.UNVERIFIED,
     )
     assert (result.status, result.worst_pipeline_id) == (Status.UNVERIFIED, "1")
+
+
+# --- T78 and T79: no frames, and stopping early only on a conclusive answer --------------
+
+
+class CountingMediaLive:
+    """The replayed channel with its description changed, counting thumbnail reads."""
+
+    def __init__(self, replay, *, thumbnails=True, **channel_changes):
+        self.replay, self.changes = replay, channel_changes
+        self.thumbnails, self.thumbnail_calls = thumbnails, 0
+
+    def describe_channel(self, **kwargs):
+        return self.replay.describe_channel(**kwargs) | self.changes
+
+    def describe_thumbnails(self, **kwargs):
+        self.thumbnail_calls += 1
+        if not self.thumbnails:  # enabled, but none has arrived yet
+            return {"ThumbnailDetails": []}
+        return self.replay.describe_thumbnails(**kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.replay, name)
+
+
+def analyze_changed(*, thumbnails=True, **channel_changes):
+    runtime = RuntimeSettings(demo=True, demo_scenario="frozen_output", fixtures_dir=FIXTURES)
+    clients = create_medialive_clients(runtime)
+    medialive = CountingMediaLive(clients.medialive, thumbnails=thumbnails, **channel_changes)
+    clients = dataclasses.replace(clients, medialive=medialive)
+    tools = {f.__name__: f for f in create_read_tools(runtime, clients)}
+    return tools["analyze_channel_visual_quality"](channel_id="1234567"), medialive
+
+
+DISABLED = {"EncoderSettings": {"ThumbnailConfiguration": {"State": "DISABLED"}}}
+ENABLED = {"EncoderSettings": {"ThumbnailConfiguration": {"State": "AUTO"}}}
+TRUSTED = DEFAULT_THRESHOLDS.trusted_vision_confidence.value
+
+
+def test_with_no_frames_neither_score_reads_as_a_perfect_picture():
+    """T78: nothing was measured, so there is no score, and confidence stays untrusted."""
+    result, _ = analyze_changed(**DISABLED)
+
+    for pipeline in result.pipelines:
+        assessment = pipeline.assessment
+        assert assessment.sampled_frames == 0 and assessment.status is Status.UNVERIFIED
+        assert assessment.score is None and assessment.deterministic_score is None
+        assert assessment.confidence < TRUSTED
+    assert all(finding.confidence < TRUSTED for finding in result.findings)
+
+
+def test_thumbnails_disabled_in_the_channel_stop_sampling_before_any_read():
+    """T79: a conclusive answer, as MediaConnect's disabled thumbnails are."""
+    result, medialive = analyze_changed(**DISABLED)
+
+    assert medialive.thumbnail_calls == 0
+    assert result.status is Status.UNVERIFIED
+    assert all("disabled in the channel's configuration" in p.note for p in result.pipelines)
+
+
+def test_a_channel_that_is_not_running_is_not_sampled():
+    result, medialive = analyze_changed(State="IDLE", **ENABLED)
+
+    assert medialive.thumbnail_calls == 0
+    assert all("the channel is IDLE" in p.note for p in result.pipelines)
+
+
+def test_enabled_thumbnails_that_have_not_arrived_yet_keep_polling_the_window():
+    """Transient, not conclusive: a running channel with thumbnails on is sampled throughout."""
+    result, medialive = analyze_changed(thumbnails=False, **ENABLED)
+
+    frames = RuntimeSettings(demo=True, fixtures_dir=FIXTURES).visual_quality_frames
+    pipelines = len(result.pipelines)
+    assert medialive.thumbnail_calls == frames * pipelines
+    assert all("none arrived" in p.note for p in result.pipelines)

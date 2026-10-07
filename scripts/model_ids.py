@@ -12,6 +12,9 @@ VISION_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 # Variants of the same models for specific deployment shapes.
 MAIN_AGENT_MODEL_ID_SINGLE_REGION = "anthropic.claude-sonnet-4-6"
+# The foundation model behind VISION_MODEL_ID: agentic-iops-streaming's IAM grants it (derived in
+# the stack).
+VISION_MODEL_ID_SINGLE_REGION = "anthropic.claude-haiku-4-5-20251001-v1:0"
 VISION_MODEL_ID_GLOBAL = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 ALLOWED_MODEL_IDS = frozenset(
@@ -19,6 +22,7 @@ ALLOWED_MODEL_IDS = frozenset(
         MAIN_AGENT_MODEL_ID,
         VISION_MODEL_ID,
         MAIN_AGENT_MODEL_ID_SINGLE_REGION,
+        VISION_MODEL_ID_SINGLE_REGION,
         VISION_MODEL_ID_GLOBAL,
     }
 )

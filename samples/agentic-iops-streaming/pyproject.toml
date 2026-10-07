@@ -1,0 +1,37 @@
+[project]
+name = "agentic-iops-streaming"
+version = "0.1.0"
+description = "One Strands agent on AgentCore that investigates across the selected media domain packs."
+license = "MIT-0"
+requires-python = ">=3.12"
+dependencies = [
+  "media-ops-contracts",
+  "medialive-mcp-server",
+  "mediaconnect-mcp-server",
+  "hls-doctor",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.5,<3",
+  "strands-agents>=1.0,<2",
+  "bedrock-agentcore>=1.0,<2",
+  "pyjwt>=2.10,<3",
+]
+
+[project.optional-dependencies]
+runtime = ["aws-opentelemetry-distro>=0.10.1,<1"]
+
+[project.scripts]
+serve-agentic-iops-streaming = "agentic_iops_streaming.entrypoints.handle_agentcore_invocation:main"
+demo-agentic-iops-streaming = "agentic_iops_streaming.demo.run_demo:main"
+
+[tool.uv.sources]
+media-ops-contracts = { workspace = true }
+medialive-mcp-server = { workspace = true }
+mediaconnect-mcp-server = { workspace = true }
+hls-doctor = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "agentic_iops_streaming"

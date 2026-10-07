@@ -21,7 +21,7 @@ crosscheck. The value this sample adds sits on top of and around it:
   are joined into one ranked diagnosis instead of four separate reports.
 - **An agent surface**: every capability is a typed read-only tool. Plug the
   MCP server into Claude Code (or Amazon Q CLI, Kiro, any MCP client) and ask
-  it to diagnose a stream; the same tools load into the media-ops hub agent,
+  it to diagnose a stream; the same tools load into the agentic-iops-streaming agent,
   which deploys as a container on Amazon Bedrock AgentCore, so coordinator
   workflows and UIs drive the identical tooling.
 
@@ -62,7 +62,7 @@ flowchart LR
 - `adapters/http/` fetches live URLs with httpx, or replays recorded exchanges
   from `fixtures/` in demo mode. A missing recording fails closed.
 - `tool_surface/` exposes the same read-only tools to the MCP server and to
-  the hub's `hls` domain pack.
+  agentic-iops-streaming's `hls` domain pack.
 
 ## Prerequisites
 
@@ -165,14 +165,14 @@ instead: a healthy encrypted VOD presentation with zero errors.
 ### Deploy to AWS
 
 This sample runs locally and creates no AWS infrastructure of its own. It is
-also a read-only domain pack of the [hub](../hub/README.md): deploy the hub
-with `MEDIA_DOMAINS=medialive,mediaconnect,hls` and the hub agent gains the
+also a read-only domain pack of [agentic-iops-streaming](../agentic-iops-streaming/README.md): deploy it
+with `MEDIA_DOMAINS=medialive,mediaconnect,hls` and the agent gains the
 HLS diagnostic tools with an empty IAM permission set.
 
 ### Verify the Deployment
 
-For the local sample the known-good request above is the verification. For a
-hub deployment that includes the `hls` domain, follow the hub README's
+For the local sample the known-good request above is the verification. For
+an agentic-iops-streaming deployment that includes the `hls` domain, follow its README's
 verification and ask its agent the known-good request.
 
 ## Available Tools

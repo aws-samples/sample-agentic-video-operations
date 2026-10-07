@@ -1,4 +1,4 @@
-"""The read-only inspection tools shared by the MCP server and the hub pack."""
+"""The read-only inspection tools shared by the MCP server and the agentic-iops-streaming pack."""
 
 from pydantic import BaseModel, Field
 

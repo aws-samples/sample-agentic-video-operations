@@ -17,7 +17,7 @@ Choose the operator outcome you need:
 | Find regional buffering, bitrate, or playback-error patterns in CMCD data | [`cmcd`](samples/cmcd/) | `just run cmcd` |
 | Inspect MediaConnect flow health, packet loss, metrics, or thumbnails | [`mediaconnect`](samples/mediaconnect/) | `just run mediaconnect` |
 | Inspect MediaLive channels, inputs, outputs, schedules, or alarms | [`medialive`](samples/medialive/) | `just run medialive` |
-| Investigate a signal path across MediaConnect and MediaLive, with approved fixes | [`hub`](samples/hub/) | `just demo` |
+| Investigate a signal path across MediaConnect and MediaLive, with approved fixes | [`agentic-iops-streaming`](samples/agentic-iops-streaming/) | `just demo` |
 | Explore CDN and streaming analytics through a web application | [`hydrolix`](samples/hydrolix/) | `just deploy hydrolix` |
 
 > [!IMPORTANT]
@@ -46,7 +46,7 @@ Every sample just started as a real MCP server and answered from **fixtures** â€
 recorded AWS responses for scripted incidents (a MediaLive input loss, an SRT
 packet-loss event, a viewer buffering spike). Nothing touched AWS.
 
-Then watch the hub agent investigate a recorded incident, still offline:
+Then watch the agent investigate a recorded incident, still offline:
 
 ```bash
 just demo
@@ -57,7 +57,7 @@ action) for a MediaLive channel whose pipeline 0 lost its SRT input.
 
 From there, [`docs/walkthrough.md`](docs/walkthrough.md) takes you the rest of
 the way in order of commitment: investigate a recorded incident from your own
-MCP client (still no AWS account), run the hub agent locally against fixtures
+MCP client (still no AWS account), run the agent locally against fixtures
 (Bedrock only, cents per question), then deploy for real.
 
 ## Architecture
@@ -72,8 +72,8 @@ flowchart LR
     ML --> CDN[Content delivery]
     CDN --> Players[Video players]
 
-    Hub[hub agent] --> MCPkg[mediaconnect pack]
-    Hub --> MLPkg[medialive pack]
+    Agent[agentic-iops-streaming agent] --> MCPkg[mediaconnect pack]
+    Agent --> MLPkg[medialive pack]
     MCPkg --> MC
     MLPkg --> ML
 
@@ -82,7 +82,7 @@ flowchart LR
 ```
 
 - `mediaconnect` and `medialive` expose focused operational tools.
-- `hub` is one agent that loads both as domain packs, and asks an operator before any write.
+- `agentic-iops-streaming` is one agent that loads both as domain packs, and asks an operator before any write.
 - `cmcd` analyzes player telemetry stored in InfluxDB.
 - `hydrolix` provides multi-agent CDN analytics with a web UI.
 
@@ -128,7 +128,7 @@ same values.
 
 | Role | Default | Used by | Change it |
 |---|---|---|---|
-| Reasoning agent | `us.anthropic.claude-sonnet-4-6` | The hub agent, Hydrolix agents | Edit `AGENT_MODEL_ID` in `.env` |
+| Reasoning agent | `us.anthropic.claude-sonnet-4-6` | The agentic-iops-streaming agent, Hydrolix agents | Edit `AGENT_MODEL_ID` in `.env` |
 | Thumbnail vision | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | MediaLive and MediaConnect thumbnail adapters | Edit `THUMBNAIL_MODEL_ID` in `.env` |
 | Chart generation | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Hydrolix web UI | Edit `CHART_MODEL_ID` in `.env` |
 
@@ -175,7 +175,7 @@ A reasoning agent must not use a Haiku model.
    just smoke
    ```
 
-6. Run the hub's offline investigation:
+6. Run the agent's offline investigation:
 
    ```bash
    just demo
@@ -183,11 +183,11 @@ A reasoning agent must not use a Haiku model.
 
 Neither step needs an AWS account or a Bedrock call. `just smoke` starts each
 sample's MCP server on recorded fixtures and calls one tool. `just demo` replays
-a recorded MediaLive input-loss incident through the real hub and medialive pack
+a recorded MediaLive input-loss incident through the real agent and medialive pack
 with a scripted model, and prints the diagnosis: pipeline 0 lost its SRT input.
 
 Then follow [`docs/walkthrough.md`](docs/walkthrough.md): it connects a sample
-to your MCP client on fixtures (no AWS account), runs the hub agent locally,
+to your MCP client on fixtures (no AWS account), runs the agent locally,
 and only then deploys.
 
 Run an individual sample's MCP server with:
@@ -235,8 +235,8 @@ are gone. Orphaned infrastructure can continue to incur cost.
 - Security hardening, tenant isolation, quotas, and operational runbooks remain
   the adopter's responsibility.
 - Model output is nondeterministic and must not replace operational policy.
-- Some samples currently require AWS to demonstrate their complete use case;
-  fixture-backed coverage is being added incrementally.
+- Some samples require AWS to demonstrate their complete use case; each
+  fixture-backed path is listed in the sample's README.
 - Write operations require explicit enablement, approval, and verification.
 - Supported regions and model availability depend on the selected AWS account.
 
