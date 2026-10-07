@@ -13,6 +13,7 @@ from hls_doctor.domain.correlate.finding_model import Finding
 from hls_doctor.settings.runtime_settings import HlsDoctorSettings
 from hls_doctor.tool_surface.create_inspection_tools import resolve_default_url
 from hls_doctor.workflows.build_probe_context import build_probe_context
+from hls_doctor.workflows.probe_media_samples import run_media_probe
 from hls_doctor.workflows.watch_stream import watch_stream
 from media_ops_contracts.domain_pack import ReadTool
 from media_ops_contracts.tool_failure import FailureKind, ToolFailure
@@ -48,12 +49,17 @@ def create_probe_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
         )
 
     def probe_segment(url: str) -> SegmentProbe:
-        """Probe one segment or init section with ffprobe: streams, format, timestamps."""
+        """Probe one segment or init section with ffprobe: streams, format, timestamps.
+
+        The bytes are downloaded through the guarded fetcher and probed as a
+        local file, so ffprobe never fetches the network itself.
+        """
         if not settings.demo:
             guard_fetch_target(url, allow_private=settings.hls_allow_private_targets)
         else:
             require_usable_entry_url(url)
-        probe = build_probe_context(settings).media_probe()
+        context = build_probe_context(settings)
+        probe = context.media_probe()
         if probe is None:
             raise ToolFailure(
                 FailureKind.INVALID_REQUEST,
@@ -61,10 +67,16 @@ def create_probe_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
                 " scenario records no media output.",
                 "Install FFmpeg, or pick a scenario with recorded ffprobe output.",
             )
-        return probe(url, with_packets=True)
+        return run_media_probe(url, probe, context)
 
     def run_apple_validator(url: str = "") -> ValidatorReport:
-        """Run Apple's mediastreamvalidator as an independent conformance crosscheck."""
+        """Run Apple's mediastreamvalidator as an independent conformance crosscheck.
+
+        The validator is a separate binary that fetches the stream itself: its
+        requests do not pass this sample's SSRF guard (only the entry URL is
+        checked). It is intended for operator machines, not deployed runtimes,
+        and the deployed image does not ship it.
+        """
         if not settings.demo:
             guard_fetch_target(
                 resolve_default_url(url, settings),
@@ -83,6 +95,9 @@ def create_probe_tools(settings: HlsDoctorSettings) -> list[ReadTool]:
         """Play the stream headlessly with hls.js and report its events and errors.
 
         Optional: needs Node.js 20+ and `npm install` in samples/hls-doctor/player-probe.
+        The browser fetches the stream itself: its requests do not pass this
+        sample's SSRF guard (only the entry URL is checked). Operator machines
+        only; the deployed image does not ship Node.
         """
         guard_fetch_target(url, allow_private=settings.hls_allow_private_targets)
         return run_harness(url, duration_seconds)

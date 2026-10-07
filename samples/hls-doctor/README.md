@@ -167,7 +167,11 @@ instead: a healthy encrypted VOD presentation with zero errors.
 This sample runs locally and creates no AWS infrastructure of its own. It is
 also a read-only domain pack of [agentic-iops-streaming](../agentic-iops-streaming/README.md): deploy it
 with `MEDIA_DOMAINS=medialive,mediaconnect,hls` and the agent gains the
-HLS diagnostic tools with an empty IAM permission set.
+HLS diagnostic tools with an empty IAM permission set. The runtime image
+does not ship `ffprobe` (or the validator and Node harness), so the
+deployed pack degrades to its non-probe tools: playlist, delivery and
+watch diagnostics work fully; `probe_segment` reports that media probing
+is unavailable.
 
 ### Verify the Deployment
 

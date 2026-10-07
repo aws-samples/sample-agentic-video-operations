@@ -24,23 +24,28 @@ def redact_url(url: str) -> str:
     return urlunsplit(parts._replace(query=urlencode(redacted)))
 
 
-URI_ATTRIBUTE_PATTERN = re.compile(r'URI="([^"]*)"')
+QUOTED_QUERY_PATTERN = re.compile(r'"([^"]*\?[^"]*)"')
+DEFINE_VALUE_PATTERN = re.compile(r'(VALUE=")[^"]*(")')
 
 
 def redact_playlist_body(text: str) -> str:
-    """Redact query values inside a playlist body: URI lines and URI="..." attributes.
+    """Redact credentials inside a playlist body before it is stored or returned.
 
-    The stored evidence copy of a manifest must not carry the very tokens the
-    URL fields already redact (key URIs, tokenized segment URIs).
+    Every `?...` query anywhere in the text is redacted (quoted attribute
+    values and bare URI lines alike), keeping only the structural `_HLS_*`
+    parameters, and EXT-X-DEFINE values are treated as secrets outright:
+    variables exist precisely to carry tokens into URIs.
     """
     lines = []
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "?" in stripped:
-            lines.append(redact_url(stripped))
-        elif stripped.startswith("#") and 'URI="' in line:
+        if stripped.startswith("#EXT-X-DEFINE"):
+            lines.append(DEFINE_VALUE_PATTERN.sub(r"\1REDACTED\2", line))
+        elif stripped and not stripped.startswith("#"):
+            lines.append(redact_url(stripped) if "?" in stripped else line)
+        elif "?" in line:
             lines.append(
-                URI_ATTRIBUTE_PATTERN.sub(lambda match: f'URI="{redact_url(match.group(1))}"', line)
+                QUOTED_QUERY_PATTERN.sub(lambda match: f'"{redact_url(match.group(1))}"', line)
             )
         else:
             lines.append(line)

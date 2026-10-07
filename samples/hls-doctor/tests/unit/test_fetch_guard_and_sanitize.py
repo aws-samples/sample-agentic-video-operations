@@ -124,7 +124,7 @@ def test_sanitized_exchange_drops_cookies_and_redacts_queries() -> None:
     assert "set-cookie" not in clean.headers and "x-amz-cf-id" not in clean.headers
     assert clean.headers["content-type"] == "text/plain"
     assert clean.body_truncated and clean.body_sha256 is not None
-    assert len(base64.b64decode(clean.body_bytes_b64 or "")) == 16
+    assert clean.body_bytes_b64 is None  # binary bodies never leave the process
 
 
 def test_key_exchanges_keep_no_body_at_all() -> None:
@@ -217,3 +217,27 @@ def test_ffprobe_local_input_is_an_allowlist(tmp_path) -> None:
     ):
         with pytest.raises(ToolFailure):
             protocol_whitelist(hostile)
+
+
+def test_small_binary_bodies_also_never_leave_the_process() -> None:
+    key = exchange_with("https://cdn.example/k", {}, bytes(range(16)))
+    clean = key.sanitized(1024)
+    assert clean.body_bytes_b64 is None
+    assert clean.body_sha256 is not None and clean.content_length == 16
+
+
+def test_playlist_redaction_covers_define_values_and_any_quoted_query() -> None:
+    from hls_doctor.adapters.http.redact_url import redact_playlist_body
+
+    body = (
+        "#EXTM3U\n"
+        '#EXT-X-DEFINE:NAME="token",VALUE="super-secret-token"\n'
+        '#EXT-X-DATERANGE:ID="ad",X-ASSET-LIST="https://ads.example/list.json?tok=sneaky"\n'
+        "seg1.ts?auth=leakme&_HLS_msn=7\n"
+    )
+    redacted = redact_playlist_body(body)
+    for secret in ("super-secret-token", "sneaky", "leakme"):
+        assert secret not in redacted
+    assert 'VALUE="REDACTED"' in redacted
+    assert "tok=REDACTED" in redacted
+    assert "_HLS_msn=7" in redacted

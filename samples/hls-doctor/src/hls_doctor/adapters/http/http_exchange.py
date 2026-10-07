@@ -71,13 +71,13 @@ class HttpExchange(BaseModel):
                     "body_sha256": hashlib.sha256(self.body_text.encode()).hexdigest(),
                 }
         if self.body_bytes_b64 is not None:
+            # Binary bodies never leave the process: length and hash only.
             raw = base64.b64decode(self.body_bytes_b64)
-            if len(raw) > preview_bytes:
-                return {
-                    "body_bytes_b64": base64.b64encode(raw[:preview_bytes]).decode() or None,
-                    "body_truncated": True,
-                    "body_sha256": hashlib.sha256(raw).hexdigest(),
-                }
+            return {
+                "body_bytes_b64": None,
+                "body_truncated": True,
+                "body_sha256": hashlib.sha256(raw).hexdigest(),
+            }
         return {}
 
 
