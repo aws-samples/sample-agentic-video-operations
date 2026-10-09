@@ -293,6 +293,12 @@ literals.
   not read, and chunked or compressed bodies stop at the decoded cap.
 - ffprobe runs under an explicit protocol whitelist (`http,https,tcp,tls`
   for URLs; `file` only for the bytes the workflow itself just downloaded).
+- `EXT-X-SESSION-DATA` `VALUE` attributes are kept as data and are not
+  redacted; a deployment that carries identifiers there should treat its
+  reports accordingly.
+- Known residual: the guard resolves and checks every hop, but httpx resolves
+  again to connect, and the fetch does not pin the connection to the checked
+  address, so a DNS rebinding between those two lookups is not closed.
 - Fetched content is treated as data, never as instructions: quoted remote
   text in findings is length-bounded and stripped of control characters, and
   the packaged skills instruct the agent accordingly.
