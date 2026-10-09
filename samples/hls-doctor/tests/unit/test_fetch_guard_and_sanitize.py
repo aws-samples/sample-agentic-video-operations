@@ -249,3 +249,35 @@ def test_ffprobe_refuses_network_targets_outright() -> None:
         with pytest.raises(ToolFailure) as failure:
             protocol_whitelist(target)
         assert "local" in failure.value.message.lower()
+
+
+def test_gzip_bomb_decompression_is_capped_per_chunk() -> None:
+    import gzip
+    import tracemalloc
+
+    from hls_doctor.adapters.http.fetch_url import MAX_BODY_BYTES
+
+    bomb = gzip.compress(b"\0" * 50_000_000)  # ~50 KB on the wire, 50 MB decoded
+    assert len(bomb) < 100_000
+
+    def wire_chunks():
+        for start in range(0, len(bomb), 16_384):
+            yield bomb[start : start + 16_384]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=wire_chunks(),
+            headers={"content-encoding": "gzip", "content-type": "video/mp4"},
+        )
+
+    fetch = fetch_with(httpx.MockTransport(handler), {"cdn.example": PUBLIC})
+    tracemalloc.start()
+    exchange = fetch("http://cdn.example/bomb.mp4")
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert exchange.body_truncated
+    assert exchange.content_length == MAX_BODY_BYTES
+    # The decoded cap must hold per decompression call, not after the fact.
+    assert peak < MAX_BODY_BYTES * 4

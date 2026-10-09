@@ -9,8 +9,10 @@ read at all. What was read is truncated evidence, never a failure.
 
 import base64
 import time
+import zlib
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
@@ -115,16 +117,51 @@ def read_exchange(
 
 
 def read_bounded_body(response: httpx.Response) -> tuple[bytes, bool]:
-    """Read decoded bytes up to the cap; a declared oversize body is not read."""
+    """Read decoded bytes up to the cap; a declared oversize body is not read.
+
+    The raw wire bytes are decompressed here with a per-call output bound
+    (`decompressobj(...).decompress(data, max_length=remaining)`), so a
+    compression bomb never expands past the cap even within one chunk.
+    """
     declared = response.headers.get("content-length")
     if declared is not None and declared.isdigit() and int(declared) > MAX_BODY_BYTES:
         return b"", True
+    if response.is_stream_consumed:
+        # A preloaded body (already decoded in memory): cap-slice it directly.
+        return response.content[:MAX_BODY_BYTES], len(response.content) > MAX_BODY_BYTES
+    decoder = BoundedDecoder(response.headers.get("content-encoding", "identity"))
     collected = bytearray()
-    for chunk in response.iter_bytes(chunk_size=65536):
+    for chunk in response.iter_raw(chunk_size=65536):
         remaining = MAX_BODY_BYTES - len(collected)
         if remaining <= 0:
             return bytes(collected), True
-        collected.extend(chunk[:remaining])
-        if len(chunk) > remaining:
+        piece, overflowed = decoder.decode(chunk, remaining)
+        collected.extend(piece)
+        if overflowed:
             return bytes(collected), True
     return bytes(collected), False
+
+
+class BoundedDecoder:
+    """gzip/deflate/identity decoding with a hard output bound per call."""
+
+    def __init__(self, content_encoding: str) -> None:
+        encoding = content_encoding.strip().lower()
+        # zlib does not export its decompressor type publicly.
+        self.decompressor: Any = None
+        if encoding in ("gzip", "x-gzip"):
+            self.decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        elif encoding == "deflate":
+            # zlib-wrapped per the RFC; +32 auto-detects a raw-gzip mislabel.
+            self.decompressor = zlib.decompressobj(32 + zlib.MAX_WBITS)
+
+    def decode(self, chunk: bytes, max_bytes: int) -> tuple[bytes, bool]:
+        """(decoded bytes, overflowed): never returns more than `max_bytes`."""
+        if self.decompressor is None:
+            return chunk[:max_bytes], len(chunk) > max_bytes
+        try:
+            piece = self.decompressor.decompress(chunk, max_bytes)
+        except zlib.error:
+            return b"", True  # corrupt stream: keep what we have, stop reading
+        overflowed = bool(self.decompressor.unconsumed_tail)
+        return piece, overflowed
