@@ -123,7 +123,8 @@ def test_sanitized_exchange_drops_cookies_and_redacts_queries() -> None:
     assert "hdnts=REDACTED" in clean.url
     assert "set-cookie" not in clean.headers and "x-amz-cf-id" not in clean.headers
     assert clean.headers["content-type"] == "text/plain"
-    assert clean.body_truncated and clean.body_sha256 is not None
+    assert clean.body_withheld and not clean.body_truncated
+    assert clean.body_sha256 is not None
     assert clean.body_bytes_b64 is None  # binary bodies never leave the process
 
 
@@ -359,3 +360,22 @@ def test_location_header_query_is_redacted_like_any_url() -> None:
     assert "leakme" not in clean.headers["location"]
     assert "signedtoken=REDACTED" in clean.headers["location"]
     assert "_HLS_msn=9" in clean.headers["location"]
+
+
+def test_withheld_is_distinct_from_truncated() -> None:
+    whole = exchange_with("https://cdn.example/seg.m4s", {}, b"x" * 500)
+    clean = whole.sanitized()
+    assert clean.body_withheld and not clean.body_truncated  # withheld whole
+
+    cut_on_read = exchange_with("https://cdn.example/big.m4s", {}, b"x" * 500).model_copy(
+        update={"body_truncated": True}
+    )
+    clean_cut = cut_on_read.sanitized()
+    assert clean_cut.body_withheld and clean_cut.body_truncated  # withheld AND really cut
+
+    text = HttpExchange(
+        url="https://cdn.example/p.m3u8", requested_url="https://cdn.example/p.m3u8",
+        at_ms=0, status=200, headers={"content-type": "text"}, body_text="#EXTM3U\n" * 300,
+    )  # fmt: skip
+    clean_text = text.sanitized(16)
+    assert clean_text.body_truncated and not clean_text.body_withheld  # preview really cut
