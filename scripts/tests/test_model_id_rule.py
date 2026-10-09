@@ -1,4 +1,4 @@
-"""One model-id rule for the deploy scripts and both CDK stacks (T72).
+"""One model-id rule for the deploy scripts and both CDK stacks.
 
 A bad AGENT_MODEL_ID used to fail at CloudFormation's parameter check, after npm ci, the
 security diff and the image build. The scripts now refuse it first, with the same rule the

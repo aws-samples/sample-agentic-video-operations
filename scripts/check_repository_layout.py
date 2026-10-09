@@ -36,7 +36,7 @@ RETIRED_PATHS = frozenset(
     }
 )
 RETIRED_PATH_PREFIXES = (
-    "samples/hub/",  # renamed to samples/agentic-iops-streaming/ (REN1)
+    "samples/hub/",  # renamed to samples/agentic-iops-streaming/
     "samples/agentic-iops-streaming/coordinator/",
     "samples/agentic-iops-streaming/eml/",
     "samples/agentic-iops-streaming/emx/",

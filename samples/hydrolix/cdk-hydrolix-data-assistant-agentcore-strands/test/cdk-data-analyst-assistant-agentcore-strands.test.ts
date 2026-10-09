@@ -64,7 +64,7 @@ test("the Hydrolix table parameter accepts only database.table", () => {
   }
 });
 
-test("query records are keyed by the verified user and only ever written (T41)", () => {
+test("query records are keyed by the verified user and only ever written", () => {
   const template = synthesizeTemplate();
   const tables = template.findResources("AWS::DynamoDB::Table");
   const [recordsId] = Object.keys(tables).filter((id) => id.startsWith("QueryRecords"));
@@ -85,7 +85,7 @@ test("query records are keyed by the verified user and only ever written (T41)",
   expect(JSON.stringify(environment)).toContain(`"QUESTION_ANSWERS_TABLE":{"Ref":"${recordsId}"}`);
 });
 
-test("the earlier results table is kept as it was, retained, and granted to nobody (T41)", () => {
+test("the earlier results table is kept as it was, retained, and granted to nobody", () => {
   const template = synthesizeTemplate();
   const tables = template.findResources("AWS::DynamoDB::Table");
   // The logical id earlier versions deployed: unchanged, so upgrading doesn't replace it.
@@ -165,7 +165,7 @@ test("runtime writes name only its table memory and log groups", () => {
   expect(JSON.stringify(logs)).not.toContain("runtimes/*");
 });
 
-describe("inbound auth (RB9)", () => {
+describe("inbound auth", () => {
   const issuer = "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_EXAMPLE";
   const jwtContext = {
     jwtDiscoveryUrl: `${issuer}/.well-known/openid-configuration`,
@@ -226,7 +226,7 @@ test("runtime metrics are limited to the AgentCore namespace", () => {
   });
 });
 
-describe("Bedrock invoke is scoped to the configured model (T71)", () => {
+describe("Bedrock invoke is scoped to the configured model", () => {
   const template = synthesizeTemplate().toJSON();
   const grant = () =>
     policyStatements(synthesizeTemplate()).filter((statement: any) =>
@@ -302,7 +302,7 @@ describe("Bedrock invoke is scoped to the configured model (T71)", () => {
   });
 
   test("the deploy context sets the parameter's default, and a bad one fails synth", () => {
-    // T71 review: the security diff and the deploy both synthesize with -c agentModelId.
+    // The security diff and the deploy both synthesize with -c agentModelId.
     const eu = ["eu", "anthropic.claude-sonnet-4-6"].join(".");
     const custom = synthesizeTemplate({ agentModelId: eu }).toJSON();
     expect(custom.Parameters.BedrockModelId.Default).toBe(eu);
@@ -326,7 +326,7 @@ describe("Bedrock invoke is scoped to the configured model (T71)", () => {
   });
 });
 
-test("the runtime is created after every policy on its role (RB14)", () => {
+test("the runtime is created after every policy on its role", () => {
   const resources = synthesizeTemplate().toJSON().Resources;
   const [runtimeId] = Object.keys(resources).filter(
     (id) => resources[id].Type === "AWS::BedrockAgentCore::Runtime",

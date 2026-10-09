@@ -1,4 +1,4 @@
-"""The Bedrock model-id rule, shared with both CDK stacks through model_id_rule.json (T72).
+"""The Bedrock model-id rule, shared with both CDK stacks through model_id_rule.json.
 
 The deploy scripts check AGENT_MODEL_ID and THUMBNAIL_MODEL_ID with it before anything is
 installed, built or diffed, so a bad id fails in seconds instead of at CloudFormation's

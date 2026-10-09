@@ -1,5 +1,5 @@
 """
-Run one Hydrolix subagent, with the bounds every subagent shares (RB12):
+Run one Hydrolix subagent, with the bounds every subagent shares:
 
 - only the Hydrolix tools it needs, each refused unless it stays on HYDROLIX_TABLE;
 - the request's tool budget, shared with the orchestrator and the other subagents;

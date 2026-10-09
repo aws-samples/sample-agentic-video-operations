@@ -1,4 +1,4 @@
-"""The executable G4.2 contract verifiers stay in the offline agentic-iops-streaming gate."""
+"""The executable contract verifiers stay in the offline Agentic IOPS gate."""
 
 from verify_approval_flow import verify_approval_flow
 from verify_stream_events import verify_stream_events

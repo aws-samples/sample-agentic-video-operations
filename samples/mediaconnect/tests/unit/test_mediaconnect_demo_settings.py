@@ -1,4 +1,4 @@
-"""DEMO=1 with the root .env's empty DEMO_SCENARIO never reaches real AWS (backlog T4)."""
+"""DEMO=1 with the root .env's empty DEMO_SCENARIO never reaches real AWS."""
 
 import asyncio
 from pathlib import Path

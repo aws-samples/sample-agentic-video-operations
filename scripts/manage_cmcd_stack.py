@@ -69,6 +69,29 @@ def read_stack_output(runner: Runner, key: str) -> str | None:
     return look_up(runner, [*arguments, "--query", query, "--output", "text"])
 
 
+NEW_CONTENT_BUCKET_PREFIX = "cmcd-content"  # the template appends -<account>
+
+
+def read_deployed_bucket_parameter(runner: Runner) -> str | None:
+    """The S3BucketName this stack was deployed with: "" for a new stack, None when unknown.
+
+    An update must pass the same value, or CloudFormation replaces the content bucket. So a
+    lookup that fails for any reason but a missing stack stops the deploy.
+    """
+    query = "Stacks[0].Parameters[?ParameterKey=='S3BucketName'].ParameterValue"
+    result = runner(
+        [
+            "cloudformation", "describe-stacks", "--region", REGION, "--stack-name", STACK,
+            "--query", query, "--output", "text",
+        ],
+        True,
+    )  # fmt: skip
+    if result.returncode == 0:
+        value = result.stdout.strip()
+        return "" if value in ("", "None") else value
+    return "" if is_missing_resource(result) else None
+
+
 def explain_foreign_bucket(bucket: str) -> None:
     print(
         f"Deployment artifacts bucket {bucket} is not owned by this AWS account. "
@@ -204,7 +227,11 @@ def deploy_stack(
     if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask, interactive=interactive):
         return 1
     origin = environ.get("CMCD_ORIGIN_DOMAIN") or "example.com"
-    bucket = environ.get("CMCD_S3_BUCKET_NAME") or f"cmcd-content-{account}"
+    deployed = read_deployed_bucket_parameter(runner)
+    if deployed is None:
+        print(f"Could not read stack {STACK}'s bucket setting. Nothing was deployed.")
+        return 1
+    bucket = environ.get("CMCD_S3_BUCKET_NAME") or deployed or NEW_CONTENT_BUCKET_PREFIX
     artifacts = environ.get("CMCD_ARTIFACTS_BUCKET") or artifact_bucket_name(account)
     status = prepare_artifact_bucket(runner, artifacts, account)
     if status != 0:
@@ -219,7 +246,6 @@ def deploy_stack(
             "--template-file", TEMPLATE, "--capabilities", "CAPABILITY_IAM", "CAPABILITY_NAMED_IAM",
             "--s3-bucket", artifacts, "--s3-prefix", STACK,
             "--parameter-overrides", f"OriginDomainName={origin}", f"S3BucketName={bucket}",
-            f"DeploymentArtifactsBucketName={artifacts}",
             f"InfluxDBInstanceType={influxdb_instance_type}",
             f"BastionInstanceType={bastion_instance_type}",
         ],

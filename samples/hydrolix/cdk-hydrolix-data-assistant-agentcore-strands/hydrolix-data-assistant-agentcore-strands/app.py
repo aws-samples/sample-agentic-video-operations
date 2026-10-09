@@ -92,7 +92,7 @@ def bounded_prompt_uuid(value: object) -> str:
 
 
 def query_results_record(request: RequestContext) -> str:
-    """The queries this request ran, for its own caller (T41): the web app shows them from
+    """The queries this request ran, for its own caller: the web app shows them from
     the response, so no browser role reads the results table."""
     records = [record.as_stream_item() for record in request.query_records]
     return json.dumps({"query_results": records}) + "\n"
@@ -130,7 +130,7 @@ async def agent_invocation(payload, context):
 
     # Every outcome after the request context exists ends with its query_results record, the
     # stream's last record: on success, at the deadline and after any failure, an error
-    # record comes first, so a caller always gets the queries that ran (T41).
+    # record comes first, so a caller always gets the queries that ran.
     request: RequestContext | None = None
     try:
         user_message = payload.get(
@@ -142,7 +142,7 @@ async def agent_invocation(payload, context):
         user_timezone = resolve_user_timezone(payload.get("user_timezone", DEFAULT_TIMEZONE))
         last_k_turns = int(payload.get("last_k_turns", 20))
 
-        # Metadata only (RB10): no prompt text, no user or session id.
+        # Metadata only: no prompt text, no user or session id.
         mode = "memory on" if caller.memory_enabled else "memory off"
         print(f"🎯 Orchestrator request (prompt length={len(user_message)}, {mode})")
 

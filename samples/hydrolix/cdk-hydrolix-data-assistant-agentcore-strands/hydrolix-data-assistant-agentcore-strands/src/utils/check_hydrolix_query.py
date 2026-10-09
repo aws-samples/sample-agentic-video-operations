@@ -1,4 +1,4 @@
-"""Refuse model SQL that does more than one SELECT on the configured table (RB12).
+"""Refuse model SQL that does more than one SELECT on the configured table.
 
 This is the runtime's own check, before a call reaches the cluster. It is a second line:
 the Hydrolix user in the secret must still be query-only and able to read only that table.

@@ -1,6 +1,6 @@
 # Tool Contract
 
-How every tool is written. This covers MCP server tools (`cmcd`, `mediaconnect`, `medialive`) and the domain packs that reuse them in `agentic-iops-streaming` (extend_agentic_iops_streaming.md §2).
+How every tool is written. This covers MCP server tools (`cmcd`, `mediaconnect`, `medialive`, `hls-doctor`) and the domain packs that reuse them in `agentic-iops-streaming` (extend_agentic_iops_streaming.md §2).
 
 Enforces guidelines §1 (names), §3 (adapters), §7 (typed data), §8 (decisions vs effects), §9 (safety in code), §10 (failures), §13 (tests).
 
@@ -71,7 +71,7 @@ def describe_channel(...): ...
 def stop_channel(...): ...
 ```
 
-**Write tools are registered only when `ALLOW_WRITES=true`.** With the default `false`, write tools do not exist, so a model cannot call them.
+**Media-resource write tools are registered only when `ALLOW_WRITES=true`.** With the default `false`, those write tools do not exist, so a model cannot call them. The one exception is agentic-iops-streaming's `save_workflow`, an approved write to the sample's own workflow store, gated by `ALLOW_WORKFLOW_DISCOVERY` instead.
 
 **Every write adapter takes an `ApprovedAction`, never loose arguments:**
 
@@ -151,7 +151,7 @@ principal-account condition.
 - `ReplayFixtureClient` answers `client.<operation>(**kwargs)` and `get_paginator(op).paginate(**kwargs)` from `fixtures/<scenario>/<service>.<operation>.json`. A fixture is either one response, or `{"sequence": [r1, r2, …]}`, consumed in order with the last one repeating. This is how a describe call returns the before state, then the after state. A response `{"error": {"Code": "…", "Message": "…"}}`, as the whole fixture or as one sequence element, raises the `ClientError` AWS would have raised, so a recorded failure is classified like a real one. `DEMO_SCENARIO` selects the scenario.
 - A missing fixture raises `ToolFailure(INVALID_REQUEST, "No fixture for medialive.describe_channel in scenario input_loss")`. It never silently returns empty data.
 - Write operations in demo mode record the call and return the fixture's "after" state. They never touch AWS.
-- Fixtures are recorded AWS responses with every account id, ARN, IP and name replaced by placeholders (`111122223333`, `demo-channel`).
+- AWS-backed samples record sanitized AWS responses, with every account id, ARN, IP and name replaced by placeholders (`111122223333`, `demo-channel`). A non-AWS source records its own sanitized format: HLS Doctor replays `http.exchanges.json`.
 
 ## 5. Shared code: `packages/media_ops_contracts/`
 
@@ -181,8 +181,8 @@ Keep each module focused on the action in this table. The package imports pydant
   - a bad signature,
   - inputs that differ from the signed parameters: one changed, one extra.
 
-  `test_every_write_checks_its_signed_parameters.py` in agentic-iops-streaming runs the last case against every registered pack write.
+  `test_every_write_checks_its_signed_parameters.py` in agentic-iops-streaming runs the last case against every registered write: each pack's and the coordinator's `save_workflow`.
 
   Plus a positive test asserting before, after and `verified`.
-- **Entrypoint:** with `ALLOW_WRITES=false`, the write tool is not registered.
+- **Entrypoint:** with `ALLOW_WRITES=false`, the media-resource write tool is not registered.
 - **Test names describe behavior:** `test_stop_channel_rejects_approval_for_another_channel`.

@@ -1,4 +1,4 @@
-// Chart formatters by name (RB11). The chart model is prompted with CDN data that callers
+// Chart formatters by name. The chart model is prompted with CDN data that callers
 // partly control (URLs, user agents, referrers), so its output is never evaluated as code.
 // It may only name one of these formatters; any other "formatter" value is removed and
 // counted. No imports, so scripts/tests/web can load this module from source.

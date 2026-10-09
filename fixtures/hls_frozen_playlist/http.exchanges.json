@@ -1,0 +1,688 @@
+{
+ "base_url": "https://demo.example/live/master.m3u8",
+ "exchanges": {
+  "https://demo.example/live/master.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"English\",LANGUAGE=\"en\",DEFAULT=YES,AUTOSELECT=YES,CHANNELS=\"2\",URI=\"audio/prog.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=6000000,AVERAGE-BANDWIDTH=5500000,CODECS=\"avc1.640028,mp4a.40.2\",RESOLUTION=1920x1080,FRAME-RATE=29.970,AUDIO=\"aud\"\nv1080/prog.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,AVERAGE-BANDWIDTH=2800000,CODECS=\"avc1.640020,mp4a.40.2\",RESOLUTION=1280x720,FRAME-RATE=29.970,AUDIO=\"aud\"\nv720/prog.m3u8\n",
+   "ttfb_ms": 15.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/prog.m3u8": {
+   "sequence": [
+    {
+     "at_ms": 0,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18416\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:36.000Z\n#EXTINF:6.00000,\nseg18416.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18416\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:36.000Z\n#EXTINF:6.00000,\nseg18416.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 6500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18416\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:36.000Z\n#EXTINF:6.00000,\nseg18416.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 12500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18416\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:36.000Z\n#EXTINF:6.00000,\nseg18416.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    }
+   ]
+  },
+  "https://demo.example/live/v1080/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 10.0,
+   "total_ms": 16.0
+  },
+  "https://demo.example/live/v1080/seg18416.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18417.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18418.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18419.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18420.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18421.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18422.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18423.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18424.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18425.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18426.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v1080/seg18427.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/prog.m3u8": {
+   "sequence": [
+    {
+     "at_ms": 0,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18416\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:36.000Z\n#EXTINF:6.00000,\nseg18416.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18417\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 2500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18418\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 4500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18419\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:24.000Z\n#EXTINF:6.00000,\nseg18424.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 6500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18420\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:24.000Z\n#EXTINF:6.00000,\nseg18424.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:30.000Z\n#EXTINF:6.00000,\nseg18425.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 8500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18421\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:24.000Z\n#EXTINF:6.00000,\nseg18424.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:30.000Z\n#EXTINF:6.00000,\nseg18425.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:36.000Z\n#EXTINF:6.00000,\nseg18426.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    }
+   ]
+  },
+  "https://demo.example/live/v720/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 10.0,
+   "total_ms": 16.0
+  },
+  "https://demo.example/live/v720/seg18416.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18417.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18418.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18419.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18420.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18421.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18422.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18423.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18424.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18425.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18426.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/v720/seg18427.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/prog.m3u8": {
+   "sequence": [
+    {
+     "at_ms": 0,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18416\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:36.000Z\n#EXTINF:6.00000,\nseg18416.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18417\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:42.000Z\n#EXTINF:6.00000,\nseg18417.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 2500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18418\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:48.000Z\n#EXTINF:6.00000,\nseg18418.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 4500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18419\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:41:54.000Z\n#EXTINF:6.00000,\nseg18419.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:24.000Z\n#EXTINF:6.00000,\nseg18424.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 6500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18420\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:00.000Z\n#EXTINF:6.00000,\nseg18420.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:24.000Z\n#EXTINF:6.00000,\nseg18424.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:30.000Z\n#EXTINF:6.00000,\nseg18425.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    },
+    {
+     "at_ms": 8500,
+     "status": 200,
+     "headers": {
+      "content-type": "application/vnd.apple.mpegurl",
+      "server": "demo-cdn",
+      "age": "0"
+     },
+     "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:18421\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:06.000Z\n#EXTINF:6.00000,\nseg18421.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:12.000Z\n#EXTINF:6.00000,\nseg18422.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:18.000Z\n#EXTINF:6.00000,\nseg18423.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:24.000Z\n#EXTINF:6.00000,\nseg18424.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:30.000Z\n#EXTINF:6.00000,\nseg18425.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:42:36.000Z\n#EXTINF:6.00000,\nseg18426.m4s\n",
+     "ttfb_ms": 14.0,
+     "total_ms": 18.0
+    }
+   ]
+  },
+  "https://demo.example/live/audio/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 10.0,
+   "total_ms": 16.0
+  },
+  "https://demo.example/live/audio/seg18416.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18417.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18418.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18419.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18420.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18421.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18422.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18423.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18424.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18425.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18426.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  },
+  "https://demo.example/live/audio/seg18427.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 9.0,
+   "total_ms": 20.0
+  }
+ }
+}

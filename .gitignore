@@ -9,6 +9,9 @@
 
 # Tool caches and run output (ruff, mypy, pytest and the eval write under .cache/)
 .cache/
+# The eval wrote here before it moved under .cache/; ignored for one more release, and
+# removed by `just clean`.
+/eval-results.json
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/

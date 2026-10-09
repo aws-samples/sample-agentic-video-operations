@@ -1,4 +1,4 @@
-"""A stdio MCP flow write runs only after the human types the exact flow ARN (RB13).
+"""A stdio MCP flow write runs only after the human types the exact flow ARN.
 
 The server asks through MCP elicitation, so the answer comes from the client's user, not
 from the model's tool arguments. A client that can't ask refuses every write.

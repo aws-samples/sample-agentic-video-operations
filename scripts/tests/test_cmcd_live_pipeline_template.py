@@ -175,7 +175,7 @@ def test_s3_gateway_endpoint_allows_only_response_and_stack_bucket_access():
     assert "Fn::Split:" in endpoint
     assert "- !Ref AWS::Region" in endpoint
     assert "- !GetAtt ContentBucket.Arn" in endpoint
-    assert "arn:${AWS::Partition}:s3:::${DeploymentArtifactsBucketName}" in endpoint
+    assert "DeploymentArtifactsBucketName" not in endpoint
     actions = set(re.findall(r"(?:Action:|-) (s3:[A-Za-z]+)", endpoint))
     assert actions == {
         "s3:DeleteObject",
@@ -187,9 +187,16 @@ def test_s3_gateway_endpoint_allows_only_response_and_stack_bucket_access():
     assert endpoint.count("Resource:") == 3
     assert endpoint.count("cloudformation-custom-resource-response-") == 1
     assert endpoint.count("ContentBucket") == 2
-    assert endpoint.count("DeploymentArtifactsBucketName") == 2
     assert "Action: '*'" not in endpoint
     assert "Resource: '*'" not in endpoint
+
+
+def test_console_launch_has_no_required_parameters():
+    parameters = template_text().split("Parameters:", 1)[1].split("Resources:", 1)[0]
+    declarations = re.split(r"(?m)^  (?=[A-Z][A-Za-z0-9]+:\n)", parameters)
+
+    assert declarations[0].strip() == ""
+    assert all("\n    Default:" in declaration for declaration in declarations[1:])
 
 
 def test_s3_gateway_endpoint_scopes_stack_buckets_to_this_account():

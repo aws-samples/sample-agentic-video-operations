@@ -6,7 +6,7 @@ something real.
 
 | Stage | What runs | AWS account | Cost |
 |---|---|---|---|
-| [0 — Prove it works](#stage-0--prove-it-works) | Every MCP server, on recorded incidents | Not needed | $0 |
+| [0 — Prove it works](#stage-0--prove-it-works) | The four fixture-backed MCP servers, on recorded incidents | Not needed | $0 |
 | [1 — Investigate with your AI client](#stage-1--investigate-an-incident-with-your-ai-client) | One sample in your MCP client, on fixtures | Not needed | Your client's model usage |
 | [2 — Run the agent locally](#stage-2--run-the-agent-locally) | The Strands agent on your machine; media data stays fixtures | Bedrock only | Cents per question |
 | [3 — Deploy](#stage-3--deploy) | A sample's full stack in your account | Yes | Real, per sample README |
@@ -28,14 +28,17 @@ Expected output:
 ok   cmcd             analyze_buffer_events
 ok   mediaconnect     list_flows
 ok   medialive        list_channels
+ok   hls-doctor       fetch_manifest
 Demo smoke passed without AWS clients.
 ```
 
-What just happened: each converted sample started as a real MCP server over
-stdio and answered a read tool from **fixtures** — recorded AWS API responses
-for a scripted incident, stored in [`fixtures/`](../fixtures/). `DEMO=1` makes
-every AWS client a replay client ([`create_aws_client.py`](../packages/media_ops_contracts/src/media_ops_contracts/create_aws_client.py)),
-so nothing can call AWS even if credentials are present. Each sample has a
+What just happened: `cmcd`, `mediaconnect`, `medialive` and `hls-doctor` each
+started as a real MCP server over stdio and answered a read tool from **fixtures**
+for a scripted incident, stored in [`fixtures/`](../fixtures/). For the three AWS
+samples those are recorded AWS API responses: `DEMO=1` makes every AWS client a
+replay client ([`create_aws_client.py`](../packages/media_ops_contracts/src/media_ops_contracts/create_aws_client.py)),
+so nothing can call AWS even if credentials are present. HLS Doctor replays
+recorded HTTP exchanges (`http.exchanges.json`) instead, so nothing reaches a stream. Each sample has a
 default scenario (for example `input_loss` for MediaLive, `srt_packet_loss` for
 MediaConnect); `DEMO_SCENARIO` selects another one from `fixtures/`.
 
@@ -84,10 +87,10 @@ media side in demo mode:
 ```bash
 cp .env.example .env          # defaults: DEMO=false, writes disabled
 just doctor aws               # credentials, Bedrock access
-DEMO=1 just run agentic-iops-streaming           # local mode on port 8080
+DEMO=1 just run agentic-iops-streaming           # local mode, port 8080 unless AGENTIC_IOPS_PORT is set
 ```
 
-In another terminal:
+In another terminal (use your `AGENTIC_IOPS_PORT` instead of 8080 if you set one):
 
 ```bash
 curl -N -X POST http://localhost:8080/invocations \
@@ -97,9 +100,10 @@ curl -N -X POST http://localhost:8080/invocations \
 
 The response streams one JSON event per SSE `data:` line — `task_started`,
 `tool_called` per tool, then `final_answer` — the same `StreamEvent` contract a
-deployed agent emits ([`extend_agentic_iops_streaming.md`](extend_agentic_iops_streaming.md)). Writes stay off unless you
-set `ALLOW_WRITES=true`, and even then every write pauses for an explicit
-approval decision.
+deployed agent emits ([`extend_agentic_iops_streaming.md`](extend_agentic_iops_streaming.md)). Media-resource writes
+stay off unless you set `ALLOW_WRITES=true`. Workflow discovery is on by default
+(`ALLOW_WORKFLOW_DISCOVERY`); its one write, `save_workflow`, goes to the sample's
+own store. Every write pauses for an explicit approval decision.
 
 ## Stage 3 — Deploy
 

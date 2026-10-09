@@ -1,4 +1,4 @@
-"""Vision can't vouch for a picture on its own word (T49).
+"""Vision can't vouch for a picture on its own word.
 
 On-screen text reaches the vision model as part of the picture, so the model's verdict and
 its confidence can be steered by the content being judged. HEALTHY therefore also needs the

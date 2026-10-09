@@ -1,5 +1,5 @@
 """
-Store executed Hydrolix queries in the results table (T41).
+Store executed Hydrolix queries in the results table.
 
 Items are keyed by the verified caller's `sub` (partition) and a millisecond timestamp
 with a unique suffix (sort), so one user's records never mix with another's and two
@@ -10,13 +10,31 @@ QUESTION_ANSWERS_TABLE names the table (set by the CDK stack).
 """
 
 import os
+import threading
 from uuid import uuid4
 
 import boto3
+from botocore.config import Config
 
 from .query_record import QueryRecord
 
 QUESTION_ANSWERS_TABLE = os.getenv("QUESTION_ANSWERS_TABLE")
+
+# Short timeouts: the write runs inside the request, so during an AWS failure it must give up
+# well before the request deadline instead of waiting out botocore's 60 s defaults.
+QUICK = Config(connect_timeout=5, read_timeout=10, retries={"max_attempts": 2})
+_dynamodb = None
+_dynamodb_lock = threading.Lock()  # subagents write from their own threads
+
+
+def _dynamodb_client():
+    """The DynamoDB client, built on the first write and reused after."""
+    global _dynamodb
+    with _dynamodb_lock:
+        if _dynamodb is None:
+            region = os.getenv("AWS_REGION", "us-east-1")
+            _dynamodb = boto3.client("dynamodb", region_name=region, config=QUICK)
+        return _dynamodb
 
 
 def save_query_record(actor_id: str, prompt_uuid: str, record: QueryRecord) -> bool:
@@ -37,7 +55,7 @@ def save_query_record(actor_id: str, prompt_uuid: str, record: QueryRecord) -> b
         "omitted_characters": {"M": {name: {"N": str(n)} for name, n in record.omitted.items()}},
     }
     try:
-        boto3.client("dynamodb").put_item(TableName=QUESTION_ANSWERS_TABLE, Item=item)
+        _dynamodb_client().put_item(TableName=QUESTION_ANSWERS_TABLE, Item=item)
     except Exception as error:
         print(f"❌ Query record not saved: {type(error).__name__}")
         return False

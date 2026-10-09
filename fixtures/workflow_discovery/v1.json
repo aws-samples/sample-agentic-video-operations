@@ -1,0 +1,74 @@
+{
+  "workflow_id": "demo-live-path-ab12cd",
+  "version": 1,
+  "name": "demo live path",
+  "entry_point_arn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+  "discovered_at": "2026-10-06T12:00:00Z",
+  "nodes": [
+    {
+      "arn": "arn:aws:cloudfront::111122223333:distribution/E123DEMO456",
+      "service": "cloudfront",
+      "resource_type": "distribution",
+      "name": "demo-distribution",
+      "sources": [
+        "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint"
+      ],
+      "destinations": []
+    },
+    {
+      "arn": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+      "service": "mediaconnect",
+      "resource_type": "flow",
+      "name": "demo-contribution",
+      "sources": [],
+      "destinations": [
+        "arn:aws:medialive:us-west-2:111122223333:channel:1234567"
+      ]
+    },
+    {
+      "arn": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+      "service": "medialive",
+      "resource_type": "channel",
+      "name": "demo-downstream-channel",
+      "sources": [
+        "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1"
+      ],
+      "destinations": [
+        "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint"
+      ]
+    },
+    {
+      "arn": "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint",
+      "service": "mediapackage",
+      "resource_type": "origin_endpoints",
+      "name": "demo-origin-endpoint",
+      "sources": [
+        "arn:aws:medialive:us-west-2:111122223333:channel:1234567"
+      ],
+      "destinations": [
+        "arn:aws:cloudfront::111122223333:distribution/E123DEMO456"
+      ]
+    }
+  ],
+  "failed_nodes": [],
+  "edges": [
+    {
+      "source": "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1",
+      "destination": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+      "inferred": false
+    },
+    {
+      "source": "arn:aws:medialive:us-west-2:111122223333:channel:1234567",
+      "destination": "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint",
+      "inferred": false
+    },
+    {
+      "source": "arn:aws:mediapackage:us-west-2:111122223333:origin_endpoints/demo-origin-endpoint",
+      "destination": "arn:aws:cloudfront::111122223333:distribution/E123DEMO456",
+      "inferred": false
+    }
+  ],
+  "content_sha256": "c386d5bc1b2be66cab962f703ed8ba1aab3242b2e1adc33ac1350da641aef391",
+  "confirmed_by": "eval-operator",
+  "confirmed_at": "2026-10-06T12:00:00Z"
+}

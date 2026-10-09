@@ -164,7 +164,13 @@ class StreamEventRecorder(HookProvider):
                 total_tokens=total_tokens,
                 cache_read_input_tokens=cache_read_input_tokens,
                 cache_write_input_tokens=cache_write_input_tokens,
-                estimated_usd=estimate_model_cost_usd(model_id, input_tokens, output_tokens),
+                estimated_usd=estimate_model_cost_usd(
+                    model_id,
+                    input_tokens,
+                    output_tokens,
+                    cache_read_input_tokens=cache_read_input_tokens,
+                    cache_write_input_tokens=cache_write_input_tokens,
+                ),
             )
         )
 

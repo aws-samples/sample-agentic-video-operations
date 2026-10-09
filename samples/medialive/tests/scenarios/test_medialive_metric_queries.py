@@ -204,7 +204,7 @@ def test_a_region_wide_reading_says_it_is_not_specific_to_the_channel():
 
     report = identify_channel_issues("1", [dropped])
 
-    assert report.issues == []  # context only (T64): never a channel issue
+    assert report.issues == []  # context only: never a channel issue
     [reading] = report.region_wide
     assert "all channels in us-west-2 combined" in reading.description
     assert reading.region == "us-west-2"

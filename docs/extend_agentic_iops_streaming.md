@@ -13,7 +13,7 @@ Enforces guidelines §3–4 (layers), §7 (typed data), §9 (safety), §11 (prom
   - `AGENTIC_IOPS_TOOL_BUDGET` (default 12) caps tool calls per request. Going over it ends the turn with `error(InvalidRequest)` and a next action.
 - **Interrupt state survives between requests** through a Strands session manager keyed by `session_id`: `AgentCoreMemorySessionManager` when `MEMORY_ID` is set, `FileSessionManager` otherwise (local and `DEMO=1`).
 - **One signing key per deployment.** AgentCore pins a session to one microVM only while it lives: after an idle timeout or a restart, the same session resumes in a new container. An approval paused in one container must therefore verify in another, so with `MEMORY_ID` set the runtime refuses to start unless `APPROVAL_SIGNING_KEY` is set (the agentic-iops-streaming CDK injects it from Secrets Manager). Locally, the coordinator and packs share one process, so the per-process key of `resolve_approval_signing_key` is enough.
-- **Entrypoint:** `entrypoints/handle_agentcore_invocation.py` (`BedrockAgentCoreApp`, port 8080). It parses the request, builds the agent and streams events. Nothing else.
+- **Entrypoint:** `entrypoints/handle_agentcore_invocation.py` (`BedrockAgentCoreApp`, port 8080: the default, and the only port the deployed container accepts; `AGENTIC_IOPS_PORT` changes it for local runs). It parses the request, builds the agent and streams events. Nothing else.
   - **Streaming:** the agent runs on a worker thread, and each `StreamEvent` is yielded as its hook records it, so `task_started` and `tool_called` reach the caller while tools and the model are still running.
   - **Caller identity fails closed:** a request without an actor (the header, or with JWT auth a valid bearer token) or a session id gets `error(InvalidRequest)` and runs nothing. Only `AGENTIC_IOPS_LOCAL_MODE=true`, which `just run agentic-iops-streaming` sets and the deployed runtime never does, substitutes one local operator and session.
   - **Trust boundary, IAM auth (the default):** the actor header is supplied by the caller and not verified. Any principal allowed to invoke the runtime can claim any actor id, so actor isolation (one operator's pending approvals hidden from another) holds only among principals trusted to invoke. The stack outputs `InvokePolicyArn` (invoke this runtime, nothing else); `AGENTIC_IOPS_INVOKER_ROLE_NAME` attaches it to one role at deploy.
@@ -64,9 +64,12 @@ class ApprovalDecision(BaseModel):
 - `final_answer`: impact first, then evidence, then the next action.
 - `usage_reported`: one per model-backed turn, immediately before the terminal
   `final_answer`, `approval_requested`, or `error`. It reports exact input,
-  output, cache-read, cache-write, and total token counts. `estimated_usd` is
-  the label **estimated list price, in-region on-demand, excludes caching and
-  cross-region differences**, using the dated table in
+  output, cache-read, cache-write, and total token counts. The agent's model
+  caches its stable prefix: cache points after the tool schemas, the system
+  prompt and the last user message, so the later calls of a turn read those
+  from Bedrock's prompt cache. `estimated_usd` is the label **estimated list
+  price, in-region on-demand, cache reads at 0.1x and writes at 1.25x the input
+  rate, excludes cross-region differences**, using the dated table in
   `media_ops_contracts/estimate_model_cost.py`. The table links to
   <https://aws.amazon.com/bedrock/pricing/>, was checked on 2026-10-06, and
   its $3/$15 and $1/$5 rates could not be confirmed through the AWS Price List
@@ -97,7 +100,7 @@ class DomainPack(Protocol):
   [project.entry-points."media_ops.domain_packs"]
   medialive = "medialive_mcp.domain_pack:create_domain_pack"
   ```
-- **Which packs ship:** medialive and mediaconnect. CMCD remains a standalone MCP sample.
+- **Which packs ship:** medialive, mediaconnect and hls (read-only HLS stream diagnostics from samples/hls-doctor). CMCD remains a standalone MCP sample.
 - **Selection:** `MEDIA_DOMAINS=medialive,mediaconnect` chooses the packs. An unknown name fails at startup and lists the installed packs.
 - **What a pack wraps:** plain typed functions over **the same adapters the sample's MCP server registers**. The pack builds its own clients and settings, including `DEMO` replay. The coordinator wraps the functions with `strands.tool`. A pack never imports Strands, the coordinator or another pack.
 - **Cross-domain reasoning** (signal path from source to flow to channel) lives in coordinator skills, not in a pack.
@@ -122,7 +125,7 @@ class DomainPack(Protocol):
 
 ## 4. Writes: typed tools, approval through a Strands interrupt
 
-**Write tools are registered only when `ALLOW_WRITES=true`.** Otherwise the model never sees them.
+**The domain packs' write tools are registered only when `ALLOW_WRITES=true`.** Otherwise the model never sees them. The coordinator's own approved write, `save_workflow` (§8), is registered by the runtime setting `ALLOW_WORKFLOW_DISCOVERY` instead, which the deployed stack leaves on, and goes through this same flow.
 
 **The flow,** using Strands' human-in-the-loop API in strands-agents 1.x (checked against the installed 1.58.0 source):
 1. **Interrupt.** A `BeforeToolCallEvent` hook runs for every write tool.
@@ -140,7 +143,7 @@ class DomainPack(Protocol):
 
      If any check fails, the hook sets `event.cancel_tool` and the coordinator streams `error(ApprovalExpired)` or `error(ApprovalRequired)`. Nothing is signed.
    - **Signing:** if every check passes, the hook signs an `ApprovedAction` for exactly that proposal, with the **same** `expires_at`, never a fresh one. It writes it into `event.tool_use["input"]["approved_action"]`, replacing any value the model supplied.
-5. **Execute and verify.** The write adapter runs `require_action_approval`, acts once, verifies, and returns `ActionResult`. The coordinator streams `action_completed`, then `verification_completed`.
+5. **Execute and verify.** The write adapter runs `require_action_approval` and `require_signed_parameters` (write_safe_tools.md §3), acts once, verifies, and returns `ActionResult`. The coordinator streams `action_completed`, then `verification_completed`.
 
 **Approval rules:**
 - A decision for an unknown `approval_id`, another session or another actor streams `error(ApprovalRequired)`. The pending tool call is not run.
@@ -187,7 +190,7 @@ class DomainPack(Protocol):
 
 The picture is measured, not described. `packages/media_ops_video_quality/` is framework-free (pydantic and Pillow, no AWS client), and every pack uses it the same way.
 
-- **Sampling (pack):** `analyze_channel_visual_quality` polls every pipeline's thumbnail in the same ticks: 10 frames over 30 s on MCP, 8 over 20 s in agentic-iops-streaming, bounded to 20 frames and 120 s. One frame is kept per distinct thumbnail timestamp. A pipeline without thumbnails gives no frames, and is reported as such. **Before polling,** the channel's own answer is read: thumbnails `DISABLED` in its `EncoderSettings.ThumbnailConfiguration`, or a channel that is not `RUNNING`, gives no frames at once, with that reason. Missing thumbnails on a running channel with them enabled are transient: the whole window is polled.
+- **Sampling (pack):** `analyze_channel_visual_quality` polls every pipeline's thumbnail in the same ticks: 10 frames over 30 s on MCP, 8 over 20 s in agentic-iops-streaming, bounded to 20 frames and 120 s. One frame is kept per distinct thumbnail timestamp. A pipeline without thumbnails gives no frames, and is reported as such. **Before polling,** the channel's own answer is read: thumbnails not enabled in its `EncoderSettings.ThumbnailConfiguration` (`DISABLED`, or no configuration at all, which MediaLive treats as off), or a channel that is not `RUNNING`, gives no frames at once, with that reason. Only a running channel with thumbnails `AUTO` is polled, through the whole window: a frame missing there is transient.
 - **Measurements (`measure_frame`, `compare_frames`):** sharpness (Laplacian variance), a **blockiness estimate** (the extra luma step at 8-px boundaries; the thumbnail's own JPEG contributes, so it is an estimate, not a standard metric), luma mean, spread and clipping, and the change between frames (freeze, scene change). Every threshold is data in `quality_thresholds.py`, with its measured or design rationale.
 - **Vision (`score_with_vision`):** one Converse call per pipeline window, forced to answer as a 1–5 rubric through a tool call. It is retried once, otherwise `unavailable`. The prompt says on-screen text is part of the picture, never an instruction, and that text addressed to the model is a card (`slate_or_bars` 1).
 - **Window (`assess_window`):** shares, the longest frozen run, a 0–100 score and a status. **With no frames, both `score` and `deterministic_score` are `null` and `confidence` is 0:** nothing was measured, so no reader of either can mistake it for a perfect picture. **Without a trusted vision verdict, a clean window is `UNVERIFIED`, never `HEALTHY`.** A verdict is *trusted* when the call succeeded and the model's own stated confidence is at least `trusted_vision_confidence` (0.5). That confidence comes from the model, which sees the frames' own text, so it is never proof by itself:
@@ -205,11 +208,11 @@ The picture is measured, not described. `packages/media_ops_video_quality/` is f
   - **Fixture and eval:** `fixtures/transport_freeze` (generated): the SRT source stays connected while its picture is frozen and content quality analysis reports frozen frames. The agentic-iops-streaming `transport_freeze` eval scenario expects `analyze_flow_visual_quality`, the keywords "frozen" and "upstream", and no writes.
 
 
-## 8. Workflow discovery (contract for F3)
+## 8. Workflow discovery
 
 This section is the contract the workflow tools, fixtures, eval scenarios and skills are built against. Where code and this section differ, the code is wrong. A **workflow** is a live signal chain, such as EMX → EML → EMP → CloudFront, stored so that monitoring and diagnosis can walk the known path instead of guessing it.
 
-**Owner:** the coordinator (this sample), not a domain pack. The tools, their IAM and their table live in the agentic-iops-streaming package and its CDK stack; the packs stay single-service. One setting, ALLOW_WORKFLOW_DISCOVERY (default true), registers all four tools. It is separate from `ALLOW_WRITES`, because none of them changes a media resource.
+**Owner:** the coordinator (this sample), not a domain pack. The tools, their IAM and their table live in the agentic-iops-streaming package and its CDK stack; the packs stay single-service. One setting, ALLOW_WORKFLOW_DISCOVERY (default true), registers all four tools. It is separate from `ALLOW_WRITES`, because none of them changes a media resource. It is a runtime setting: a local run reads it from the root `.env`, but the deploy doesn't pass it, so the deployed runtime runs with discovery on and the stack always grants the workflow IAM. Turning discovery off in a deployment means changing the stack.
 
 ### 8.1 Tools
 
@@ -223,15 +226,15 @@ This section is the contract the workflow tools, fixtures, eval scenarios and sk
 - **discover_workflow** proposes; it never stores. It returns a `WorkflowProposal` and keeps it in the session's agent state under `workflow_proposals[workflow_id]`, replacing any earlier proposal for that id. When a stored workflow already contains the entry point, the proposal reuses that workflow's id, its `version` is the latest stored version + 1, and it carries a `WorkflowDiff` against that latest version. There is no separate rediscover tool.
 - **discover_workflow needs no approval** because it leaves nothing behind. It MUST delete the signal map in a `finally`, on success, failure, timeout or cancellation (§8.3 gives the outcome rules).
 - **save_workflow** is the only write, and its inputs are exactly what the §4 hook signs. Every input other than `workflow_id` and `approved_action` is a string, so the hook's `ActionProposal` is `action = "save_workflow"`, `resource_id = workflow_id` and `parameters = {version, entry_point_arn, name, content_sha256}`, all copied from the proposal the operator was shown. The model never passes a graph. The adapter then, in order:
-  1. runs `require_action_approval` (action, resource, expiry, signature);
+  1. runs `require_action_approval` (action, resource, expiry, signature), then `require_signed_parameters` with the four passed inputs, so the signed parameters are exactly those, none changed or added (`APPROVAL_REQUIRED`);
   2. loads `workflow_proposals[workflow_id]` from the session, and refuses with `RESOURCE_NOT_FOUND` if there is none;
-  3. recomputes the proposal's `content_sha256` and refuses with `INVALID_REQUEST` unless it, `version`, `entry_point_arn` and `name` equal the signed parameters. So what is stored is exactly what was approved;
+  3. recomputes the proposal's `content_sha256` and refuses with `INVALID_REQUEST` unless it, `version`, `entry_point_arn` and `name` equal the passed inputs. Step 1 tied those to the signature, so what is stored is exactly what was approved;
   4. writes the item with `attribute_not_exists(#v)`. If another save took that version first, it refuses with `INVALID_REQUEST` ("the workflow changed since it was shown; discover it again");
   5. reads the version back, then returns an `ActionResult`, the §4 write result the completion and verification events come from:
      - `resource_id` = `workflow_id`;
      - `before_state` = `"absent"`, or `"v<N> <sha256[:12]>"` for the latest stored version;
      - `after_state` = `"v<N+1> <sha256[:12]>"`, using the hash **observed in the read-back item**, never the signed one, so a mismatch is visible in the result;
-     - `verified` is true only when the read-back item's `version` and `content_sha256` equal the signed values. When the hash differs, `verified` is false and `after_state` shows the stored hash.
+     - `verified` is true only when the read-back item's `version` and `content_sha256` equal the signed values. When the hash differs, `verified` is false and `after_state` shows the stored hash. **When the read-back finds no item, `verified` is false and `after_state` is `"v<N+1> not read back: the store returned no item"`**: the input is never reported in its place.
 
      The agent shows the stored workflow by calling `get_workflow` afterwards.
 - **Reads come from our store, never AWS.** `list_workflows(contains_arn=...)` is how a single channel or flow finds its workflow. Drift is a fresh `discover_workflow` compared with the stored version.
@@ -279,7 +282,7 @@ Signal maps are a MediaLive API (botocore's `medialive` model, checked against t
 1. **Create:** `CreateSignalMap` with `DiscoveryEntryPointArn` = the entry point, `Name` = `agentic-iops-<workflow_id>` (1–255 characters), `Tags` = `{"managed-by": "agentic-iops-streaming"}`, and `RequestId` = a fresh UUID (the API's idempotency token). The response's `Id` identifies the map.
 2. **Wait:** `GetSignalMap(Identifier=Id)` until `Status` leaves `CREATE_IN_PROGRESS`, using the bounded `wait_for_condition` (5 s interval, the same as botocore's `SignalMapCreated` waiter, and a 120 s deadline). `CREATE_COMPLETE` succeeds; `CREATE_FAILED` or the deadline fails. The status values are `CREATE_IN_PROGRESS`, `CREATE_COMPLETE`, `CREATE_FAILED`, `UPDATE_IN_PROGRESS`, `UPDATE_COMPLETE`, `UPDATE_REVERTED`, `UPDATE_FAILED`, `READY` and `NOT_READY`; only the first three occur for a new map.
 3. **Read:** the fields mapped from the `GetSignalMap` response are `Id`, `Status`, `ErrorMessage`, `DiscoveryEntryPointArn`, `LastDiscoveredAt`, `MediaResourceMap` and `FailedMediaResourceMap`. Both maps are `{ARN: MediaResource}`, where `MediaResource` is `{"Name": str, "Sources": [{"Arn": str, "Name": str}], "Destinations": [{"Arn": str, "Name": str}]}`. Every key becomes a node; every source and destination pair becomes an edge.
-4. **Delete:** `DeleteSignalMap(Identifier=Id)` in the `finally`, then one `GetSignalMap`, which must raise a `ClientError` that `classify_aws_error` classifies as `RESOURCE_NOT_FOUND` (`NotFoundException`). Any other answer is a cleanup failure, `AccessDeniedException` included. With a tag-conditioned grant, IAM may refuse the read of a deleted map before the service can say it's gone, and that refusal never counts as proof. The live probe (B3) records the real post-delete answer.
+4. **Delete:** `DeleteSignalMap(Identifier=Id)` in the `finally`, then one `GetSignalMap`, which must raise a `ClientError` that `classify_aws_error` classifies as `RESOURCE_NOT_FOUND` (`NotFoundException`). Any other answer is a cleanup failure, `AccessDeniedException` included. With a tag-conditioned grant, IAM may refuse the read of a deleted map before the service can say it's gone, and that refusal never counts as proof. The live sandbox probe records the real post-delete answer.
 
 **Outcomes:** one rule covers every combination.
 
@@ -306,10 +309,10 @@ Signal maps are a MediaLive API (botocore's `medialive` model, checked against t
 
 - **Deployed:** one DynamoDB table in the coordinator's CDK stack, on-demand, with point-in-time recovery, encryption at rest and the stack's `RETAIN` policy. Its key is partition key `workflow_id` (S) and sort key `version` (N). Each item holds the `Workflow` record as attributes, plus `entry_point_arn` and `node_arns` (a string set, never empty: it always holds the entry point). An item over 350 KB is refused before writing, with an `INVALID_REQUEST` failure, staying under DynamoDB's 400 KB limit.
 - **Attribute names:** `name` and `source` are DynamoDB reserved words, so every expression names attributes through `ExpressionAttributeNames` (`#n`, `#v`, …), never literally.
-- **Local and demo:** JSON files at `.cache/workflows/<workflow_id>/v<version>.json`, one `Workflow` per file, under the ignored `.cache/`. A save creates the file exclusively, and fails if it exists (the local `attribute_not_exists`).
+- **Local and demo:** JSON files at `.cache/workflows/<workflow_id>/v<version>.json`, one `Workflow` per file, under the ignored `.cache/`. A save creates the file exclusively, and fails if it exists (the local `attribute_not_exists`). `get_workflow` takes a model-supplied id, so the id must have the generated format (lowercase words joined by hyphens, at most 64 characters, else `INVALID_REQUEST`), and every path is resolved and must stay inside the resolved root: `../`, a symlinked folder or a symlinked file is refused. A file whose record names another id or version is not that workflow. Inside the repository, `WORKFLOW_DIR` must be under `.cache/`, as `SESSION_DIR` must; a path outside the repository is the operator's to protect.
 - **Versions are immutable.** A save writes `version` = latest + 1, conditioned on the item not existing (§8.1, step 4).
 - **Workflows are account-wide,** shared by every operator of the deployment. Each version records who confirmed it and when; nothing is keyed by actor.
-- **`get_workflow`** is one `Query` on `workflow_id`, latest first (`ScanIndexForward=False`, `Limit=1`), or one `GetItem` for a given version.
+- **`get_workflow`** is one `Query` on `workflow_id`, latest first (`ScanIndexForward=False`, `Limit=1`), or one `GetItem` for a given version. **Both are `ConsistentRead=True`:** an eventually consistent read just after a save could miss the version it wrote or report the one before it, and the save's read-back and `before_state` use these reads. The latest-version `Query` also requires the record's own version to equal the item's sort key, and treats a mismatch as absent.
 - **`list_workflows`** pages through one `Scan` to the end (following `LastEvaluatedKey`), with a projection of the summary fields and `node_arns`.
   - It collapses the versions to exactly one `WorkflowSummary` per `workflow_id`, taken from its highest version.
   - With `contains_arn`, it keeps the workflows whose **latest** version's `node_arns` contain that ARN.
@@ -320,15 +323,22 @@ Signal maps are a MediaLive API (botocore's `medialive` model, checked against t
 
 | Actions | Resource | Condition |
 |---|---|---|
-| `medialive:CreateSignalMap`, `medialive:CreateTags` | `arn:aws:medialive:<region>:<account>:signal-map:*` | `aws:RequestTag/managed-by` = `agentic-iops-streaming` and `aws:TagKeys` = `["managed-by"]`. The Service Authorization Reference lists `CreateTags` as a dependent action of `CreateSignalMap` |
-| `medialive:GetSignalMap`, `medialive:DeleteSignalMap` | `arn:aws:medialive:<region>:<account>:signal-map:*` | `aws:ResourceTag/managed-by` = `agentic-iops-streaming` |
+| `medialive:CreateSignalMap`, `medialive:CreateTags` | `arn:<partition>:medialive:<region>:<account>:signal-map:*` | `aws:RequestTag/managed-by` = `agentic-iops-streaming` and `aws:TagKeys` = `["managed-by"]`. The Service Authorization Reference lists `CreateTags` as a dependent action of `CreateSignalMap` |
+| `medialive:GetSignalMap`, `medialive:DeleteSignalMap` | `arn:<partition>:medialive:<region>:<account>:signal-map:*` | `aws:ResourceTag/managed-by` = `agentic-iops-streaming` |
 | `dynamodb:PutItem`, `dynamodb:GetItem`, `dynamodb:Query`, `dynamodb:Scan` | the workflow table's ARN only | none |
-| The discovery reads of the services a map can contain (MediaConnect, MediaLive, MediaPackage v1 and v2, MediaTailor, CloudFront, S3), read-only | as narrow as each API allows | none |
 
 - **No other signal-map action is granted:** no `StartUpdateSignalMap`, no `ListSignalMaps` (the store is the list), and no monitor deployment.
-- **The discovery reads are not final.** Whether discovery runs with the caller's credentials, and which reads it needs, is settled by the live probe (B3) on a sandbox account, and the list is trimmed to what the probe shows is used. Each `*` resource gets a reasoned entry in the IAM gate's allowlist, as today.
+- **The IAM gate:** `TAG_SCOPED_WRITES` in `scripts/check_synth_iam.py` enforces the
+  exact signal-map ARN and request/resource tag conditions on every synth.
+- **These three statements are all the stack grants for discovery.** The resource ARN is the stack's `Fn::Sub` of `arn:${AWS::Partition}:medialive:${AWS::Region}:${AWS::AccountId}:signal-map:*`. MediaLive and MediaConnect reads come only from those packs' own IAM, when they are in `MEDIA_DOMAINS`. Nothing grants MediaPackage, MediaTailor, CloudFront or S3 reads.
+- **An open question for the live sandbox probe: does discovery read with the caller's permissions?** AWS's example workflow-monitor policies give a principal reads on CloudFront, MediaConnect, MediaLive, MediaPackage (v1, v2 and VOD) and MediaTailor, which suggests it does. If so, a map that reaches a resource the runtime role can't read comes back partial: that resource is listed in the map's `FailedMediaResourceMap`, and the proposal shows it as a failed node rather than inventing a link. The probe decides which reads, if any, are added. Each one would be pinned in the CDK tests and, for a `*` resource, given a reasoned entry in the IAM gate's allowlist.
 - **The tag conditions are the scope:** the runtime can create, read and delete only the maps it tagged, and never touches a map an operator made in the console.
-- **A residual for B3:** with only `aws:RequestTag`, `CreateTags` would also let the role add our tag to an existing operator map. No adapter calls `CreateTags`, so the model can't reach it. If the probe shows create-time tagging works without `CreateTags`, it is removed; otherwise this residual stays recorded here.
+- **A live-probe residual:** with only `aws:RequestTag`, `CreateTags` would also let the role
+  add our tag to an existing operator map. A static repository guard refuses direct
+  `create_tags` or `CreateTags` operation names in every sample source file, so the model
+  cannot reach it. If the probe shows
+  create-time tagging works without `CreateTags`, the permission is removed; otherwise
+  this residual stays recorded here.
 
 ### 8.6 Required tests
 

@@ -1,4 +1,4 @@
-// node --test: chart formatters are names we implement; model output is never run (RB11).
+// node --test: chart formatters are names we implement; model output is never run.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

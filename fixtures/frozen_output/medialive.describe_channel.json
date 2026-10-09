@@ -6,6 +6,7 @@
   "LogLevel": "INFO",
   "PipelinesRunningCount": 2,
   "State": "RUNNING",
+  "EncoderSettings": {"ThumbnailConfiguration": {"State": "AUTO"}},
   "InputAttachments": [
     {"InputAttachmentName": "demo-primary-srt", "InputId": "7654321"},
     {"InputAttachmentName": "demo-backup-srt", "InputId": "7654322"}

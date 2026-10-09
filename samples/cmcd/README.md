@@ -244,7 +244,8 @@ cd sample-agentic-video-operations
    ```dotenv
    # Domain used only when adapting the template's custom origin.
    CMCD_ORIGIN_DOMAIN=example.com
-   # Full, globally unique bucket name. Leave unset to use cmcd-content-<account id>.
+   # Bucket name prefix: the template appends -<account id>. Leave unset to use
+   # cmcd-content (bucket cmcd-content-<account id>); an existing stack keeps its name.
    CMCD_S3_BUCKET_NAME=
    # Optional deployment-artifact bucket override if the generated name is unavailable.
    CMCD_ARTIFACTS_BUCKET=

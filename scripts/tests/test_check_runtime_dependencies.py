@@ -1,4 +1,4 @@
-"""An AgentCore runtime waits for every policy attached to its role (RB14).
+"""An AgentCore runtime waits for every policy attached to its role.
 
 The live failure: CREATE_FAILED AgenticIopsRuntime, "Access denied while validating ECR URI …",
 because the role's DefaultPolicy (with the ECR pull) was created in the same second.
@@ -58,7 +58,7 @@ def test_a_ref_to_the_role_is_read_like_a_get_att():
 
 
 # The shapes CDK synthesizes for `Role.fromRoleArn(..., {mutable: true})` plus
-# `repository.grantPull(role)` (GPT's RB14 review case, checked with a real synth): the grant
+# `repository.grantPull(role)` (checked with a real synth): the grant
 # is an in-stack policy that names the role, while the runtime holds the role's ARN.
 ECR_PULL = {
     "Statement": [{"Action": "ecr:GetAuthorizationToken", "Effect": "Allow", "Resource": "*"}]

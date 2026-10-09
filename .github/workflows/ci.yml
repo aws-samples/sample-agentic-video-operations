@@ -85,7 +85,7 @@ jobs:
       - name: Default-synth IAM gate
         if: matrix.iam == 'required'
         run: python3 "$GITHUB_WORKSPACE/scripts/check_synth_iam.py" cdk.out/*.template.json
-      # RB14: an AgentCore runtime must wait for every policy on its role, in every variant.
+      # An AgentCore runtime must wait for every policy on its role, in every variant.
       - name: Default-synth runtime dependencies
         run: python3 "$GITHUB_WORKSPACE/scripts/check_runtime_dependencies.py" cdk.out/*.template.json
       - run: npx cdk synth --quiet -c allowWrites=true

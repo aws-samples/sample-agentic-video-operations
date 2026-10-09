@@ -11,6 +11,10 @@ samples/agentic-iops-streaming/cdk/cdk.out/AgenticIopsStreamingStack.template.js
   permissions. Every other statement must name ARNs.
 - NEVER_GRANT actions (workload identity tokens) fail on any resource; iam:PassRole and
   sts:AssumeRole fail on "*"; an action of "*" or "<service>:*" fails.
+- Every statement must be readable, or it fails: a literal Effect of Allow or Deny,
+  and literal action names. Policies are read wherever IAM keeps them (policy resources,
+  and the inline policies of roles, users and groups), a managed policy may be attached
+  only from this template, and a resource intrinsic that comes out as "*" counts as "*".
 """
 
 import json
@@ -89,14 +93,21 @@ def find_iam_problems(template: dict[str, Any]) -> list[str]:
     allowed_writes = lowercase_keys(ALLOWED_WRITES)
     tag_scoped_writes = {name.lower(): rule for name, rule in TAG_SCOPED_WRITES.items()}
     star_allowed = lowercase_keys(STAR_RESOURCE_ALLOWED)
-    problems = []
-    for logical_id, statement in allow_statements(template):
+    stack_resource_writes = lowercase_keys(STACK_RESOURCE_WRITES)
+    problems = attachment_problems(template)
+    for logical_id, statement in all_statements(template):
+        unreadable = unreadable_statement(statement)
+        if unreadable:
+            problems.append(f"{logical_id}: {unreadable}")
+            continue
+        if statement["Effect"] != "Allow":
+            continue  # a Deny only takes away
         if "NotAction" in statement or "NotResource" in statement:
             problems.append(f"{logical_id}: NotAction/NotResource is not allowed")
         actions = as_list(statement.get("Action"))
-        resources = as_list(statement.get("Resource"))
+        resources = [literal(resource) for resource in as_list(statement.get("Resource"))]
         for action in actions:
-            key = str(action).lower()
+            key = action.lower()
             verb = key.split(":", 1)[-1]
             if key in never_grant:
                 problems.append(f"{logical_id}: {action} is never granted ({never_grant[key]})")
@@ -127,16 +138,16 @@ def find_iam_problems(template: dict[str, Any]) -> list[str]:
                     statement,
                     tag_scoped_writes[key],
                 )
-            if action in STACK_RESOURCE_WRITES and (
+            if key in stack_resource_writes and (
                 not resources
                 or not all(
-                    references_stack_resource(template, resource, STACK_RESOURCE_WRITES[action])
+                    references_stack_resource(template, resource, stack_resource_writes[key])
                     for resource in resources
                 )
             ):
                 problems.append(
                     f"{logical_id}: {action} is not scoped to this stack's "
-                    f"{STACK_RESOURCE_WRITES[action]}"
+                    f"{stack_resource_writes[key]}"
                 )
     return sorted(set(problems))
 
@@ -195,18 +206,79 @@ def references_stack_resource(template: dict[str, Any], resource: Any, resource_
     return template.get("Resources", {}).get(logical_id, {}).get("Type") == resource_type
 
 
-def allow_statements(template: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
+POLICY_RESOURCES = frozenset(
+    {
+        "AWS::IAM::Policy",
+        "AWS::IAM::ManagedPolicy",
+        "AWS::IAM::RolePolicy",
+        "AWS::IAM::UserPolicy",
+        "AWS::IAM::GroupPolicy",
+    }
+)
+PRINCIPALS = frozenset({"AWS::IAM::Role", "AWS::IAM::User", "AWS::IAM::Group"})
+
+
+def all_statements(template: dict[str, Any]) -> Iterable[tuple[str, Any]]:
+    """Every statement of every identity policy, Allow or Deny, read or not."""
     for logical_id, resource in template.get("Resources", {}).items():
         properties = resource.get("Properties", {})
         documents = []
-        if resource.get("Type") in ("AWS::IAM::Policy", "AWS::IAM::ManagedPolicy"):
+        if resource.get("Type") in POLICY_RESOURCES:
             documents.append(properties.get("PolicyDocument", {}))
-        if resource.get("Type") == "AWS::IAM::Role":
+        if resource.get("Type") in PRINCIPALS:
             documents += [p.get("PolicyDocument", {}) for p in properties.get("Policies", [])]
         for document in documents:
-            for statement in as_list(document.get("Statement")):
-                if statement.get("Effect") == "Allow":
-                    yield logical_id, statement
+            statements = document.get("Statement") if isinstance(document, dict) else document
+            for statement in as_list(statements):
+                yield logical_id, statement
+
+
+def unreadable_statement(statement: Any) -> str | None:
+    """Why the gate can't judge this statement, or None. What it can't read, it refuses."""
+    if not isinstance(statement, dict) or statement.keys() & {"Fn::If", "Ref"}:
+        return "a statement chosen at deploy time (an intrinsic) can't be checked"
+    if statement.get("Effect") not in ("Allow", "Deny"):
+        return "a statement's Effect must be a literal Allow or Deny"
+    actions = as_list(statement.get("Action")) + as_list(statement.get("NotAction"))
+    if not all(isinstance(action, str) for action in actions):
+        return "an Action built by an intrinsic can't be checked"
+    return None
+
+
+def attachment_problems(template: dict[str, Any]) -> list[str]:
+    """A managed policy attached by ARN is one the gate never reads (AdministratorAccess)."""
+    resources = template.get("Resources", {})
+    problems = []
+    for logical_id, resource in resources.items():
+        if resource.get("Type") not in PRINCIPALS:
+            continue
+        for attached in as_list(resource.get("Properties", {}).get("ManagedPolicyArns")):
+            reference = attached.get("Ref") if isinstance(attached, dict) else None
+            if resources.get(reference, {}).get("Type") != "AWS::IAM::ManagedPolicy":
+                problems.append(
+                    f"{logical_id}: attaches a managed policy from outside this template "
+                    f"({json.dumps(attached)})"
+                )
+    return problems
+
+
+def literal(resource: Any) -> Any:
+    """A resource intrinsic built only of literals, as the string it becomes; else as is."""
+    if isinstance(resource, dict) and len(resource) == 1:
+        [(function, argument)] = resource.items()
+        if function == "Fn::Join" and isinstance(argument, list) and len(argument) == 2:
+            separator, parts = argument
+            if (
+                isinstance(separator, str)
+                and isinstance(parts, list)
+                and all(isinstance(part, str) for part in parts)
+            ):
+                return separator.join(parts)
+        if function == "Fn::Sub":
+            text = argument[0] if isinstance(argument, list) and argument else argument
+            if isinstance(text, str) and "${" not in text:
+                return text
+    return resource
 
 
 def as_list(value: Any) -> list[Any]:

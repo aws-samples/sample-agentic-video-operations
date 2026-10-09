@@ -1,11 +1,11 @@
 """Validate documented environment settings and MCP tool names."""
 
 import ast
-import os
 import re
 import shlex
-from collections.abc import Iterator
 from pathlib import Path
+
+from list_tracked_files import list_tracked_files
 
 ENV_TABLE_ROW = re.compile(r"^\|\s*`([A-Z][A-Z0-9_]*)`\s*\|", re.MULTILINE)
 ENV_SETTING = re.compile(r"`([A-Z][A-Z0-9_]*)`\s+(?:environment variable|setting)\b")
@@ -15,7 +15,6 @@ ENV_READ = re.compile(
     r"os\.(?:getenv|environ\.get)\(\s*['\"]([A-Z][A-Z0-9_]*)['\"]"
     r"|os\.environ\[\s*['\"]([A-Z][A-Z0-9_]*)['\"]\s*\]"
 )
-SKIPPED_DIRECTORIES = frozenset({"cdk.out", "node_modules"})
 FENCE = re.compile(r"^```([a-z0-9_-]*)\s*$")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 TOOL_NAME = re.compile(r"`([a-z][a-z0-9_]+)`")
@@ -33,18 +32,21 @@ TOOL_FACTORIES = {
     "build_cmcd_server",
     "create_load_skill_tool",
     "create_read_tools",
+    "create_workflow_tools",
     "create_write_tools",
 }
 TOOL_ACTION = re.compile(
-    r"(?:analyze|check|create|delete|describe|get|identify|list|load|read|restart|"
-    r"start|stop|switch)_[a-z0-9_]+"
+    r"(?:analyze|check|create|delete|describe|discover|get|identify|list|load|read|restart|"
+    r"save|start|stop|switch)_[a-z0-9_]+"
 )
 
 
 def read_setting_names(root: Path) -> frozenset[str]:
     """Return BaseSettings fields plus root environment-template keys."""
-    names = set()
-    for path in walk_files(root / "samples"):
+    names: set[str] = set()
+    sample_files = list_tracked_files(root, "samples")
+    script_files = list_tracked_files(root, "scripts")
+    for path in sample_files:
         if path.name != "runtime_settings.py" or path.parent.name != "settings":
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -57,13 +59,13 @@ def read_setting_names(root: Path) -> frozenset[str]:
                 if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
             )
     env_example = root / ".env.example"
-    if env_example.exists():
+    if env_example in list_tracked_files(root, ".env.example"):
         names.update(
             match.group(1)
             for line in env_example.read_text().splitlines()
             if (match := re.match(r"^#?\s*([A-Z][A-Z0-9_]*)=", line))
         )
-    for path in (*walk_files(root / "scripts"), *walk_files(root / "samples")):
+    for path in (*script_files, *sample_files):
         if path.suffix != ".py":
             continue
         for match in ENV_READ.finditer(path.read_text()):
@@ -71,23 +73,10 @@ def read_setting_names(root: Path) -> frozenset[str]:
     return frozenset(names)
 
 
-def walk_files(top: Path) -> Iterator[Path]:
-    """Every file under `top`, never descending into build output or installed packages.
-
-    A recursive glob would list node_modules and cdk.out (tens of thousands of files) only
-    for the callers to drop them; pruning them here gives the same files in a fraction of
-    the time.
-    """
-    for directory, subdirectories, files in os.walk(top):
-        subdirectories[:] = [name for name in subdirectories if name not in SKIPPED_DIRECTORIES]
-        for name in files:
-            yield Path(directory, name)
-
-
 def read_tool_names(root: Path) -> frozenset[str]:
     """Return tool names from factories, decorators, and dynamic action names."""
     names = set()
-    for path in walk_files(root / "samples"):
+    for path in list_tracked_files(root, "samples"):
         relative = path.relative_to(root / "samples").parts
         if path.suffix != ".py" or "src" not in relative[:-1] or "tests" in relative:
             continue
@@ -107,7 +96,7 @@ def read_infrastructure_names(root: Path) -> tuple[frozenset[str], frozenset[str
     """Return declared CloudFormation output and parameter logical names."""
     outputs: set[str] = set()
     parameters: set[str] = set()
-    for path in walk_files(root / "samples"):
+    for path in list_tracked_files(root, "samples"):
         if path.suffix == ".ts":
             for match in CDK_DECLARATION.finditer(path.read_text()):
                 target = outputs if match.group("kind") == "Output" else parameters

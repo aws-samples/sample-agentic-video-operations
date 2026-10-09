@@ -1,5 +1,5 @@
 // The chart-model prompt. It lives in code, not in the copied env.js, so a fix to it
-// reaches every installation (RB11: it asks for formatter names, never JavaScript).
+// reaches every installation. It asks for formatter names, never JavaScript.
 // The names are the ones utils/chartFormatters.js implements.
 
 export const CHART_PROMPT = `

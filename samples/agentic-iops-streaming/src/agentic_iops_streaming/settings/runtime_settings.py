@@ -1,9 +1,12 @@
 """Validated agentic-iops-streaming settings (build_a_sample.md §5). Read once at startup."""
 
+import os
 from pathlib import Path
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from agentic_iops_streaming.settings.refuse_renamed_settings import refuse_renamed_settings
 
 
 class AgenticIopsSettings(BaseSettings):
@@ -16,7 +19,20 @@ class AgenticIopsSettings(BaseSettings):
     memory_id: str = Field(default="")
     approval_signing_key: str = Field(default="")
     agentic_iops_tool_budget: int = Field(default=12, ge=1)
+    agentic_iops_port: int = Field(default=8080, ge=1, le=65535)
     session_dir: Path = Field(default=Path(".cache/agentic-iops-sessions"))
+    # DEMO replay for the coordinator's own tools (the packs read these too): the workflow
+    # tools answer from `fixtures/<DEMO_SCENARIO>` instead of AWS.
+    demo: bool = Field(default=False)
+    demo_scenario: str = Field(default="")
+    fixtures_dir: Path = Field(default=Path("fixtures"))
+    # The workflow tools (extend_agentic_iops_streaming.md §8). They read and write only this
+    # sample's own store, and discovery leaves nothing in the account, so they are on by
+    # default and gated separately from ALLOW_WRITES.
+    allow_workflow_discovery: bool = Field(default=True)
+    # Set by the CDK: the workflow store's table. Empty means the local store under .cache/.
+    workflow_table_name: str = Field(default="")
+    workflow_dir: Path = Field(default=Path(".cache/workflows"))
     # Only `just run agentic-iops-streaming` sets this. It lets a request without an actor header
     # or session id
     # run as one local operator; everywhere else such a request is refused.
@@ -34,6 +50,24 @@ class AgenticIopsSettings(BaseSettings):
         )
 
     @model_validator(mode="after")
+    def serve_the_container_on_agentcores_port(self) -> "AgenticIopsSettings":
+        """AGENTIC_IOPS_PORT is for local runs. In the deployed image (DOCKER_CONTAINER=1),
+        AgentCore reaches the container on 8080, so another port would only fail health
+        checks without saying why."""
+        if os.environ.get("DOCKER_CONTAINER") == "1" and self.agentic_iops_port != 8080:
+            raise ValueError(
+                f"AGENTIC_IOPS_PORT={self.agentic_iops_port} in the container: AgentCore serves "
+                "the container on 8080, and the setting is for local runs. Unset it."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def refuse_old_setting_names(self) -> "AgenticIopsSettings":
+        """A setting under its old name is ignored, which fails open."""
+        refuse_renamed_settings(os.environ)
+        return self
+
+    @model_validator(mode="after")
     def require_a_complete_jwt_setting_outside_local_mode(self) -> "AgenticIopsSettings":
         """The runtime reads token claims without re-verifying the signature (AgentCore did), so
         JWT mode must never run where AgentCore is not in front: not in local mode."""
@@ -49,19 +83,13 @@ class AgenticIopsSettings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def keep_session_files_out_of_the_repository(self) -> "AgenticIopsSettings":
-        """Session files hold conversations and pending approvals. Inside the working
-        directory (the repository) they must sit under the ignored `.cache/`, which git, the
-        image build contexts and `just clean` all cover. A path outside it is the operator's
-        own location to protect."""
-        here = Path.cwd().resolve()
-        target = (here / self.session_dir).resolve()
-        if target.is_relative_to(here) and not target.is_relative_to(here / ".cache"):
-            raise ValueError(
-                f"SESSION_DIR={self.session_dir} is inside {here} but not under .cache/, so "
-                "session files could be committed or copied into an image. Use a path under "
-                ".cache/ (default .cache/agentic-iops-sessions) or one outside the repository."
-            )
+    def keep_local_state_out_of_the_repository(self) -> "AgenticIopsSettings":
+        """Session files hold conversations and pending approvals; stored workflows map the
+        account's live chain. Inside the working directory (the repository) both must sit
+        under the ignored `.cache/`, which git, the image build contexts and `just clean` all
+        cover. A path outside it is the operator's own location to protect."""
+        require_under_cache("SESSION_DIR", self.session_dir, "session files")
+        require_under_cache("WORKFLOW_DIR", self.workflow_dir, "stored workflows")
         return self
 
     @model_validator(mode="after")
@@ -75,3 +103,14 @@ class AgenticIopsSettings(BaseSettings):
 
 def load_agentic_iops_settings() -> AgenticIopsSettings:
     return AgenticIopsSettings()
+
+
+def require_under_cache(setting: str, path: Path, holds: str) -> None:
+    here = Path.cwd().resolve()
+    target = (here / path).resolve()
+    if target.is_relative_to(here) and not target.is_relative_to(here / ".cache"):
+        raise ValueError(
+            f"{setting}={path} is inside {here} but not under .cache/, so {holds} could be "
+            "committed or copied into an image. Use a path under .cache/ or one outside the "
+            "repository."
+        )

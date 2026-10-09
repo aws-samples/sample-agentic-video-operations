@@ -1,4 +1,4 @@
-"""Local session files live under the ignored .cache/ (T65).
+"""Local session files live under the ignored .cache/.
 
 They hold operators' conversations and pending approvals. The old default `.hub-sessions`
 was neither git-ignored nor kept out of image build contexts.
@@ -33,7 +33,7 @@ def test_the_agentic_iops_image_asset_excludes_old_session_files():
 
 
 def test_a_session_dir_inside_the_repository_must_be_under_cache(tmp_path, monkeypatch):
-    """T65 review: SESSION_DIR=custom-sessions would be committed and copied into images."""
+    """SESSION_DIR=custom-sessions would be committed and copied into images."""
     import pytest
     from pydantic import ValidationError
 
@@ -53,3 +53,25 @@ def test_a_session_dir_outside_the_working_directory_is_the_operators_to_protect
     monkeypatch.chdir(repository)
     outside = tmp_path / "state" / "agentic-iops-sessions"
     assert AgenticIopsSettings(session_dir=outside).session_dir == outside
+
+
+def test_a_workflow_dir_inside_the_repository_must_be_under_cache(tmp_path, monkeypatch):
+    """Stored workflows map the account's live chain: like session files, inside the
+    repository they belong under the ignored .cache/, never in git or an image."""
+    import pytest
+    from pydantic import ValidationError
+
+    monkeypatch.chdir(tmp_path)
+    for unsafe in ("workflows", ".cache/../workflows", str(tmp_path / "workflows"), "."):
+        with pytest.raises(ValidationError, match="WORKFLOW_DIR"):
+            AgenticIopsSettings(workflow_dir=Path(unsafe))
+    for safe in (".cache/workflows", str(tmp_path / ".cache" / "w")):
+        assert AgenticIopsSettings(workflow_dir=Path(safe)).workflow_dir == Path(safe)
+
+
+def test_a_workflow_dir_outside_the_working_directory_is_allowed(tmp_path, monkeypatch):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    monkeypatch.chdir(repository)
+    outside = tmp_path / "state" / "workflows"
+    assert AgenticIopsSettings(workflow_dir=outside).workflow_dir == outside

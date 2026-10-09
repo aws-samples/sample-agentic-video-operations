@@ -1,4 +1,4 @@
-"""Hydrolix runtime: the model's SQL is bounded in code, not by the prompt (RB12).
+"""Hydrolix runtime: the model's SQL is bounded in code, not by the prompt.
 
 The subagent tests run the real subagent tool with a real Strands agent, a scripted model
 and a fake Hydrolix MCP client, so a refused call is shown never to reach the cluster.
@@ -606,7 +606,7 @@ def test_the_parser_is_pinned_exactly_and_the_same_everywhere():
     assert sqlglot.__version__ == runtime_pin
 
 
-# --- RB12 re-review: the orchestrator stream and a hung MCP child are bounded too -------
+# --- The orchestrator stream and a hung MCP child are bounded too ------------------------
 
 
 class SlowOrchestrator(RecordingAgent):
@@ -627,7 +627,7 @@ def test_the_orchestrator_stream_stops_at_the_request_deadline(entrypoint, monke
 
     assert time.monotonic() - started < 1
     assert "LATE-ANSWER-AFTER-THE-DEADLINE" not in repr(chunks)
-    # The stopped error, then the request's query records as the last record (T41).
+    # The stopped error, then the request's query records as the last record.
     assert "stopped" in chunks[-2]["error"] and "query_results" in chunks[-1]
 
 
@@ -848,6 +848,7 @@ def pid_file_for(tmp_path, pid: int) -> str:
     return str(path)
 
 
+@pytest.mark.slow  # a real process, signalled
 def test_the_fallback_kills_a_live_group_that_is_provably_ours(runtime, sleepers, tmp_path):
     ours = sleeper("our-run")
     sleepers.append(ours)

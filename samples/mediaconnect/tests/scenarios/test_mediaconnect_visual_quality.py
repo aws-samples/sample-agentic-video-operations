@@ -496,11 +496,11 @@ def test_access_denied_is_still_a_typed_failure_not_a_retry():
     assert failure.value.kind is FailureKind.PERMISSION_DENIED
 
 
-# --- T78 and T80: no frames, a disconnected source ----------------------------------------
+# --- No frames and a disconnected source --------------------------------------------------
 
 
 def test_with_no_frames_neither_score_reads_as_a_perfect_picture():
-    """T78: nothing was measured, so there is no score, and confidence stays untrusted."""
+    """Nothing was measured, so there is no score, and confidence stays untrusted."""
     result = analyze(
         FakeMediaConnect(monitoring={"ThumbnailState": "DISABLED"}),
         FakeCloudWatch(HEALTHY_TRANSPORT),
@@ -514,7 +514,7 @@ def test_with_no_frames_neither_score_reads_as_a_perfect_picture():
 
 
 def test_a_source_with_no_sender_connected_is_named_before_the_thumbnails():
-    """T80: SourceConnected at 0 explains the missing picture; enabling thumbnails wouldn't."""
+    """SourceConnected at 0 explains the missing picture; enabling thumbnails would not."""
     mediaconnect = RefusingThumbnails("BadRequestException")
     transport = HEALTHY_TRANSPORT | {"SourceConnected": 0.0}
 

@@ -23,6 +23,7 @@ from confirm_aws_action import NO_CREDENTIALS_FIX, ConfirmationPrompt, ask_to_co
 from model_id_rule import find_invalid_model_ids
 from read_aws_cli_error import describe_failure, is_missing_resource
 from read_root_env import describe_root_env, load_root_env
+from renamed_settings import describe_consequences, describe_renames, find_renamed_settings
 
 STACK = "AgenticIopsStreamingStack"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -138,6 +139,22 @@ def install_cdk_dependencies(runner: Runner) -> int:
     return runner(["npm", "ci", "--no-audit", "--no-fund"], CDK_DIRECTORY, False).returncode
 
 
+def refuse_renamed_settings(environ: Mapping[str, str]) -> bool:
+    """A setting under its old name is ignored by this deploy, so it fails
+    open. Stop first."""
+    found = find_renamed_settings(environ)
+    if not found:
+        return False
+    print(
+        f"Settings still use their pre-rename names, which this deploy ignores: {', '.join(found)}."
+    )
+    for consequence in describe_consequences(found):
+        print(f"- Deployed as set, {consequence}.")
+    print(f"Rename them in {describe_root_env()} (or the shell): {describe_renames(found)}.")
+    print("Nothing was deployed.")
+    return True
+
+
 def deploy_stack(
     runner: Runner,
     *,
@@ -147,7 +164,9 @@ def deploy_stack(
     interactive: bool = True,
 ) -> int:
     """One confirmation, after the bootstrap check and the security diff and before any
-    build: CDK then deploys with --require-approval never (T59)."""
+    build: CDK then deploys with --require-approval never."""
+    if refuse_renamed_settings(environ):
+        return 1
     settings = read_deploy_settings(environ)
     if settings is None:
         return 1
@@ -237,6 +256,31 @@ def read_stack_status(runner: Runner, region: str) -> str | None:
     return None
 
 
+def read_workflow_table(runner: Runner, region: str) -> str | None:
+    """The retained workflow table's name, "" when the stack has none (deployed before it),
+    or None when the lookup failed (fail closed)."""
+    result = aws(
+        runner, region, "cloudformation", "describe-stacks", "--stack-name", STACK,
+        "--query", "Stacks[0].Outputs[?OutputKey=='WorkflowTableName'].OutputValue",
+        "--output", "text",
+    )  # fmt: skip
+    if result.returncode != 0:
+        print(f"Could not read stack {STACK}'s outputs: {describe_failure(result)}")
+        return None
+    name = result.stdout.strip()
+    return "" if name in ("", "None") else name
+
+
+def describe_retained_table(table: str, region: str) -> list[str]:
+    """Printed, never run: confirmed workflows are operator data, so only they delete them."""
+    return [
+        "Left in place by design:",
+        f"- DynamoDB table {table} (RemovalPolicy RETAIN: the confirmed workflows). "
+        "Delete it when you no longer need them:",
+        f"  aws dynamodb delete-table --region {region} --table-name {table}",
+    ]
+
+
 def read_runtime_log_groups(runner: Runner, region: str) -> list[str] | None:
     result = aws(
         runner, region, "logs", "describe-log-groups",
@@ -267,8 +311,9 @@ def destroy_stack(
         print(NO_CREDENTIALS_FIX)
         return 1
     stack_status = read_stack_status(runner, region)
+    table = read_workflow_table(runner, region) if stack_status else ""
     log_groups = read_runtime_log_groups(runner, region)
-    if stack_status is None or log_groups is None:
+    if stack_status is None or table is None or log_groups is None:
         print(
             "Nothing was deleted. Fix the error above, then re-run `just destroy "
             "agentic-iops-streaming`."
@@ -285,6 +330,8 @@ def destroy_stack(
         else "already absent",  # fmt: skip
         "runtime log groups": ", ".join(log_groups) or "none",
     }
+    if table:
+        details["workflow table"] = f"{table} (left in place by design: RemovalPolicy RETAIN)"
     prompt = ConfirmationPrompt(DESTROY_ACTION, STACK, region, account, details)
     if not ask_to_continue(prompt, assume_yes=assume_yes, ask=ask, interactive=interactive):
         return 1
@@ -301,12 +348,17 @@ def destroy_stack(
         if result.returncode != 0 and not is_missing_resource(result):
             print(f"Could not delete log group {name}: {describe_failure(result)}")
             remaining.append(f"log group {name}")
+    retained = describe_retained_table(table, region) if table else []
     if remaining:
         print("Teardown incomplete. Remaining resources:")
         for resource in remaining:
             print(f"- {resource}")
+        if retained:
+            print("\n".join(retained))
         print("Fix the reported error(s), then re-run `just destroy agentic-iops-streaming`.")
         return 1
+    if retained:
+        print("\n".join(retained))
     print(
         f"Teardown complete: {STACK} and {len(log_groups)} runtime log group(s) are absent.\n"
         "The signing-key secret is scheduled for deletion by Secrets Manager (recovery window).\n"

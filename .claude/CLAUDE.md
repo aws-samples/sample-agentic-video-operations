@@ -19,7 +19,8 @@ When guidance conflicts:
 ## Layout
 
 - `samples/<key>/`: one folder per sample, named by its key (`cmcd`,
-  `mediaconnect`, `medialive`, `agentic-iops-streaming`, `hydrolix`).
+  `mediaconnect`, `medialive`, `hls-doctor`, `agentic-iops-streaming`,
+  `hydrolix`).
 - `packages/media_ops_contracts`: typed tool failures, approved actions, stream
   events, fixture replay and the domain-pack contract.
 - `packages/media_ops_video_quality`: frame measurements, the vision rubric and
@@ -32,7 +33,7 @@ not cryptic, names for branches, folders and files.
 
 ## Architecture
 
-- **MCP servers** (`cmcd`, `mediaconnect`, `medialive`): FastMCP over stdio,
+- **MCP servers** (`cmcd`, `mediaconnect`, `medialive`, `hls-doctor`): FastMCP over stdio,
   started with `just run <key>`. Write tools are hidden unless
   `ALLOW_WRITES=true`. Each write asks the operator, through MCP form
   elicitation, to type the exact resource id, and is refused when the client
@@ -41,7 +42,12 @@ not cryptic, names for branches, folders and files.
   AgentCore, created per request, over domain packs selected by
   `MEDIA_DOMAINS`. The MediaLive and MediaConnect packs share their tools with
   the MCP servers. A write is an interrupt, then a signed `ApprovedAction`, then
-  a verified result. Agent instructions live in
+  a verified result. `ALLOW_WRITES` registers the packs' media-resource writes
+  only. The coordinator's workflow tools have their own switch,
+  `ALLOW_WORKFLOW_DISCOVERY` (default true), a runtime setting for local runs;
+  a deployed stack always runs with discovery on and grants its IAM. Discovery
+  creates and deletes a transient signal map tagged `managed-by`, and
+  `save_workflow` is an approved write to the sample's own workflow store. Agent instructions live in
   `samples/agentic-iops-streaming/src/agentic_iops_streaming/prompts/agentic_iops_instructions.md`, and packaged
   skills are `SKILL.md` files loaded on demand.
 - **Hydrolix** (`samples/hydrolix`): an orchestrator and three subagents on
@@ -60,7 +66,8 @@ just lint && just typecheck && just test && just eval && just docs-check
 
 For changed deploy material, also run `cdk synth` and
 `scripts/check_synth_iam.py`, or `cfn-lint`. `just deploy <key>` creates
-billable resources; `just destroy <key>` removes them.
+billable resources; `just destroy <key>` removes the stack-managed resources,
+and a sample README lists anything retained by design.
 
 ## Security Rules
 

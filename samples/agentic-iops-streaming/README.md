@@ -13,7 +13,8 @@ Use agentic-iops-streaming when an operator needs to know why viewers see a prob
 signal path from MediaConnect flow to MediaLive channel it starts.
 
 It is one Strands agent on Amazon Bedrock AgentCore. Each media service plugs in as a
-**domain pack** (`samples/medialive`, `samples/mediaconnect`), chosen with `MEDIA_DOMAINS`.
+**domain pack** (`samples/medialive`, `samples/mediaconnect`, and the read-only `hls` pack
+from `samples/hls-doctor`), chosen with `MEDIA_DOMAINS`.
 The first successful run, `just demo`, replays a recorded input-loss incident through the
 real agent and needs no AWS account.
 
@@ -33,9 +34,17 @@ flowchart LR
     Runtime --> Secret[Secrets Manager: approval signing key]
 ```
 
-- **Reads** run freely. **Writes** (start, stop, input switch, schedule actions) exist only
-  with `ALLOW_WRITES=true`. They pause for an operator decision, are signed for exactly
-  the approved action, and are verified after they run.
+- **Reads** run freely. **Media-resource writes** (start, stop, input switch, schedule
+  actions) exist only with `ALLOW_WRITES=true`. They pause for an operator decision, are
+  signed for exactly the approved action, and are verified after they run.
+- **Workflow discovery** has its own switch, `ALLOW_WORKFLOW_DISCOVERY`, on by default and
+  independent of `ALLOW_WRITES`. `discover_workflow` creates a signal map tagged
+  `managed-by` in your account, reads the chain it maps, and deletes it. `save_workflow` is
+  an approved write, like the media writes, but only to this sample's own workflow store.
+  It is a runtime setting: in a local run, `false` registers none of the four workflow
+  tools. The deploy doesn't pass it, so a deployed runtime always runs with discovery on,
+  and the stack always grants the workflow IAM (the tag-scoped signal-map actions and the
+  workflow table).
 - **Events stream** as each happens: `task_started`, `tool_called`, `action_completed`,
   `verification_completed`, then `usage_reported` immediately before the terminal
   `approval_requested`, `final_answer`, or `error`.
@@ -121,7 +130,10 @@ uv run python scripts/check_prerequisites.py
    just run agentic-iops-streaming
    ```
 
-   It listens on `http://localhost:8080` (`/ping`, `/invocations`).
+   It listens on `http://localhost:8080` (`/ping`, `/invocations`). To share a
+   host with another service, set `AGENTIC_IOPS_PORT` in the root `.env`, for
+   example `AGENTIC_IOPS_PORT=8091`. It is for local runs only: the deployed container
+   refuses any port but 8080, the one AgentCore serves it on.
 
 ### Deploy to AWS
 
@@ -165,7 +177,9 @@ uv run python scripts/manage_agentic_iops_streaming_stack.py deploy
   Amazon Cognito user pool's) and `AGENTIC_IOPS_JWT_CLIENT_IDS` (the app client ids allowed to
   call) before deploying. `AGENTIC_IOPS_INVOKER_ROLE_NAME` can't be combined with them.
 - Outputs: `AgentRuntimeArn`, `AgentRuntimeId`, `AgentEndpointName`, `MemoryId`,
-  `MediaDomains`, `InboundAuth` (`iam` or `jwt`), and `InvokePolicyArn` (IAM mode only).
+  `MediaDomains`, `InboundAuth` (`iam` or `jwt`), `InvokePolicyArn` (IAM mode only), and
+  `WorkflowTableName`: the retained workflow store, which `just destroy agentic-iops-streaming`
+  names again as left in place by design.
 
 ### Verify the Deployment
 
@@ -196,7 +210,10 @@ uv run python scripts/manage_agentic_iops_streaming_stack.py destroy
 
 It deletes the stack (runtime, endpoint, memory, signing-key secret, roles, invoke
 policy) and the log groups of this runtime only. If a step fails, it prints exactly what
-remains. A deploy that failed and rolled back leaves the stack in the ROLLBACK_COMPLETE state;
+remains. **The workflow table is left in place by design:** it holds the workflows operators
+confirmed, so the stack retains it. The confirmation and the result name it, with the
+`aws dynamodb delete-table --region … --table-name …` command to run when you no longer need
+them; the script never runs it. A deploy that failed and rolled back leaves the stack in the ROLLBACK_COMPLETE state;
 `just destroy agentic-iops-streaming` deletes that too (the confirmation shows the status), and
 then you can deploy again. The CDK bootstrap ECR repository may keep the
 agentic-iops-streaming image; remove it there if unused.
@@ -208,12 +225,23 @@ is a separate deployment, so an old one keeps running, and billing, until you de
 Nothing in this repository deletes it for you. Check it is yours, then delete it once:
 
 ```bash
-aws cloudformation delete-stack --stack-name MediaOpsHubStack
+aws cloudformation delete-stack --stack-name MediaOpsHubStack --region "$AWS_REGION"
 ```
 
 Its AgentCore Memory goes with it, with the session history and paused approvals it held.
 Settings named HUB_ in the root `.env` are now named AGENTIC_IOPS_ (for example
-AGENTIC_IOPS_WRITE_TAG); the old names are not read, and `just doctor` lists any still set.
+AGENTIC_IOPS_WRITE_TAG). An old name would be ignored, which fails open (a stale
+HUB_WRITE_TAG would deploy writes without the tag scope), so `just deploy
+agentic-iops-streaming` and the runtime both refuse to start while any is set, naming each
+one and its new name. `just doctor` lists them too.
+
+An upgraded clone also keeps the old release's local output: the git-ignored samples/hub
+folder (its node_modules and cdk.out), every `cdk.out/`, the CDK apps' compiled `.js` and
+`.d.ts`, and an eval-results.json file at the repository root. `just clean` removes them and
+prints each path. It keeps the samples/hub folder, and names it, if anything there is
+tracked or not ignored.
+`just clean-all` also removes every `node_modules/`; run `npm ci` in a CDK folder before its
+next deploy.
 
 ## Known Limitations
 

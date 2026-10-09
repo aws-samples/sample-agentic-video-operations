@@ -41,8 +41,29 @@ def test_zero_tokens_cost_zero() -> None:
 
 def test_the_estimate_is_dated_qualified_and_explicitly_unconfirmed() -> None:
     assert COST_ESTIMATE_BASIS == (
-        "estimated list price, in-region on-demand, excludes caching and cross-region differences"
+        "estimated list price, in-region on-demand, cache reads at 0.1x and writes at 1.25x the "
+        "input rate, excludes cross-region differences"
     )
     assert BEDROCK_PRICING_URL == "https://aws.amazon.com/bedrock/pricing/"
     assert PRICING_CHECKED_ON.isoformat() == "2026-10-06"
     assert RATES_CONFIRMED is False
+
+
+def test_cache_reads_and_writes_are_priced_at_their_own_rates():
+    """Bedrock bills cached input apart from inputTokens: reads at a tenth of the input rate,
+    writes at one and a quarter times it."""
+    cost = estimate_model_cost_usd(
+        "us.anthropic.claude-sonnet-4-6",
+        1_000,
+        100,
+        cache_read_input_tokens=10_000,
+        cache_write_input_tokens=2_000,
+    )
+
+    assert cost == round((1_000 * 3.00 + 100 * 15.00 + 10_000 * 0.30 + 2_000 * 3.75) / 1e6, 6)
+
+
+def test_without_cache_tokens_the_estimate_is_unchanged():
+    assert estimate_model_cost_usd("us.anthropic.claude-sonnet-4-6", 1_000, 100) == round(
+        (1_000 * 3.00 + 100 * 15.00) / 1e6, 6
+    )

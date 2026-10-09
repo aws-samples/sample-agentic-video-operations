@@ -15,6 +15,9 @@ SCRIPTS = [
     / "export_approval_signing_key.py",
 ]
 ENV_KEY = r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+"
+# In .env.example a single-word name is a key too (DEMO), so a one-word setting counts as
+# documented. Free text still needs the underscore, or words like LICENSE would read as keys.
+DOCUMENTED_KEY = r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*"
 
 
 def documented_keys() -> set[str]:
@@ -22,7 +25,7 @@ def documented_keys() -> set[str]:
     return {
         match.group(1)
         for line in lines
-        if (match := re.match(rf"^#?\s*({ENV_KEY})=", line.strip()))
+        if (match := re.match(rf"^#?\s*({DOCUMENTED_KEY})=", line.strip()))
     }
 
 

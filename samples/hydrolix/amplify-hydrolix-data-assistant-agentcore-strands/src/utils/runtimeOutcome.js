@@ -1,4 +1,4 @@
-// What a request ended with (T41). The runtime's last record is always the request's
+// What a request ended with. The runtime's last record is always the request's
 // {"query_results": [...]}, after any {"error": ...}: so note both while the stream is read,
 // and decide only once it has ended. Throwing on the error would lose the queries that ran.
 export const createRuntimeOutcome = () => {

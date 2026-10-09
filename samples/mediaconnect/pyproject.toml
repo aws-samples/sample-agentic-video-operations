@@ -8,6 +8,7 @@ dependencies = [
   "botocore>=1.35,<2",
   "fastmcp>=3.2,<4",
   "media-ops-contracts",
+  "media-ops-video-quality",
   "pydantic>=2.9,<3",
   "pydantic-settings>=2.6,<3",
 ]
@@ -20,6 +21,7 @@ mediaconnect = "mediaconnect_mcp.domain_pack:create_domain_pack"
 
 [tool.uv.sources]
 media-ops-contracts = { workspace = true }
+media-ops-video-quality = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]

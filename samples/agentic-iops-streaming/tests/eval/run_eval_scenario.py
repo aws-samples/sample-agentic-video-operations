@@ -1,23 +1,32 @@
 """Run one fixture-backed agentic-iops-streaming scenario and score its contract expectations."""
 
 import functools
+import json
 import os
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 from unittest.mock import patch
 
 from scenario_models import ActionVerification, EvalResult, EvalScenario
 from scripted_eval_model import ScriptedEvalModel
 from strands.agent.agent_result import AgentResult
 
+from agentic_iops_streaming.adapters.signal_maps.discover_signal_map import DiscoveryPolicy
+from agentic_iops_streaming.adapters.workflow_store.local_workflow_store import LocalWorkflowStore
 from agentic_iops_streaming.bootstrap.create_agentic_iops import create_agentic_iops
+from agentic_iops_streaming.bootstrap.create_workflow_tools import (
+    WorkflowTools,
+    create_workflow_tools,
+)
 from agentic_iops_streaming.domain.agentic_iops_request import AgenticIopsRequest, ApprovalDecision
+from agentic_iops_streaming.domain.workflow_records import Workflow
 from agentic_iops_streaming.settings.runtime_settings import AgenticIopsSettings
 from agentic_iops_streaming.workflows.run_agentic_iops_turn import stream_agentic_iops_turn
+from hls_doctor.domain_pack import create_domain_pack as create_hls_pack
 from media_ops_contracts.domain_pack import DomainPack, ReadTool, WriteTool
 from media_ops_contracts.stream_event import StreamEvent
 from mediaconnect_mcp.domain_pack import create_domain_pack as create_mediaconnect_pack
@@ -33,6 +42,7 @@ class PackFactory(Protocol):
 FACTORIES: dict[str, PackFactory] = {
     "medialive": create_medialive_pack,
     "mediaconnect": create_mediaconnect_pack,
+    "hls": create_hls_pack,
 }
 
 
@@ -85,6 +95,51 @@ def observe_writes(pack: DomainPack, count: list[int]) -> ObservedPack:
     return ObservedPack(pack, observed)
 
 
+def observe_workflow_writes(tools: WorkflowTools, count: list[int]) -> WorkflowTools:
+    observed: list[WriteTool] = []
+    for write in tools.writes:
+        function = write.function
+
+        @functools.wraps(function)
+        def record(*args, _function=function, **kwargs):
+            count[0] += 1
+            return _function(*args, **kwargs)
+
+        observed.append(WriteTool(function=record, resource_parameter=write.resource_parameter))
+    return WorkflowTools(reads=tools.reads, writes=observed)
+
+
+def seed_workflow(scenario: EvalScenario, store: LocalWorkflowStore) -> None:
+    if scenario.seed_workflow is None:
+        return
+    path = ROOT / "fixtures" / scenario.seed_workflow
+    workflow = Workflow.model_validate_json(path.read_text())
+    store.save(workflow)
+
+
+def count_tool_errors(messages: Sequence[dict[str, Any]]) -> int:
+    results: dict[str, str] = {}
+    for message in messages:
+        for block in message.get("content", []):
+            result = block.get("toolResult")
+            if isinstance(result, dict):
+                tool_use_id = result.get("toolUseId")
+                status = result.get("status")
+                if isinstance(tool_use_id, str) and isinstance(status, str):
+                    results[tool_use_id] = status
+    return sum(status == "error" for status in results.values())
+
+
+def count_session_tool_errors(session_dir: Path) -> int:
+    messages: list[dict[str, Any]] = []
+    for path in session_dir.glob("actor_*/session_*/agents/agent_*/messages/message_*.json"):
+        record = json.loads(path.read_text())
+        message = record.get("message")
+        if isinstance(message, dict):
+            messages.append(message)
+    return count_tool_errors(messages)
+
+
 def run_scenario(scenario: EvalScenario, sessions: Path) -> EvalResult:
     started = time.perf_counter()
     write_count = [0]
@@ -113,10 +168,29 @@ def run_scenario(scenario: EvalScenario, sessions: Path) -> EvalResult:
             media_domains=",".join(scenario.media_domains),
             allow_writes=scenario.allow_writes,
             approval_signing_key=environment["APPROVAL_SIGNING_KEY"],
+            demo=True,
+            demo_scenario=scenario.fixture,
+            fixtures_dir=ROOT / "fixtures",
             session_dir=sessions / scenario.name,
         )
+        workflow_store = LocalWorkflowStore(sessions / scenario.name / "workflows")
+        seed_workflow(scenario, workflow_store)
+        workflow_tools = observe_workflow_writes(
+            create_workflow_tools(
+                settings,
+                workflow_store,
+                signing_key=environment["APPROVAL_SIGNING_KEY"].encode(),
+                now=clock,
+                policy=DiscoveryPolicy(sleep=lambda _: None),
+                suffix="ab12cd",
+            ),
+            write_count,
+        )
         iops = create_agentic_iops(
-            settings, packs=packs, model=None if model_name == "bedrock" else scripted
+            settings,
+            packs=packs,
+            model=None if model_name == "bedrock" else scripted,
+            workflow_tools=workflow_tools,
         )
         events = list(
             stream_agentic_iops_turn(
@@ -158,6 +232,7 @@ def run_scenario(scenario: EvalScenario, sessions: Path) -> EvalResult:
         skills,
         agent_results,
         write_count[0],
+        count_session_tool_errors(settings.session_dir),
         model_name,
         (time.perf_counter() - started) * 1000,
     )
@@ -169,6 +244,7 @@ def score_scenario(
     skills: list[str],
     results: list[AgentResult],
     writes: int,
+    tool_errors: int,
     model_name: str,
     latency_ms: float,
 ) -> EvalResult:
@@ -210,6 +286,8 @@ def score_scenario(
         failures.append(f"{len(tools)} tool calls exceeds {expected.max_tool_calls}")
     if writes != expected.writes_attempted:
         failures.append(f"writes attempted: expected {expected.writes_attempted}, got {writes}")
+    if expected.tool_errors is not None and tool_errors != expected.tool_errors:
+        failures.append(f"tool errors: expected {expected.tool_errors}, got {tool_errors}")
     failed_verifications = [item for item in verifications if not item.verified]
     if failed_verifications:
         failures.append(
@@ -242,6 +320,7 @@ def score_scenario(
         specialists=list(dict.fromkeys(specialists)),
         latency_ms=round(latency_ms, 2),
         writes_attempted=writes,
+        tool_errors=tool_errors,
         verifications=verifications,
         failures=failures,
     )

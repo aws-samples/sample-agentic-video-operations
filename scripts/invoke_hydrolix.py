@@ -58,7 +58,7 @@ def print_chunks(chunks: Iterable[dict[str, Any]]) -> int:
         elif "error" in chunk:
             print(f"[error] {chunk['error']}")
             status = 1
-        elif "query_results" in chunk:  # this request's own queries, as they ran (T41)
+        elif "query_results" in chunk:  # this request's own queries, as they ran
             statuses = [str(query.get("status")) for query in chunk["query_results"]]
             print(f"\n[queries] {len(statuses)} ran: {', '.join(statuses) or 'none'}")
     print()

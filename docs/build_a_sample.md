@@ -19,6 +19,7 @@ The sample key is the argument to every `just` recipe.
 | `medialive` | MediaLive channel health and control | No own deploy. Runs in the cloud as a domain pack of `agentic-iops-streaming`; its former `cdk/` is now agentic-iops-streaming's | `medialive-mcp-server/` |
 | `agentic-iops-streaming` | One agent that investigates across the selected media domains (extend_agentic_iops_streaming.md) | `samples/agentic-iops-streaming/cdk/` | consolidates the earlier multi-runtime sample |
 | `hydrolix` | CDN analytics with a web UI | Its existing CDK + Amplify | `hydrolix-cdn-insights/` |
+| `hls-doctor` | HLS stream diagnostics from a manifest URL | No stack of its own. Runs locally (CLI and MCP stdio), and deploys as the read-only `hls` pack of `agentic-iops-streaming` | new in this repository |
 
 Adding a sample means adding a row here, a `samples/<key>/` folder that follows section 2, and its recipes in the `justfile`.
 
@@ -26,7 +27,7 @@ Adding a sample means adding a row here, a `samples/<key>/` folder that follows 
 
 ```
 samples/<key>/
-  pyproject.toml        # uv workspace member; pinned deps; one console script
+  pyproject.toml        # uv workspace member; pinned deps; its console script(s)
   README.md             # sections in section 6
   Dockerfile            # only if the sample ships a container
   src/<package>/
@@ -54,7 +55,9 @@ samples/<key>/
 | `samples/mediaconnect` | `mediaconnect-mcp-server` | `mediaconnect_mcp` | `serve-mediaconnect` |
 | `samples/medialive` | `medialive-mcp-server` | `medialive_mcp` | `serve-medialive` |
 | `samples/agentic-iops-streaming` | `agentic-iops-streaming` | `agentic_iops_streaming` | `serve-agentic-iops-streaming` |
+| `samples/hls-doctor` | `hls-doctor` | `hls_doctor` | `serve-hls-doctor`, plus the `hls-doctor` CLI |
 | `packages/media_ops_contracts` | `media-ops-contracts` | `media_ops_contracts` | none |
+| `packages/media_ops_video_quality` | `media-ops-video-quality` | `media_ops_video_quality` | none |
 
 **Rules:**
 - Package names MUST be unique across the repo. There MUST NOT be a top-level `tools`, `src` or `shared` package.
@@ -81,6 +84,7 @@ justfile  pyproject.toml  uv.lock  .env.example  .python-version  .gitignore
 docs/                 # repo-level documentation; repo-level images in docs/images/
 samples/<key>/        # one folder per sample (§1, §2)
 packages/media_ops_contracts/   # shared contract code (write_safe_tools.md §5)
+packages/media_ops_video_quality/  # shared picture-quality measurements
 fixtures/<scenario>/  # the only fixture location; scenarios are shared across samples
 scripts/              # repo tooling: check_prerequisites.py, check_*.py, manage_*_stack.py
 ```
@@ -102,19 +106,21 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | Recipe | Meaning | Native command it wraps |
 |---|---|---|
 | `just doctor` | Check prerequisites, printing a fix command for each failure | `uv run python scripts/check_prerequisites.py` |
-| `just smoke` | Start each converted MCP server on fixtures and make one read | `uv run python scripts/smoke_demo_servers.py` |
-| `just smoke aws` | Run one live list and health read per converted MCP sample | `uv run python scripts/smoke_aws_servers.py` |
-| `just docs-check` | README structure, repository layout, documentation claims and model ids | `uv run python scripts/check_readme_structure.py && uv run python scripts/check_repository_layout.py && uv run python scripts/check_docs_claims.py && uv run python scripts/check_model_ids.py` |
-| `just run cmcd\|mediaconnect\|medialive` | Run one MCP stdio server | `uv run --package <distribution> serve-<key>` |
+| `just smoke` | Start the four fixture-backed MCP servers (`cmcd`, `mediaconnect`, `medialive`, `hls-doctor`) on fixtures and make one read each | `uv run python scripts/smoke_demo_servers.py` |
+| `just smoke aws` | Run one live list and health read per AWS MCP sample (`cmcd`, `mediaconnect`, `medialive`) | `uv run python scripts/smoke_aws_servers.py` |
+| `just docs-check` | README structure, repository layout, public hygiene, documentation claims and model ids | `uv run python scripts/check_readme_structure.py && uv run python scripts/check_repository_layout.py && uv run python scripts/check_public_hygiene.py && uv run python scripts/check_docs_claims.py && uv run python scripts/check_model_ids.py` |
+| `just run cmcd\|mediaconnect\|medialive\|hls-doctor` | Run one MCP stdio server | `uv run --package <distribution> serve-<key>` |
 | `just run agentic-iops-streaming` | Run the agentic-iops-streaming server locally | `AGENTIC_IOPS_LOCAL_MODE=true uv run --package agentic-iops-streaming serve-agentic-iops-streaming` |
 | `just test` | All offline unit and scenario tests, except those that start real processes | `uv run pytest` |
 | `just test-slow` | The tests that start real processes (MCP servers, a hung server the deadline must kill); CI runs them | `uv run pytest -m slow` |
 | `just test contracts` | Shared contract tests | `uv run pytest packages/media_ops_contracts/tests` |
+| `just test video-quality` | Shared visual-quality package tests | `uv run pytest packages/media_ops_video_quality/tests` |
 | `just test cmcd` | CMCD tests | `uv run pytest samples/cmcd/tests` |
 | `just test mediaconnect` | MediaConnect tests | `uv run pytest samples/mediaconnect/tests` |
 | `just test medialive` | MediaLive scenario and pack tests | `uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack` |
 | `just test agentic-iops-streaming` | Contract tests of agentic-iops-streaming | `uv run pytest samples/agentic-iops-streaming/tests/contract` |
-| `just test hydrolix` | Hydrolix deployment-management tests | `uv run pytest scripts/tests/test_manage_hydrolix_stack.py` |
+| `just test hls-doctor` | HLS Doctor tests | `uv run pytest samples/hls-doctor/tests` |
+| `just test hydrolix` | All Hydrolix tests | `uv run pytest scripts/tests/test_*hydrolix*.py` |
 | `just lint` | ruff check + format check | `uv run ruff check . && uv run ruff format --check .` |
 | `just typecheck` | Static type check with the repository ratchet | `uv run mypy` |
 | `just eval` | Replay the fixture scenarios and score them | `uv run pytest -m eval` |
@@ -122,13 +128,13 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 | `just cmcd-token` | Create or reuse a CMCD bucket-read token | `uv run python scripts/manage_cmcd_stack.py create-read-token` |
 | `just cmcd-token-verify` | Verify that the CMCD token can read but cannot write | `uv run python scripts/verify_influxdb_read_token.py` |
 | `just deploy <key>` | Deploy with the sample's existing material | per sample, see section 1 |
-| `just destroy <key>` | Remove everything `deploy` created | per sample |
+| `just destroy <key>` | Remove the stack-managed resources `deploy` created; the sample README lists anything retained by design | per sample |
 
 **Rules:**
 - A recipe is a thin wrapper. It contains no logic beyond choosing the native command and passing `.env` values. Logic belongs in a script or in the sample.
 - The sample README shows the raw native command under each recipe, so nothing is hidden.
 - `deploy` and `destroy` MUST print the AWS account and region and ask for confirmation, unless `--yes` is passed.
-- `deploy` defaults to read-only permissions. Write permissions require `ALLOW_WRITES=true` at deploy time.
+- `deploy` defaults to read-only permissions on media resources. Media-resource write permissions require `ALLOW_WRITES=true` at deploy time. A sample's own state is separate: agentic-iops-streaming always grants its tag-scoped signal-map create and delete and its own workflow table. `ALLOW_WORKFLOW_DISCOVERY` doesn't change that: it is a runtime setting the deploy doesn't pass, so it turns the workflow tools off only in a local run.
 
 ## 5. Configuration
 
@@ -138,11 +144,11 @@ Install `just` once with `uv tool install rust-just`. Running `just` with no arg
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AWS_REGION` | none (required) | Region for every AWS client |
+| `AWS_REGION` | `us-west-2` (root `.env.example`) | Region for every AWS client |
 | `AGENT_MODEL_ID` | `us.anthropic.claude-sonnet-4-6` | Bedrock model for agents |
 | `THUMBNAIL_MODEL_ID` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Bedrock model for thumbnail analysis (MediaLive and MediaConnect) |
 | `MEMORY_ID` | empty, meaning memory is off | AgentCore Memory id |
-| `ALLOW_WRITES` | `false` | Register write tools, or grant write IAM at deploy |
+| `ALLOW_WRITES` | `false` | Register the media-resource write tools, or grant their IAM at deploy |
 | `DEMO` | `false` | Replay fixtures instead of calling AWS |
 | `DEMO_SCENARIO` | per sample | Which `fixtures/<scenario>/` to replay |
 | `FIXTURES_DIR` | `fixtures` (relative to the repo root, where `just` runs) | Fixture root override |
@@ -170,7 +176,7 @@ The root `.env` is never committed. The root `.env.example` is always committed.
 
 ### Model selection (every deployment)
 
-The user chooses models **once**, in the root `.env`. Every `just run` and `just deploy` uses that choice. No model id is hardcoded anywhere else.
+The user chooses models **once**, in the root `.env`. Every model-using `just run` and `just deploy` uses that choice. No model id is hardcoded anywhere else.
 
 | Role | Env var | CDK input | Default | Used by |
 |---|---|---|---|---|

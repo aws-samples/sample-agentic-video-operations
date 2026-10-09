@@ -4,6 +4,7 @@ from pathlib import Path
 
 import check_docs_claims as claims
 from validate_documented_commands import ScriptInterface
+from validate_documented_surfaces import read_tool_names
 
 JUSTFILE = """
 demo:
@@ -329,6 +330,27 @@ def test_tools_in_skills_and_expected_results_must_be_registered():
         "'restart_encoder' is not a registered tool"
     ]
     assert expected == ["samples/medialive/README.md: 'restart_encoder' is not a registered tool"]
+
+
+def test_the_coordinator_workflow_tools_are_registered():
+    tools = read_tool_names(claims.ROOT)
+
+    assert {"discover_workflow", "save_workflow", "list_workflows", "get_workflow"} <= tools
+
+
+def test_discover_and_save_tools_named_in_a_skill_must_be_registered():
+    found = claims.find_problems(
+        Path("samples/agentic-iops-streaming/src/agentic_iops_streaming/skills/map/SKILL.md"),
+        "1. Call `discover_topology(arn)`, then `save_topology(topology_id)`.",
+        RECIPES,
+        sources(tools=frozenset({"discover_workflow", "save_workflow"})),
+    )
+
+    assert found == [
+        "samples/agentic-iops-streaming/src/agentic_iops_streaming/skills/map/SKILL.md: "
+        f"{name!r} is not a registered tool"
+        for name in ("discover_topology", "save_topology")
+    ]
 
 
 def test_stack_outputs_and_cdk_parameters_must_be_declared():

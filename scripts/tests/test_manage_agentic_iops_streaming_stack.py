@@ -76,7 +76,7 @@ def test_deploy_defaults_to_both_packs_without_writes_and_confirms_once():
     assert deploy[deploy.index("--require-approval") + 1] == "never"
 
 
-# --- T59: one confirmation, before anything is built ------------------------------------
+# --- One confirmation, before anything is built -----------------------------------------
 
 
 def test_the_security_diff_is_shown_before_the_prompt_and_builds_nothing():
@@ -356,7 +356,7 @@ def test_incomplete_or_conflicting_auth_settings_stop_before_any_aws_call(extra,
 
 
 def test_the_security_diff_and_the_deploy_name_the_same_models():
-    """T60 review: the models are CDK context, so the diff shown before approval synthesizes
+    """The models are CDK context, so the diff shown before approval synthesizes
     the exact IAM the deploy creates. The stack derives each base model; nothing passes one."""
     runner = FakeRunner()
     env = ENV | {"THUMBNAIL_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0"}
@@ -406,7 +406,7 @@ def test_a_bootstrap_with_another_qualifier_stops_before_anything_is_built(capsy
 
 
 def test_destroy_deletes_a_stack_a_failed_deploy_left_in_rollback_complete(capsys):
-    """RB14: the live failure rolled back; `just destroy agentic-iops-streaming` is how to clear
+    """The live failure rolled back; `just destroy agentic-iops-streaming` is how to clear
     it."""
     runner = FakeRunner({"--stack-name AgenticIopsStreamingStack": (0, "ROLLBACK_COMPLETE\n", "")})
 
@@ -414,3 +414,72 @@ def test_destroy_deletes_a_stack_a_failed_deploy_left_in_rollback_complete(capsy
 
     assert runner.ran("destroy AgenticIopsStreamingStack --force")
     assert "AgenticIopsStreamingStack (ROLLBACK_COMPLETE)" in capsys.readouterr().out
+
+
+# --- The retained workflow table is reported, never deleted ------------------------------
+
+TABLE = "AgenticIopsStreamingStack-WorkflowTable1A2B3C4D-EXAMPLE"
+
+
+def test_destroy_names_the_retained_workflow_table_and_never_deletes_it(capsys):
+    runner = FakeRunner(
+        {"Outputs[?OutputKey=='WorkflowTableName']": (0, f"{TABLE}\n", ""),
+         "describe-log-groups": (0, "", "")}
+    )  # fmt: skip
+    prompts = []
+
+    assert (
+        stack_script.main(
+            ["destroy"],
+            runner,
+            ask=lambda text: prompts.append(text) or "y",
+            environ=ENV,
+            interactive=True,
+        )
+        == 0
+    )
+
+    out = capsys.readouterr().out
+    shown = "\n".join(prompts) + out
+    assert f"{TABLE} (left in place by design" in shown  # in the confirmation
+    assert "Left in place by design:" in out
+    assert f"aws dynamodb delete-table --region us-west-2 --table-name {TABLE}" in out
+    assert runner.ran("delete-table") == []  # printed for the operator, never run
+    assert "Teardown complete" in out
+
+
+def test_a_failed_destroy_still_lists_the_retained_table_beside_what_remains(capsys):
+    runner = FakeRunner(
+        {"Outputs[?OutputKey=='WorkflowTableName']": (0, f"{TABLE}\n", ""),
+         "describe-log-groups": (0, "", ""),
+         "destroy AgenticIopsStreamingStack": (1, "", "")}
+    )  # fmt: skip
+
+    assert stack_script.main(["destroy", "--yes"], runner, environ=ENV) == 1
+
+    out = capsys.readouterr().out
+    assert "- CloudFormation stack AgenticIopsStreamingStack" in out
+    assert f"- DynamoDB table {TABLE}" in out.split("Left in place by design:")[1]
+    assert runner.ran("delete-table") == []
+
+
+def test_a_stack_without_the_table_output_reports_no_table(capsys):
+    """A stack deployed before the workflow table: nothing to report, nothing invented."""
+    runner = FakeRunner(
+        {"Outputs[?OutputKey=='WorkflowTableName']": (0, "None\n", ""),
+         "describe-log-groups": (0, "", "")}
+    )  # fmt: skip
+
+    assert stack_script.main(["destroy", "--yes"], runner, environ=ENV) == 0
+
+    out = capsys.readouterr().out
+    assert "Left in place by design" not in out and "delete-table" not in out
+
+
+def test_an_unreadable_table_output_deletes_nothing(capsys):
+    runner = FakeRunner({"Outputs[?OutputKey=='WorkflowTableName']": (254, "", DENIED)})
+
+    assert stack_script.main(["destroy", "--yes"], runner, environ=ENV) == 1
+
+    assert runner.ran(" destroy ") == [] and runner.ran("delete-log-group") == []
+    assert "Nothing was deleted" in capsys.readouterr().out

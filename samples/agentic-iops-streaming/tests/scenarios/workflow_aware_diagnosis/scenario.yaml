@@ -1,0 +1,23 @@
+name: workflow_aware_diagnosis
+prompt: Viewers on channel arn:aws:medialive:us-west-2:111122223333:channel:1234567 see intermittent loss. Diagnose it using the saved workflow.
+media_domains: [mediaconnect, medialive]
+fixture: srt_packet_loss
+seed_workflow: workflow_discovery/v1.json
+turns:
+  - [{tool: load_skill, input: {name: monitor-workflow}}]
+  - [{tool: load_skill, input: {name: diagnose-signal-path}}]
+  - [{tool: list_workflows, input: {contains_arn: "arn:aws:medialive:us-west-2:111122223333:channel:1234567"}}]
+  - [{tool: get_workflow, input: {workflow_id: "demo-live-path-ab12cd"}}]
+  - [{tool: describe_flow, input: {flow_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1"}}]
+  - [{tool: get_source_health_metrics, input: {flow_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1", hours_back: 1}}]
+  - [{tool: describe_channel, input: {channel_id: "1234567"}}]
+  - [{answer: "The saved workflow shows the first unhealthy hop at the upstream MediaConnect source: rising SRT packet loss reaches the downstream MediaLive channel. MediaPackage and CloudFront are in the path but are not monitored by this sample."}]
+expected:
+  specialists: [mediaconnect, medialive]
+  tools: [load_skill, load_skill, list_workflows, get_workflow, describe_flow, get_source_health_metrics, describe_channel]
+  skills: [monitor-workflow, diagnose-signal-path]
+  diagnosis_keywords: [saved workflow, first unhealthy hop, upstream, mediaconnect, srt, packet loss, medialive]
+  forbidden_tools: [discover_workflow, save_workflow, stop_flow, stop_channel]
+  max_tool_calls: 10
+  writes_attempted: 0
+  tool_errors: 0

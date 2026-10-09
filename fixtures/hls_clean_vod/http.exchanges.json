@@ -1,0 +1,629 @@
+{
+ "base_url": "https://demo.example/vod/master.m3u8",
+ "exchanges": {
+  "https://demo.example/vod/master.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "1120"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"English\",LANGUAGE=\"en\",DEFAULT=YES,AUTOSELECT=YES,CHANNELS=\"2\",URI=\"audio/en/prog.m3u8\"\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"English\",LANGUAGE=\"en\",DEFAULT=YES,AUTOSELECT=YES,URI=\"subs/en/prog.m3u8\"\n#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"cc\",NAME=\"English CC\",LANGUAGE=\"en\",AUTOSELECT=YES,INSTREAM-ID=\"CC1\"\n#EXT-X-STREAM-INF:BANDWIDTH=6000000,AVERAGE-BANDWIDTH=5500000,CODECS=\"avc1.640028,mp4a.40.2\",RESOLUTION=1920x1080,FRAME-RATE=29.970,AUDIO=\"aud\",SUBTITLES=\"subs\",CLOSED-CAPTIONS=\"cc\"\nv1080/prog.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,AVERAGE-BANDWIDTH=2800000,CODECS=\"avc1.640020,mp4a.40.2\",RESOLUTION=1280x720,FRAME-RATE=29.970,AUDIO=\"aud\",SUBTITLES=\"subs\",CLOSED-CAPTIONS=\"cc\"\nv720/prog.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1400000,AVERAGE-BANDWIDTH=1200000,CODECS=\"avc1.64001e,mp4a.40.2\",RESOLUTION=842x480,FRAME-RATE=29.970,AUDIO=\"aud\",SUBTITLES=\"subs\",CLOSED-CAPTIONS=\"cc\"\nv480/prog.m3u8\n#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=180000,CODECS=\"avc1.640028\",RESOLUTION=1920x1080,URI=\"iframe/prog.m3u8\"\n",
+   "ttfb_ms": 18.0,
+   "total_ms": 24.0
+  },
+  "https://demo.example/vod/v1080/prog.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "796"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-KEY:METHOD=AES-128,URI=\"/vod/keys/content.key\",IV=0x00112233445566778899aabbccddeeff\n#EXT-X-DATERANGE:ID=\"chapter-1\",CLASS=\"com.demo.chapter\",START-DATE=\"2026-10-06T14:00:00.000Z\",DURATION=36.0\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:00.000Z\n#EXTINF:6.00000,\nseg0.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:06.000Z\n#EXTINF:6.00000,\nseg1.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:12.000Z\n#EXTINF:6.00000,\nseg2.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:18.000Z\n#EXTINF:6.00000,\nseg3.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:24.000Z\n#EXTINF:6.00000,\nseg4.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:30.000Z\n#EXTINF:6.00000,\nseg5.m4s\n#EXT-X-ENDLIST\n",
+   "ttfb_ms": 18.0,
+   "total_ms": 24.0
+  },
+  "https://demo.example/vod/v720/prog.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "796"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-KEY:METHOD=AES-128,URI=\"/vod/keys/content.key\",IV=0x00112233445566778899aabbccddeeff\n#EXT-X-DATERANGE:ID=\"chapter-1\",CLASS=\"com.demo.chapter\",START-DATE=\"2026-10-06T14:00:00.000Z\",DURATION=36.0\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:00.000Z\n#EXTINF:6.00000,\nseg0.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:06.000Z\n#EXTINF:6.00000,\nseg1.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:12.000Z\n#EXTINF:6.00000,\nseg2.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:18.000Z\n#EXTINF:6.00000,\nseg3.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:24.000Z\n#EXTINF:6.00000,\nseg4.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:30.000Z\n#EXTINF:6.00000,\nseg5.m4s\n#EXT-X-ENDLIST\n",
+   "ttfb_ms": 18.0,
+   "total_ms": 24.0
+  },
+  "https://demo.example/vod/v480/prog.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "796"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-KEY:METHOD=AES-128,URI=\"/vod/keys/content.key\",IV=0x00112233445566778899aabbccddeeff\n#EXT-X-DATERANGE:ID=\"chapter-1\",CLASS=\"com.demo.chapter\",START-DATE=\"2026-10-06T14:00:00.000Z\",DURATION=36.0\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:00.000Z\n#EXTINF:6.00000,\nseg0.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:06.000Z\n#EXTINF:6.00000,\nseg1.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:12.000Z\n#EXTINF:6.00000,\nseg2.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:18.000Z\n#EXTINF:6.00000,\nseg3.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:24.000Z\n#EXTINF:6.00000,\nseg4.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:30.000Z\n#EXTINF:6.00000,\nseg5.m4s\n#EXT-X-ENDLIST\n",
+   "ttfb_ms": 18.0,
+   "total_ms": 24.0
+  },
+  "https://demo.example/vod/audio/en/prog.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "796"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-KEY:METHOD=AES-128,URI=\"/vod/keys/content.key\",IV=0x00112233445566778899aabbccddeeff\n#EXT-X-DATERANGE:ID=\"chapter-1\",CLASS=\"com.demo.chapter\",START-DATE=\"2026-10-06T14:00:00.000Z\",DURATION=36.0\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:00.000Z\n#EXTINF:6.00000,\nseg0.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:06.000Z\n#EXTINF:6.00000,\nseg1.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:12.000Z\n#EXTINF:6.00000,\nseg2.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:18.000Z\n#EXTINF:6.00000,\nseg3.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:24.000Z\n#EXTINF:6.00000,\nseg4.m4s\n#EXT-X-PROGRAM-DATE-TIME:2026-10-06T14:00:30.000Z\n#EXTINF:6.00000,\nseg5.m4s\n#EXT-X-ENDLIST\n",
+   "ttfb_ms": 18.0,
+   "total_ms": 24.0
+  },
+  "https://demo.example/vod/subs/en/prog.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "269"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:6.00000,\nsub0.vtt\n#EXTINF:6.00000,\nsub1.vtt\n#EXTINF:6.00000,\nsub2.vtt\n#EXTINF:6.00000,\nsub3.vtt\n#EXTINF:6.00000,\nsub4.vtt\n#EXTINF:6.00000,\nsub5.vtt\n#EXT-X-ENDLIST\n",
+   "ttfb_ms": 18.0,
+   "total_ms": 24.0
+  },
+  "https://demo.example/vod/iframe/prog.m3u8": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/vnd.apple.mpegurl",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "460"
+   },
+   "body": "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-I-FRAMES-ONLY\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:6.00000,\n#EXT-X-BYTERANGE:1200@0\nseg0.m4s\n#EXTINF:6.00000,\n#EXT-X-BYTERANGE:1200@0\nseg1.m4s\n#EXTINF:6.00000,\n#EXT-X-BYTERANGE:1200@0\nseg2.m4s\n#EXTINF:6.00000,\n#EXT-X-BYTERANGE:1200@0\nseg3.m4s\n#EXTINF:6.00000,\n#EXT-X-BYTERANGE:1200@0\nseg4.m4s\n#EXTINF:6.00000,\n#EXT-X-BYTERANGE:1200@0\nseg5.m4s\n#EXT-X-ENDLIST\n",
+   "ttfb_ms": 18.0,
+   "total_ms": 24.0
+  },
+  "https://demo.example/vod/v1080/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v1080/seg0.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v1080/seg1.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v1080/seg2.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v1080/seg3.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v1080/seg4.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v1080/seg5.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v720/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v720/seg0.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v720/seg1.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v720/seg2.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v720/seg3.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v720/seg4.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v720/seg5.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v480/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v480/seg0.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v480/seg1.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v480/seg2.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v480/seg3.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v480/seg4.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/v480/seg5.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/audio/en/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/audio/en/seg0.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/audio/en/seg1.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/audio/en/seg2.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/audio/en/seg3.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/audio/en/seg4.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/audio/en/seg5.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/iframe/init.mp4": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/mp4",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/iframe/seg0.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/iframe/seg1.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/iframe/seg2.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/iframe/seg3.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/iframe/seg4.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/iframe/seg5.m4s": {
+   "status": 200,
+   "headers": {
+    "content-type": "video/iso.segment",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "38"
+   },
+   "body_b64": "AAAAGGZ0eXBjbWYyLWhscy1kb2N0b3ItZGVtby1tZWRpYS1zdHVi",
+   "truncated": true,
+   "ttfb_ms": 12.0,
+   "total_ms": 30.0
+  },
+  "https://demo.example/vod/subs/en/sub0.vtt": {
+   "status": 200,
+   "headers": {
+    "content-type": "text/vtt",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "54"
+   },
+   "body": "WEBVTT\n\n00:00:00.000 --> 00:00:06.000\n[demo subtitle]\n",
+   "ttfb_ms": 10.0,
+   "total_ms": 14.0
+  },
+  "https://demo.example/vod/subs/en/sub1.vtt": {
+   "status": 200,
+   "headers": {
+    "content-type": "text/vtt",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "54"
+   },
+   "body": "WEBVTT\n\n00:00:06.000 --> 00:00:12.000\n[demo subtitle]\n",
+   "ttfb_ms": 10.0,
+   "total_ms": 14.0
+  },
+  "https://demo.example/vod/subs/en/sub2.vtt": {
+   "status": 200,
+   "headers": {
+    "content-type": "text/vtt",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "54"
+   },
+   "body": "WEBVTT\n\n00:00:12.000 --> 00:00:18.000\n[demo subtitle]\n",
+   "ttfb_ms": 10.0,
+   "total_ms": 14.0
+  },
+  "https://demo.example/vod/subs/en/sub3.vtt": {
+   "status": 200,
+   "headers": {
+    "content-type": "text/vtt",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "54"
+   },
+   "body": "WEBVTT\n\n00:00:18.000 --> 00:00:24.000\n[demo subtitle]\n",
+   "ttfb_ms": 10.0,
+   "total_ms": 14.0
+  },
+  "https://demo.example/vod/subs/en/sub4.vtt": {
+   "status": 200,
+   "headers": {
+    "content-type": "text/vtt",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "54"
+   },
+   "body": "WEBVTT\n\n00:00:24.000 --> 00:00:30.000\n[demo subtitle]\n",
+   "ttfb_ms": 10.0,
+   "total_ms": 14.0
+  },
+  "https://demo.example/vod/subs/en/sub5.vtt": {
+   "status": 200,
+   "headers": {
+    "content-type": "text/vtt",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "54"
+   },
+   "body": "WEBVTT\n\n00:00:30.000 --> 00:00:36.000\n[demo subtitle]\n",
+   "ttfb_ms": 10.0,
+   "total_ms": 14.0
+  },
+  "https://demo.example/vod/keys/content.key": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/octet-stream",
+    "server": "demo-cdn",
+    "age": "0",
+    "content-length": "16"
+   },
+   "body_b64": "AAECAwQFBgcICQoLDA0ODw==",
+   "truncated": false,
+   "ttfb_ms": 9.0,
+   "total_ms": 11.0
+  }
+ }
+}

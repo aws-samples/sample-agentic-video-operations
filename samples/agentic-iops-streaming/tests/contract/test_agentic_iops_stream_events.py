@@ -68,7 +68,8 @@ def test_a_turn_reports_its_accumulated_usage(tmp_path, caplog):
         usage.cache_read_input_tokens,
         usage.cache_write_input_tokens,
     ) == (2, 2, 4, 6, 8)
-    assert usage.estimated_usd == 0.000036
+    # input and output at 3 and 15 USD per million; cache reads at 0.1x and writes at 1.25x input
+    assert usage.estimated_usd == round((2 * 3 + 2 * 15 + 6 * 0.3 + 8 * 3.75) / 1e6, 6)
     assert usage.rates_confirmed is False
     assert '"tokens.input": 2, "tokens.output": 2' in caplog.text
     assert '"tokens.cache_read_input": 6, "tokens.cache_write_input": 8' in caplog.text

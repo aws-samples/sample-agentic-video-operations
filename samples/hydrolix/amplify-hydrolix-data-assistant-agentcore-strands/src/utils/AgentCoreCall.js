@@ -88,7 +88,7 @@ export const getAnswer = async (
     let unknownEvents = 0;
     let currentToolName = "";
     // The request's error and the queries it ran: the runtime's last record is always the
-    // query records, after any error, so they are decided once the stream ends (T41).
+    // query records, after any error, so they are decided once the stream ends.
     const outcome = createRuntimeOutcome();
 
     // One record's text (what the runtime yielded) into the answer being built.

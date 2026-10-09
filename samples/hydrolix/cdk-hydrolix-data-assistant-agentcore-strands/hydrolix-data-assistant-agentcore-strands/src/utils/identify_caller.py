@@ -1,4 +1,4 @@
-"""Who is asking, and which conversation they may use (RB9).
+"""Who is asking, and which conversation they may use.
 
 JWT mode (HYDROLIX_JWT_ISSUER, set by the CDK): AgentCore Runtime accepts only bearer
 tokens from the configured Cognito user pool and app clients. It verifies their signature,

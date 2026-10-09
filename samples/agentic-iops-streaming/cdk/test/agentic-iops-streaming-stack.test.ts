@@ -8,7 +8,7 @@ import {
 
 function synth(context: Record<string, string> = {}): Template {
   const app = new cdk.App({ context });
-  return Template.fromStack(new AgenticIopsStreamingStack(app, 'TestHub'));
+  return Template.fromStack(new AgenticIopsStreamingStack(app, 'TestAgenticIops'));
 }
 
 function runtimeEnvironment(template: Template): Record<string, unknown> {
@@ -31,6 +31,11 @@ const defaultTemplate = synth();
 const EU_SONNET = ['eu', 'anthropic.claude-sonnet-4-6'].join('.');
 
 describe('runtime environment', () => {
+  test('the hls pack synthesizes with its empty IAM permission set', () => {
+    const template = synth({ mediaDomains: 'medialive,mediaconnect,hls' });
+    expect(runtimeEnvironment(template).MEDIA_DOMAINS).toBe('medialive,mediaconnect,hls');
+  });
+
   test('sets the selected domains, writes off by default, memory and the signing-key secret', () => {
     const env = runtimeEnvironment(defaultTemplate);
     expect(env.MEDIA_DOMAINS).toBe('medialive,mediaconnect');
@@ -230,7 +235,7 @@ describe('pack IAM', () => {
 describe("runtime writes are scoped to the runtime's own resources", () => {
   test("memory actions name only the agent's memory and logs only this runtime", () => {
     const statements = roleStatements(defaultTemplate);
-    const memory = statements.find((s: any) => s.Sid === 'UseHubMemory');
+    const memory = statements.find((s: any) => s.Sid === 'UseAgenticIopsMemory');
     expect(memory.Resource).toEqual({ 'Fn::GetAtt': [expect.stringMatching(/^AgenticIopsMemory/), 'MemoryArn'] });
     const logs = statements.find((s: any) => s.Sid === 'WriteRuntimeLogs');
     expect(JSON.stringify(logs.Resource)).toContain(`runtimes/${RUNTIME_NAME}-*`);
@@ -268,7 +273,7 @@ describe('trust policy', () => {
   });
 });
 
-describe('Bedrock invoke is scoped to the configured models (T60)', () => {
+describe('Bedrock invoke is scoped to the configured models', () => {
   const bedrockStatements = (template: Template) =>
     roleStatements(template).filter((s) =>
       ([] as string[]).concat(s.Action).some((a: string) => a.startsWith('bedrock:Invoke')),
@@ -299,7 +304,7 @@ describe('Bedrock invoke is scoped to the configured models (T60)', () => {
   });
 
   test('the foundation model is derived from the profile, so the pair can never mismatch', () => {
-    // GPT's T60 case: a Sonnet profile could be paired with an unrelated base id. There is no
+    // A Sonnet profile could previously be paired with an unrelated base id. There is no
     // base input any more: the stack derives it.
     const template = synth({ agentModelId: EU_SONNET });
     expect(agentGrant(template)).toEqual([
@@ -339,7 +344,7 @@ describe('Bedrock invoke is scoped to the configured models (T60)', () => {
   });
 });
 
-describe('the runtime is created after its role can pull the image (RB14)', () => {
+describe('the runtime is created after its role can pull the image', () => {
   test.each([
     ['default', {}],
     ['allowWrites', { allowWrites: 'true' }],
@@ -366,5 +371,98 @@ test('the memory and endpoint names have a fixed suffix, not one derived from th
   });
   renamed.hasResourceProperties('AWS::BedrockAgentCore::RuntimeEndpoint', {
     Name: `AgenticIopsStreamingEndpoint_${RESOURCE_NAME_SUFFIX}`,
+  });
+});
+
+describe('the workflow store and the signal maps it may touch (§8.4, §8.5)', () => {
+  const template = defaultTemplate.toJSON();
+  const statement = (sid: string) =>
+    roleStatements(defaultTemplate).find((item: any) => item.Sid === sid);
+  const signalMapArn = {
+    'Fn::Sub': 'arn:${AWS::Partition}:medialive:${AWS::Region}:${AWS::AccountId}:signal-map:*',
+  };
+
+  test('the table is on-demand, recoverable, encrypted and retained', () => {
+    defaultTemplate.hasResource('AWS::DynamoDB::Table', {
+      DeletionPolicy: 'Retain',
+      UpdateReplacePolicy: 'Retain',
+      Properties: {
+        BillingMode: 'PAY_PER_REQUEST',
+        KeySchema: [
+          { AttributeName: 'workflow_id', KeyType: 'HASH' },
+          { AttributeName: 'version', KeyType: 'RANGE' },
+        ],
+        AttributeDefinitions: [
+          { AttributeName: 'workflow_id', AttributeType: 'S' },
+          { AttributeName: 'version', AttributeType: 'N' },
+        ],
+        PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+        SSESpecification: { SSEEnabled: true },
+      },
+    });
+  });
+
+  test('the runtime is told the table name and the stack outputs it', () => {
+    const environment = runtimeEnvironment(defaultTemplate);
+    const [tableId] = Object.keys(defaultTemplate.findResources('AWS::DynamoDB::Table'));
+    expect(environment.WORKFLOW_TABLE_NAME).toEqual({ Ref: tableId });
+    expect(template.Outputs.WorkflowTableName.Value).toEqual({ Ref: tableId });
+  });
+
+  test('the store grant names this table only, with no delete or scan of anything else', () => {
+    const store = statement('UseWorkflowStore');
+    const [tableId] = Object.keys(defaultTemplate.findResources('AWS::DynamoDB::Table'));
+    expect(store.Resource).toEqual({ 'Fn::GetAtt': [tableId, 'Arn'] });
+    expect(store.Action.sort()).toEqual([
+      'dynamodb:GetItem',
+      'dynamodb:PutItem',
+      'dynamodb:Query',
+      'dynamodb:Scan',
+    ]);
+    const everyAction = JSON.stringify(roleStatements(defaultTemplate));
+    expect(everyAction).not.toContain('dynamodb:DeleteItem');
+    expect(everyAction).not.toContain('dynamodb:UpdateItem');
+  });
+
+  test('creating a signal map requires the app tag, and only that tag', () => {
+    const create = statement('CreateTaggedSignalMap');
+    expect(create.Action.sort()).toEqual(['medialive:CreateSignalMap', 'medialive:CreateTags']);
+    expect(create.Resource).toEqual(signalMapArn);
+    expect(create.Condition).toEqual({
+      StringEquals: { 'aws:RequestTag/managed-by': 'agentic-iops-streaming' },
+      'ForAllValues:StringEquals': { 'aws:TagKeys': ['managed-by'] },
+    });
+  });
+
+  test('reading and deleting a signal map require the app tag on the map itself', () => {
+    const own = statement('ReadAndDeleteOwnSignalMaps');
+    expect(own.Action.sort()).toEqual(['medialive:DeleteSignalMap', 'medialive:GetSignalMap']);
+    expect(own.Resource).toEqual(signalMapArn);
+    expect(own.Condition).toEqual({
+      StringEquals: { 'aws:ResourceTag/managed-by': 'agentic-iops-streaming' },
+    });
+  });
+
+  test('no other signal-map or monitor action is granted', () => {
+    const granted = JSON.stringify(roleStatements(defaultTemplate));
+    for (const refused of [
+      'medialive:StartUpdateSignalMap',
+      'medialive:ListSignalMaps',
+      'medialive:StartMonitorDeployment',
+      'medialive:DeleteMonitorDeployment',
+      'medialive:CreateCloudWatchAlarmTemplate',
+    ]) {
+      expect(granted).not.toContain(refused);
+    }
+  });
+
+  test('every signal-map statement is tag-conditioned: none is unconditional', () => {
+    const signalMapStatements = roleStatements(defaultTemplate).filter((item: any) =>
+      JSON.stringify(item.Action).includes('SignalMap'),
+    );
+    expect(signalMapStatements.length).toBeGreaterThan(0);
+    for (const item of signalMapStatements) {
+      expect(JSON.stringify(item.Condition)).toContain('managed-by');
+    }
   });
 });

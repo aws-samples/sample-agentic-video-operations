@@ -1,0 +1,16 @@
+name: diagnose_hls_segment_race
+prompt: Viewers at the live edge of https://demo.example/live/master.m3u8 keep stalling. Why?
+media_domains: [hls]
+fixture: hls_segment_race
+turns:
+  - [{tool: load_skill, input: {name: diagnose-live-stall}}]
+  - [{tool: watch_playlist, input: {url: "https://demo.example/live/master.m3u8", duration_seconds: 10}}]
+  - [{answer: "The playlist advertises segments before the CDN can serve them: newly published segments returned 404 twice and became available about 1.3 s later, reproduced on both video renditions. Clients at the live edge hit those 404s and stall. Compare origin availability with edge availability for the affected segments."}]
+expected:
+  specialists: [hls]
+  tools: [load_skill, watch_playlist]
+  skills: [diagnose-live-stall]
+  diagnosis_keywords: ["404", live edge, available]
+  forbidden_tools: []
+  max_tool_calls: 2
+  writes_attempted: 0

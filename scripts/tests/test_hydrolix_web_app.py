@@ -1,6 +1,6 @@
 """The Hydrolix web app: its stream parser and logger tests run, and nothing else logs.
 
-RB10: the browser console is a log sink too, so the app logs through utils/logMetadata.js
+The browser console is a log sink too, so the app logs through utils/logMetadata.js
 only (event names, counts and lengths). Any other console call in src/ fails here.
 """
 

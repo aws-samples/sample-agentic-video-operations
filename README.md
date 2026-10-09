@@ -17,6 +17,7 @@ Choose the operator outcome you need:
 | Find regional buffering, bitrate, or playback-error patterns in CMCD data | [`cmcd`](samples/cmcd/) | `just run cmcd` |
 | Inspect MediaConnect flow health, packet loss, metrics, or thumbnails | [`mediaconnect`](samples/mediaconnect/) | `just run mediaconnect` |
 | Inspect MediaLive channels, inputs, outputs, schedules, or alarms | [`medialive`](samples/medialive/) | `just run medialive` |
+| Diagnose an HLS presentation from one manifest URL: playlists, delivery, live updates, ad signaling | [`hls-doctor`](samples/hls-doctor/) | `just run hls-doctor` |
 | Investigate a signal path across MediaConnect and MediaLive, with approved fixes | [`agentic-iops-streaming`](samples/agentic-iops-streaming/) | `just demo` |
 | Explore CDN and streaming analytics through a web application | [`hydrolix`](samples/hydrolix/) | `just deploy hydrolix` |
 
@@ -39,11 +40,13 @@ just smoke
 ok   cmcd             analyze_buffer_events
 ok   mediaconnect     list_flows
 ok   medialive        list_channels
+ok   hls-doctor       fetch_manifest
 Demo smoke passed without AWS clients.
 ```
 
-Every sample just started as a real MCP server and answered from **fixtures** —
-recorded AWS responses for scripted incidents (a MediaLive input loss, an SRT
+The four fixture-backed MCP samples just started as real MCP servers and answered from **fixtures**:
+recorded AWS responses for the three AWS samples, and recorded HTTP exchanges for HLS Doctor,
+for scripted incidents (a MediaLive input loss, an SRT
 packet-loss event, a viewer buffering spike). Nothing touched AWS.
 
 Then watch the agent investigate a recorded incident, still offline:
@@ -117,14 +120,14 @@ Before an AWS-backed run or deployment, make those checks strict:
 just doctor aws
 ```
 
-The strict check also starts the three converted MCP servers with writes
-disabled, lists the configured live resources, and runs one health read per
-sample. Run that probe directly with `just smoke aws`.
+The strict check also starts the three AWS MCP servers (`cmcd`, `mediaconnect`,
+`medialive`) with writes disabled, lists the configured live resources, and runs one
+health read per sample. Run that probe directly with `just smoke aws`.
 
 ### Models
 
-Choose models once in the root `.env`. All local runs and deployments use the
-same values.
+Choose models once in the root `.env`. Every model-using local run and deployment
+uses the same values.
 
 | Role | Default | Used by | Change it |
 |---|---|---|---|
@@ -169,7 +172,7 @@ A reasoning agent must not use a Haiku model.
    just doctor
    ```
 
-5. Prove every sample works offline:
+5. Prove the four fixture-backed MCP samples work offline:
 
    ```bash
    just smoke
@@ -181,8 +184,10 @@ A reasoning agent must not use a Haiku model.
    just demo
    ```
 
-Neither step needs an AWS account or a Bedrock call. `just smoke` starts each
-sample's MCP server on recorded fixtures and calls one tool. `just demo` replays
+Neither step needs an AWS account or a Bedrock call. `just smoke` starts the MCP
+servers of `cmcd`, `mediaconnect`, `medialive` and `hls-doctor` on recorded fixtures and
+calls one tool on each. It doesn't start `agentic-iops-streaming` or `hydrolix`;
+`just demo` is the offline proof of the agent: it replays
 a recorded MediaLive input-loss incident through the real agent and medialive pack
 with a scripted model, and prints the diagnosis: pipeline 0 lost its SRT input.
 
@@ -208,8 +213,14 @@ just deploy <key>
 ```
 
 The command prints the AWS account and region and asks for confirmation.
-Deployments create billable resources. Write permissions are disabled by
-default; explicitly set `ALLOW_WRITES=true` only when they are required.
+Deployments create billable resources. Media-resource writes (start, stop,
+input switch, schedule changes) are off by default; set `ALLOW_WRITES=true` only
+when they are required. agentic-iops-streaming's workflow discovery has its own
+switch, `ALLOW_WORKFLOW_DISCOVERY`, on by default: discovery creates and then
+deletes a transient signal map tagged `managed-by`, and `save_workflow` writes only
+the sample's own workflow store, after the operator approves. It is a runtime setting
+for local runs: the deploy doesn't pass it, so a deployed agent always has discovery on
+and the stack always grants its IAM.
 
 ### Verify the Deployment
 
@@ -220,7 +231,8 @@ exact request against the deployed endpoint and the expected operational result.
 
 Stop a local process with `Ctrl+C`.
 
-Destroy everything created by a sample deployment:
+Remove the stack-managed resources of a sample deployment (each sample README lists
+anything retained by design, such as the agent's workflow table):
 
 ```bash
 just destroy <key>

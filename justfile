@@ -2,7 +2,7 @@
 # show that raw command too. Contract: docs/build_a_sample.md §4.
 #
 # Install once:  uv tool install rust-just
-# Sample keys:   cmcd · mediaconnect · medialive · agentic-iops-streaming · hydrolix
+# Sample keys:   cmcd · mediaconnect · medialive · hls-doctor · agentic-iops-streaming · hydrolix
 
 set dotenv-load
 set shell := ["bash", "-euo", "pipefail", "-c"]
@@ -26,6 +26,7 @@ run sample *args:
       mediaconnect) uv run --package mediaconnect-mcp-server serve-mediaconnect {{ args }} ;;
       medialive)    uv run --package medialive-mcp-server serve-medialive {{ args }} ;;
       agentic-iops-streaming)          AGENTIC_IOPS_LOCAL_MODE=true uv run --package agentic-iops-streaming serve-agentic-iops-streaming {{ args }} ;;
+      hls-doctor)   uv run --package hls-doctor serve-hls-doctor {{ args }} ;;
       hydrolix)     just _pending hydrolix ;;
       *)            just _unknown "{{ sample }}" ;;
     esac
@@ -43,7 +44,8 @@ test sample="":
       mediaconnect) uv run pytest samples/mediaconnect/tests ;;
       medialive) uv run pytest samples/medialive/tests/scenarios samples/medialive/tests/pack ;;
       agentic-iops-streaming)       uv run pytest samples/agentic-iops-streaming/tests/contract ;;
-      hydrolix)  uv run pytest scripts/tests/test_manage_hydrolix_stack.py ;;
+      hls-doctor) uv run pytest samples/hls-doctor/tests ;;
+      hydrolix)  uv run pytest scripts/tests/test_*hydrolix*.py ;;
       *)         just _unknown "{{ sample }}" ;;
     esac
 
@@ -89,14 +91,19 @@ smoke target="":
 docs-check:
     uv run python scripts/check_readme_structure.py
     uv run python scripts/check_repository_layout.py
+    uv run python scripts/check_public_hygiene.py
     uv run python scripts/check_docs_claims.py
     uv run python scripts/check_model_ids.py
 
-# Remove tool caches, eval output and Python bytecode (keeps .venv, node_modules and .env)
+# Remove caches, eval output, bytecode, cdk.out and CDK tsc output, and an old release's leftovers (keeps .venv, node_modules and .env)
 [group('develop')]
 clean:
-    rm -rf .cache .mypy_cache .ruff_cache .pytest_cache
-    find . -name __pycache__ -type d -prune -not -path './.venv/*' -not -path '*/node_modules/*' -exec rm -rf {} +
+    uv run python scripts/clean_local_state.py
+
+# `just clean`, plus every node_modules (reinstall with npm ci)
+[group('develop')]
+clean-all:
+    uv run python scripts/clean_local_state.py --all
 
 # Deploy a sample with its existing deploy material (scripts/confirm_aws_action.py asks first; --yes skips)
 [group('deploy')]
@@ -140,4 +147,4 @@ _pending sample step="":
 
 [private]
 _unknown sample:
-    @echo "Unknown sample '{{ sample }}'. Use: cmcd mediaconnect medialive agentic-iops-streaming hydrolix" >&2; exit 1
+    @echo "Unknown sample '{{ sample }}'. Use: cmcd mediaconnect medialive hls-doctor agentic-iops-streaming hydrolix" >&2; exit 1

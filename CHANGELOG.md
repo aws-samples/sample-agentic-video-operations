@@ -12,6 +12,152 @@ the top.
 Work merged after the latest release candidate. It moves into a candidate
 section when the next candidate is cut.
 
+<!-- Add entries under these headings; the conductor drops empty ones when cutting a release. -->
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [media-ops-samples-2026-10-06] — release candidate, update 6 (workflow discovery, HLS diagnostics, lower agent cost, safer upgrades)
+
+Branch: `release-candidate/media-ops-samples-2026-10-06`. Adds workflow discovery to
+agentic-iops-streaming and the HLS Doctor sample, caches the agent's prompt prefix, makes
+upgrades stop on stale settings instead of changing behavior silently, and tightens the IAM
+and public-hygiene gates.
+
+### Upgrade actions
+- **Rename every `HUB_*` setting this sample renamed before you deploy or start the agent:**
+  the deploy now stops before any AWS call, and the runtime refuses to start, naming each
+  old setting and its `AGENTIC_IOPS_*` replacement. Before, an old name was ignored, which
+  could drop the write-tag scope (`HUB_WRITE_TAG`) or deploy IAM inbound auth instead of JWT
+  (`HUB_JWT_*`). Teardown is not blocked.
+- **The next agentic-iops-streaming deploy replaces the invoke policy:** the last `Hub`
+  construct id and statement ids are now `AgenticIops`, so the `InvokePolicyArn` output
+  changes. The stack re-attaches the role named by `AGENTIC_IOPS_INVOKER_ROLE_NAME`; a
+  principal you attached the old ARN to by hand needs the new one.
+- **New CMCD stacks name their bucket `cmcd-content-<account>`:** the account id was
+  appended twice. An existing stack keeps the bucket name it was deployed with (unless
+  `CMCD_S3_BUCKET_NAME` sets another), because a changed name would make CloudFormation
+  replace the bucket; the deploy reads the current value and stops if it can't.
+  `CMCD_S3_BUCKET_NAME` is a prefix, as the README now says.
+- **The legacy stack delete names its region:** the upgrade note's `aws cloudformation
+  delete-stack --stack-name MediaOpsHubStack` now passes `--region "$AWS_REGION"`.
+
+### Added
+- **`AGENTIC_IOPS_PORT` moves the local agent off 8080:** `just run agentic-iops-streaming`
+  listens on that port when another service already holds 8080. It is for local runs only:
+  inside the deployed container any other value stops startup, because AgentCore serves the
+  container on 8080.
+- **Workflow discovery:** the agent can map a signal chain through the MediaLive signal-map
+  API (MediaConnect, MediaLive, MediaPackage, MediaTailor, S3 and CloudFront hops) and keep
+  it. A hop the runtime role can't read shows as a failed node; which reads discovery needs
+  on a live account is still open (`docs/extend_agentic_iops_streaming.md` §8.5), and the
+  evals replay fixtures.
+  - `discover_workflow` creates a signal map tagged `managed-by`, reads the resource graph
+    the map discovers, and deletes the map in a `finally`, so nothing stays in the account.
+    A map it can't prove deleted is reported.
+  - `save_workflow` is an approved write. The approval signs the id, version, entry point,
+    name and a content hash, and a save stores one immutable version, then reads it back
+    with a strongly consistent read; only that read-back marks it verified.
+  - `list_workflows` (optionally by a resource ARN) and `get_workflow` read only this
+    sample's store: a DynamoDB table in the stack (retained, point-in-time recovery,
+    encrypted), or JSON files under `.cache/workflows` locally. Inside the repository,
+    `WORKFLOW_DIR` must sit under `.cache/`, as `SESSION_DIR` must; the deployed
+    `list_workflows` answers from one paged scan; and the latest-version query refuses a
+    record whose version differs from its sort key.
+  - Signal-map create, read and delete are scoped by the `managed-by` tag, and with the
+    `CreateTags` guard below, a map made in the console is out of reach.
+    `ALLOW_WORKFLOW_DISCOVERY` (default true) registers the four tools. `just destroy
+    agentic-iops-streaming` leaves the workflow table in place by design and prints the `aws
+    dynamodb delete-table` command; it never runs it.
+  - Skills `discover-workflow` and `monitor-workflow` walk an operator through mapping and
+    then checking a chain hop by hop; `diagnose-signal-path` uses a stored workflow first.
+    Two eval scenarios run the real tools on fixtures.
+- **HLS Doctor (`samples/hls-doctor`):** a CLI, an MCP stdio server and a read-only `hls`
+  domain pack for agentic-iops-streaming over one tool surface. It builds the presentation
+  graph, validates playlists against RFC 8216, rfc8216bis's version rules and Apple's
+  LL-HLS, Interstitials and Content Steering specs, probes delivery through an SSRF guard on
+  every request and redirect hop, watches live playlists (publication races, frozen
+  playlists, stale CDN generations), decodes SCTE-35, and inspects interstitials, LL-HLS and
+  Content Steering. Findings cite redacted evidence by id, with unconditional redaction:
+  every query value in playlist text except the LL-HLS `_HLS_*` directives, a header
+  allowlist, and binary bodies kept only as length and sha256. The validator and player
+  probes fetch on their own and are for operator machines only. A 26-scenario fixture corpus
+  (3 recorded clean bases and 23 scenarios derived from them by registered mutations, with a
+  drift test) and a scored eval suite cover it.
+
+### Changed
+- **The agent caches its prompt prefix:** every model call in a turn re-sent the same tool
+  schemas and system prompt, about 4.1K tokens, uncached. The model now places Bedrock cache
+  points after them and after the last user message. Measured live on Sonnet 4.6 with the
+  same three-call read-only turn: 13.3K uncached input tokens and $0.051 before; $0.036 on
+  the first turn (later calls read the first call's write) and $0.018 once the cache is
+  warm; wall time went from 18.2 s to 17.6 s and 14.4 s. `usage_reported`'s `estimated_usd`
+  now prices cache reads at 0.1x and writes at 1.25x the input rate.
+- **`just typecheck` covers `scripts/`:** the gate, deploy and smoke scripts (39 files,
+  about 6,900 lines) are checked with no new ignore, and the errors it found are fixed.
+
+### Fixed
+- **The docs say what the code does:**
+  - HLS Doctor is in the README and AGENTS sample tables;
+  - `just smoke` is described as the four MCP samples, with `just demo` as the agent's
+    proof;
+  - `ALLOW_WRITES` is described as the media-resource write gate, separate from
+    `ALLOW_WORKFLOW_DISCOVERY`;
+  - HLS Doctor's README gives the exact deployed tool matrix and limits its SSRF claim to
+    the built-in fetcher and `probe_segment`;
+  - §8 lists only the IAM the stack grants, keeps the discovery-read question open, and uses
+    partition-aware ARNs;
+  - the stack outputs include `WorkflowTableName`.
+- **An unset MediaLive thumbnail setting counts as off:** a running channel with no
+  `EncoderSettings.ThumbnailConfiguration` polled the whole window (34 s), each read
+  answering NotFoundException. `analyze_channel_visual_quality` now returns `UNVERIFIED` at
+  once, saying thumbnails are not enabled. Only `AUTO` on a running channel is polled.
+- **Startup errors point at the right fix:** a settings error tells a local operator to fix
+  the root `.env` and a deployed one to fix the stack, and local mode is read with the
+  settings' own boolean rules (`AGENTIC_IOPS_LOCAL_MODE=y` counts).
+- **The CMCD template launches from the console:** it no longer requires a
+  `DeploymentArtifactsBucketName` parameter that only the deploy script could fill in.
+- **`just clean` removes what an older release left:** the root `eval-results.json`, a
+  pre-rename `samples/hub/` holding nothing tracked, and the CDK apps' tsc output and
+  `cdk.out`, printing each path and never removing a tracked file. `just clean-all` also
+  removes every `node_modules/`.
+- **The checks run from any clone:** the documented-surface check reads only tracked files,
+  the history check skips cleanly in a shallow clone, and `just test hydrolix` runs all
+  eight Hydrolix test files under `scripts/tests/`, not just the stack test.
+- **A Hydrolix query record can't hold a request past its deadline:** the runtime wrote each
+  record to the results table with botocore's defaults (60 s connect and read timeouts,
+  retried), so during an AWS failure one write could outlive the 180 s request deadline. The
+  DynamoDB client is now built once, on the first write, with a 5 s connect timeout, a 10 s
+  read timeout and 3 attempts in all, as the Secrets Manager read already was. A failed write
+  still logs only the error class and the answer goes on.
+
+### Security
+- **HLS Doctor's fetcher is bounded in memory, time and scope:** a compressed body is
+  decompressed against the read cap chunk by chunk, so a gzip bomb stays near the cap; one
+  deadline covers a whole fetch, every redirect hop and chunk included, so a slow-drip
+  server is cut off; `--header` values (cookies, `Authorization`) go only to the entry URL's
+  origin, never to a cross-origin rendition or redirect; a `location` header is stored with
+  its query redacted; and ffprobe refuses any target but the workflow's own downloaded file.
+  `HLS_ALLOW_PRIVATE_TARGETS=true` inside the deployed container now stops startup. A binary
+  body kept only as length and sha256 is marked `body_withheld`, not `body_truncated`. The
+  README records DNS rebinding between the guard's lookup and the connection as a known
+  residual.
+- **The IAM gate refuses what it can't read:** policies in `AWS::IAM::RolePolicy`,
+  `UserPolicy` or `GroupPolicy`, or inline in a user or group, are read; a managed policy
+  attached by ARN fails; a statement or Effect chosen by `Fn::If`, a missing Effect, or an
+  Action built by an intrinsic fails; a `Fn::Join` or `Fn::Sub` resource that comes out as
+  `"*"` counts as `"*"`; and action-name case variants can't escape the own-table rule.
+- **No direct `CreateTags` in sample code:** a static guard refuses any `create_tags` or
+  `CreateTags` call or operation name in every sample's Python `src/` tree, so the tag scope
+  on signal maps can't be widened to an operator's own map.
+- **No internal plan labels in published files:** the public-hygiene gate scans every
+  tracked file, `.claude/CLAUDE.md` included, and refuses internal task labels.
+
 ## [media-ops-samples-2026-10-06] — release candidate, update 5 (web install fix, truthful no-frames results)
 
 Branch: `release-candidate/media-ops-samples-2026-10-06`. Fixes the Hydrolix web install on
@@ -19,7 +165,7 @@ Node 22, reports no score when no frame was sampled, faster tests with an offlin
 signed-parameters rule for every write.
 
 ### Added
-- **Workflow discovery contract (F3):** `docs/extend_agentic_iops_streaming.md` §8 defines the
+- **Workflow discovery contract:** `docs/extend_agentic_iops_streaming.md` §8 defines the
   coordinator's four workflow tools (discover, save, list, get), their records, the
   signal-map calls and fixture shapes, the versioned workflow store, and the tag-scoped
   IAM. `save_workflow` is a §4 write and returns an `ActionResult`. The tools are built
@@ -27,7 +173,7 @@ signed-parameters rule for every write.
   `{"error": {"Code": ..., "Message": ...}}`, as the `ClientError` AWS would raise.
 
 ### Changed
-- **`just test` runs in about a quarter of the time (T75):** 66 s to 18 s on the same loaded
+- **`just test` runs in about a quarter of the time:** 66 s to 18 s on the same loaded
   laptop. The time was not in the code under test:
   - the Hydrolix deadline tests waited out real deadlines and grace periods around workers
     they had left blocked; the blocked fakes now wait on an event the test releases;
@@ -41,29 +187,29 @@ signed-parameters rule for every write.
 
 ### Fixed
 - **Hydrolix web installs on Node 22:** `package-lock.json` is regenerated with Node 22 (npm 10.9), the version CI runs. npm 11 had dropped an optional peer that npm 10's `npm ci` requires, so the install failed there.
-- **Every test suite runs under the offline guard (T81):** the guard T75 added covered only
+- **Every test suite runs under the offline guard:** the earlier guard covered only
   `scripts/tests`, so the samples' and packages' tests could reach the network unnoticed. It
   is now the root `conftest.py` (allowed by the layout check, kept out of the image's build
   context), and covers the unit, slow and eval runs. Run under it, all 1037 tests pass: the
   Hydrolix memory client was the only leak.
-- **A picture with no frames no longer scores 100 (T78):** with no thumbnail sampled, both
+- **A picture with no frames no longer scores 100:** with no thumbnail sampled, both
   visual-quality tools returned `score: 100.0` and `deterministic_score: 100.0` beside an
   `UNVERIFIED` status, so anything reading the score saw a perfect picture. Both scores are
   now `null` and confidence is 0.
-- **`analyze_channel_visual_quality` stops early on a conclusive answer (T79):** thumbnails
+- **`analyze_channel_visual_quality` stops early on a conclusive answer:** thumbnails
   disabled in the channel's configuration, or a channel that is not running, now gives no
   frames before the first read, where it waited out the whole window (34 s on RC4). Enabled
   thumbnails that haven't arrived yet are still polled, as in MediaConnect.
-- **A disconnected MediaConnect source is named first (T80):** with no frames and
+- **A disconnected MediaConnect source is named first:** with no frames and
   `SourceConnected` at 0, the next action says no sender was connected, not "Enable
   thumbnails". A service reason quoted in the note no longer doubles its full stop.
-- **Two Hydrolix tests reached the network (T75):** the memory hook built a real AgentCore
+- **Two Hydrolix tests reached the network:** the memory hook built a real AgentCore
   `MemoryClient`, so boto3 looked for credentials at the EC2 metadata endpoint: 4 s per run
   off AWS, and an answer on AWS. The fixtures stub it, and a guard in `scripts/tests` now
   fails any test that connects off the machine.
 
 ### Security
-- **A write must check its signed parameters (T73):** `require_action_approval` never reads
+- **A write must check its signed parameters:** `require_action_approval` never reads
   an approval's `parameters`, so a write that checked only the approval could act on inputs
   nobody signed. No current write did: both packs already compared them. The rule is now
   stated in `docs/write_safe_tools.md` §3, and `require_signed_parameters` in
@@ -79,7 +225,7 @@ metric scope across the samples. It also renames the coordinator sample to
 `agentic-iops-streaming`.
 
 ### Changed
-- **The hub sample is now agentic-iops-streaming (REN1):** the folder
+- **The hub sample is now agentic-iops-streaming:** the folder
   (`samples/agentic-iops-streaming`), package (`agentic_iops_streaming`), distribution,
   console scripts (`serve-agentic-iops-streaming`, `demo-agentic-iops-streaming`), recipes
   (`just run|test|deploy|destroy agentic-iops-streaming`), deploy and invoke scripts, design
@@ -96,7 +242,7 @@ metric scope across the samples. It also renames the coordinator sample to
   repository paths/templates, Markdown anchors, and CloudFormation output and
   parameter names. Planning language is refused in published docs and
   justfile messages.
-- **Deploys confirm once, before anything is built (T59):** `just deploy hub` asked twice,
+- **Deploys confirm once, before anything is built:** `just deploy hub` asked twice,
   the repository's prompt and then CDK's IAM approval, which without a terminal aborted
   after the image build and push. The hub and Hydrolix deploys now check the CDK bootstrap
   (the CDKToolkit stack, a Qualifier matching the app's, and
@@ -109,50 +255,50 @@ metric scope across the samples. It also renames the coordinator sample to
   first prompt instead.
 
 ### Fixed
-- **Model ids are checked before a deploy starts (T72):** a bad `AGENT_MODEL_ID` failed at
+- **Model ids are checked before a deploy starts:** a bad `AGENT_MODEL_ID` failed at
   CloudFormation's parameter check, after `npm ci`, the security diff and the image build.
   `just deploy hub` and `just deploy hydrolix` now refuse it (and the hub's
   `THUMBNAIL_MODEL_ID`) first, with the rule both CDK stacks read from
   `scripts/model_id_rule.json`, so the three can't drift.
-- **Raw script commands read the root `.env` (T61):** the READMEs show each recipe's
+- **Raw script commands read the root `.env`:** the READMEs show each recipe's
   `uv run python scripts/...` command, but only `just` loaded the root `.env`, so
   `scripts/invoke_hub.py` reported `AWS_REGION` missing while it was set there. Every
   script a doc runs directly now loads the root `.env` at entry (the environment still
   wins, as with `just`), and a missing setting names the file that was read. A test
   derives the scripts from the docs, so a new one can't skip it.
-- **Hub session files under `.cache/` (T65):** without `MEMORY_ID` the hub wrote its
+- **Agentic IOPS session files under `.cache/`:** without `MEMORY_ID` the hub wrote its
   per-actor session files to `.hub-sessions`, which was neither git-ignored nor kept out of
-  image build contexts. The default is now `.cache/hub-sessions`; `.hub-sessions` is
+  image build contexts. The default is now `.cache/agentic-iops-sessions`; `.hub-sessions` is
   git-ignored, excluded from every build context and the hub image asset, and refused by
   the build-context check. A `SESSION_DIR` inside the repository but outside `.cache/` is
   refused at startup. Move or delete an existing `.hub-sessions` folder by hand.
 
-- **The hub runtime waits for its role's policy (RB14):** a live `just deploy hub` failed
+- **The hub runtime waits for its role's policy:** a live `just deploy hub` failed
   with "Access denied while validating ECR URI" and rolled back. The runtime referenced
   only its role, so CloudFormation created it in the same second as the role's
-  DefaultPolicy, which holds the ECR pull. HubRuntime now depends on that policy, and so
+  DefaultPolicy, which holds the ECR pull. AgenticIopsRuntime now depends on that policy, and so
   does the Hydrolix runtime, which had the same latent race. A new CI gate,
   `scripts/check_runtime_dependencies.py`, fails any synth (default, allowWrites, JWT)
   where an AgentCore runtime can be created before a policy attached to its role,
   including a role imported with `Role.fromRoleArn(..., {mutable: true})`, whose grants
   are matched by role name.
   `just destroy hub` shows the stack's status and clears a `ROLLBACK_COMPLETE` stack.
-- **Start and stop skip a channel already there (T62):** `start_channel` and
+- **Start and stop skip a channel already there:** `start_channel` and
   `stop_channel` set `idempotentHint` but always called MediaLive, so starting a RUNNING
   channel or stopping an IDLE one still reached AWS. They now return a verified no-op
   without the call, as `start_flow` and `stop_flow` already did; tests pin all four.
-- **MediaLive retries wait instead of repeating writes (T69):** starting a channel already
+- **MediaLive retries wait instead of repeating writes:** starting a channel already
   `STARTING` and stopping one already `STOPPING` now poll for the target state without
   sending a conflicting second call. Immediate input-switch retries also skip the write
   when every pipeline is already on the target or the same named immediate switch is
   pending; a reused action name for another operation is refused before mutation.
-- **Region-wide MediaLive metrics no longer score a channel (T64):** `DroppedFrames` and
+- **Region-wide MediaLive metrics no longer score a channel:** `DroppedFrames` and
   `SvqTime` are published per pipeline and Region only, so they combine every channel in
   the Region, but the channel health check scored `DroppedFrames` against the one
   channel (penalty 20). They are now reported as `region_wide` context and never change a
   channel's issues, score or status. The MQCS and region-wide dimension sets were checked
   against the MediaLive user guide, which `metric_catalog.py` now cites; they matched.
-- **Complete MediaLive MQCS coverage (T70):** content-quality checks now query and score
+- **Complete MediaLive MQCS coverage:** content-quality checks now query and score
   `MqcsFillFrameInsertion`, `MqcsSvq`, and `MqcsVideoFrameDrops` with the documented
   ChannelId/Pipeline dimensions and Minimum statistic. Each emits an issue only when its
   MQCS portion falls below the documented healthy value of 100.
@@ -165,7 +311,7 @@ metric scope across the samples. It also renames the coordinator sample to
   of assuming the template default.
 
 ### Security
-- **Hydrolix Bedrock invoke is scoped to the configured model (T71):** the runtime role
+- **Hydrolix Bedrock invoke is scoped to the configured model:** the runtime role
   could invoke every foundation model, every inference profile, and every Bedrock resource
   in the account and region. It now names only `AGENT_MODEL_ID`: the profile here plus the
   foundation model behind it in any region, or a bare model alone. The template derives
@@ -174,7 +320,7 @@ metric scope across the samples. It also renames the coordinator sample to
   `-c agentModelId` for the security diff and the deploy alike (`--no-previous-parameters`,
   so an update never keeps an older model). The unused second model grant (the memory has no
   strategies) is gone.
-- **Hub Bedrock invoke is scoped to the configured models (T60):** the hub runtime role
+- **Hub Bedrock invoke is scoped to the configured models:** the hub runtime role
   could invoke every foundation model and inference profile, and both packs'
   `iam_permissions.json` granted the same. The role now names only `AGENT_MODEL_ID`, and
   packs get only `THUMBNAIL_MODEL_ID` through the new `{vision_model}` placeholder: each
@@ -184,7 +330,7 @@ metric scope across the samples. It also renames the coordinator sample to
   `ThumbnailModelId` parameters, so the security diff shown before approval names the same
   models as the deploy; it derives each foundation model from the id, and an id that
   could widen the grant fails synth.
-- **Hydrolix query records are per user (T41):** the web app read the results table by a
+- **Hydrolix query records are per user:** the web app read the results table by a
   client-chosen `prompt_uuid` with a role every signed-in user shares, so any user could
   read any other's SQL. The runtime now streams each request's own query records back at
   the end of its response, the web app reads no table (its DynamoDB packages are gone), and
@@ -207,12 +353,12 @@ feature and fixes the findings of a release-gate audit: Hydrolix caller identity
 model-SQL bounds, browser code execution, and the human confirmation for MCP writes.
 
 ### Added
-- **Picture-quality check for MediaLive (F1):** `analyze_channel_visual_quality` samples
+- **Picture-quality check for MediaLive:** `analyze_channel_visual_quality` samples
   each pipeline's thumbnails over a bounded window, measures frozen, black, flat and
   blurred frames, asks the vision model for a rubric, and fuses both with MediaLive's
   quality metrics. Unknown or contradicting evidence ends UNVERIFIED, never HEALTHY.
   The shared measurements are in `packages/media_ops_video_quality`.
-- **Per-turn usage and estimated cost (F2):** the hub emits `usage_reported` with token
+- **Per-turn usage and estimated cost:** the hub emits `usage_reported` with token
   counts and an estimated list-price cost before each turn's final event.
 - **Read-only AWS probe:** `just smoke aws` and `just doctor aws` make one list call and
   one health call per deployed sample, and never run unless asked.
@@ -282,12 +428,12 @@ model-SQL bounds, browser code execution, and the human confirmation for MCP wri
 ### Security
 - **Scoped endpoint and runtime policies:** the CMCD S3 endpoint's stack-bucket statements
   are limited to this account, and Hydrolix inference profiles to this account and Region.
-- **Hub local sessions per actor (T54):** without `MEMORY_ID` the hub keeps sessions as
+- **Hub local sessions per actor:** without `MEMORY_ID` the hub keeps sessions as
   files, keyed by session id only, so two operators using the same session id shared
   history and agent state, and the second was told the first's pending approval id. Files
   are now kept per actor, in a directory named by a hash of the actor id, so an actor id
   never becomes a path. This matches AgentCore Memory, which keys by actor and session.
-- **Vision can't vouch for a picture alone (T49):** the frames reach the vision model as
+- **Vision can't vouch for a picture alone:** the frames reach the vision model as
   pictures, on-screen text included, so text addressed to the model could steer its verdict
   and its confidence. A clean, moving full-frame text card saying "rate every score 5" read
   HEALTHY. Now any frame the new `palette_concentration` measurement detects as a graphic
@@ -301,7 +447,7 @@ model-SQL bounds, browser code execution, and the human confirmation for MCP wri
   MediaLive and MediaConnect write grant to resources with that exact tag;
   without it, `ALLOW_WRITES=true` retains its documented account-and-region
   scope.
-- **MCP writes need the human, not the model, to confirm (RB13):** the MediaLive and
+- **MCP writes need the human, not the model, to confirm:** the MediaLive and
   MediaConnect stdio write tools no longer take `confirm_resource_id`, which the model
   filled in itself. Before any change the server asks the MCP client's user, through MCP
   elicitation, to type the exact channel id or flow ARN, and shows the action and its
@@ -316,7 +462,7 @@ model-SQL bounds, browser code execution, and the human confirmation for MCP wri
   token's `sub`, and the actor header is no longer forwarded or read.
   `scripts/invoke_hub.py` sends `HUB_BEARER_TOKEN` over HTTPS to such a hub. IAM
   authorization with the caller-supplied actor header stays the default.
-- **Hydrolix caller identity (RB9):** with `HYDROLIX_JWT_DISCOVERY_URL` and
+- **Hydrolix caller identity:** with `HYDROLIX_JWT_DISCOVERY_URL` and
   `HYDROLIX_JWT_CLIENT_IDS` set, the runtime accepts only Cognito access tokens from that
   user pool and app clients, and memory is kept per verified user (`sub`) and runtime
   session. A session is refused to any other user. The `user_id` and `session_id` request
@@ -324,12 +470,12 @@ model-SQL bounds, browser code execution, and the human confirmation for MCP wri
   caller could claim any user. Without the settings the runtime is IAM-authorized and runs
   with memory off. The web app calls the runtime with the signed-in user's access token,
   and `scripts/invoke_hydrolix.py` replaces the CLI verify step.
-- **Hydrolix web app runs no model output (RB11):** chart formatters are names our code
+- **Hydrolix web app runs no model output:** chart formatters are names our code
   implements; the chart model's function strings were evaluated with `new Function`, so a
   prompt injection through CDN data could run script in a signed-in browser. Raw HTML in
   answers is sanitized. CI builds the app with warnings as errors and with `no-eval`,
   `no-new-func` and `no-implied-eval`.
-- **Hydrolix model SQL is bounded in code (RB12):** the subagents get only
+- **Hydrolix model SQL is bounded in code:** the subagents get only
   `run_select_query` and `get_table_info`, and the runtime refuses, before the call
   reaches the cluster, any SQL but one `SELECT` that reads `HYDROLIX_TABLE`: every
   `SELECT` reads from it, a subquery or a CTE that reads it; only allowlisted functions,
@@ -345,7 +491,7 @@ model-SQL bounds, browser code execution, and the human confirmation for MCP wri
   per request, so two requests served at once no longer share a `prompt_uuid`. The README
   now requires a query-only Hydrolix user scoped to that table, and the `HydrolixTable`
   parameter must be `database.table`.
-- **Hydrolix logs (RB10)** carry counts and lengths only: no question, answer, SQL,
+- **Hydrolix logs** carry counts and lengths only: no question, answer, SQL,
   memory text, user id or session id, in the runtime and in the web app's browser console.
   Error logs name the exception class only.
 

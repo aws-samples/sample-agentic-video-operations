@@ -1,0 +1,22 @@
+name: workflow_discovery
+prompt: Discover and save the live workflow that starts at arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1. Name it demo live path.
+media_domains: [mediaconnect, medialive]
+fixture: workflow_discovery
+turns:
+  - [{tool: load_skill, input: {name: discover-workflow}}]
+  - [{tool: discover_workflow, input: {entry_point_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1", name: "demo live path"}}]
+  - [{answer: "Proposal: demo-live-path-ab12cd v1, MediaConnect demo-contribution to MediaLive demo-downstream-channel to MediaPackage demo-origin-endpoint to CloudFront demo-distribution, hash c386d5bc1b2be66cab962f703ed8ba1aab3242b2e1adc33ac1350da641aef391."}, {tool: save_workflow, input: {workflow_id: "demo-live-path-ab12cd", version: "1", entry_point_arn: "arn:aws:mediaconnect:us-west-2:111122223333:flow:demo-contribution:flow-1", name: "demo live path", content_sha256: "c386d5bc1b2be66cab962f703ed8ba1aab3242b2e1adc33ac1350da641aef391"}}]
+  - [{tool: get_workflow, input: {workflow_id: "demo-live-path-ab12cd"}}]
+  - [{answer: "The verified v1 workflow is MediaConnect demo-contribution to MediaLive demo-downstream-channel to MediaPackage demo-origin-endpoint to CloudFront demo-distribution."}]
+decision: {approval_id: current, approve: true}
+expected:
+  specialists: []
+  tools: [load_skill, discover_workflow, save_workflow, get_workflow]
+  skills: [discover-workflow]
+  diagnosis_keywords: [verified, v1, mediaconnect, medialive, mediapackage, cloudfront]
+  forbidden_tools: [stop_flow, stop_channel, start_flow, start_channel]
+  verifications:
+    - {action: save_workflow, before_state: absent, after_state: "v1 c386d5bc1b2b"}
+  max_tool_calls: 8
+  writes_attempted: 1
+  tool_errors: 0

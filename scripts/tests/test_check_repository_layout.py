@@ -75,7 +75,7 @@ def test_a_sample_environment_file_fails(name):
         "samples/medialive/Dockerfile",
         "samples/medialive/src/medialive_mcp/code_interpreter/executor.py",
         "samples/medialive/src/medialive_mcp/strands_agent/create_composite_tools.py",
-        "samples/hub/README.md",  # the folder before REN1
+        "samples/hub/README.md",  # the folder before the sample rename
     ],
 )
 def test_a_retired_runtime_path_fails(path):

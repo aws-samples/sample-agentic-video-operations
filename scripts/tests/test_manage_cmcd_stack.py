@@ -46,8 +46,14 @@ class FakeAws:
             "Please check your logs."
         ),
         deletions_take_effect=True,
+        parameters=None,
     ):
         self.account = account
+        # What an existing stack was deployed with; before, the deploy passed the account in
+        # the name and the template appended it again.
+        self.parameters = (
+            {"S3BucketName": "cmcd-content-111122223333"} if parameters is None else parameters
+        )
         self.log_groups = list(log_groups)
         self.outputs = dict(outputs)
         self.failing = failing
@@ -146,6 +152,13 @@ class FakeAws:
         if "delete-log-group" in joined and self.deletions_take_effect:
             self.log_groups = [name for name in self.log_groups if name != arguments[-1]]
         if "describe-stacks" in joined:
+            if "Parameters[?ParameterKey" in joined:
+                if self.stack_status is None:
+                    return self._missing(arguments, "StackNotFound")
+                key = next((key for key in self.parameters if f"'{key}'" in joined), None)
+                return subprocess.CompletedProcess(
+                    arguments, 0, f"{self.parameters.get(key, 'None')}\n", ""
+                )
             if "StackStatus" in joined:
                 if self.stack_status is None:
                     return self._missing(arguments, "StackNotFound")
@@ -237,7 +250,7 @@ def test_deploy_with_yes_deploys_the_template_in_us_east_1_and_prints_next_steps
     )
     assert deploy[deploy.index("--s3-prefix") + 1] == "video-ops-cmcd"
     assert "S3BucketName=cmcd-content-111122223333" in deploy
-    assert "DeploymentArtifactsBucketName=video-ops-cmcd-artifacts-111122223333-us-east-1" in deploy
+    assert not any(value.startswith("DeploymentArtifactsBucketName=") for value in deploy)
     assert "OriginDomainName=example.com" in deploy
     assert "InfluxDBInstanceType=db.influx.medium" in deploy
     assert "BastionInstanceType=t3.nano" in deploy
@@ -400,7 +413,7 @@ def test_deploy_uses_bucket_and_origin_from_the_environment(monkeypatch):
     run(fake_aws, "deploy", "--yes")
     [deploy] = fake_aws.commands("cloudformation deploy")
     assert "S3BucketName=my-bucket" in deploy
-    assert "DeploymentArtifactsBucketName=my-artifacts" in deploy
+    assert not any(value.startswith("DeploymentArtifactsBucketName=") for value in deploy)
     assert "OriginDomainName=origin.example.org" in deploy
 
 
@@ -894,7 +907,7 @@ def test_invalid_influxdb_secret_does_not_call_api_or_write_env(tmp_path, capsys
 
 
 def test_without_a_terminal_a_deploy_stops_at_the_prompt_before_any_aws_change(capsys):
-    """T59: nobody can answer, so it refuses at once instead of failing halfway through."""
+    """Nobody can answer, so it refuses at once instead of failing halfway through."""
     runner = FakeAws()
 
     status = manage_cmcd_stack.deploy_stack(
@@ -905,3 +918,37 @@ def test_without_a_terminal_a_deploy_stops_at_the_prompt_before_any_aws_change(c
     joined = [" ".join(call) for call in runner.calls]
     assert not any("cloudformation deploy" in call or "s3 " in call for call in joined)
     assert "no terminal: re-run with --yes" in capsys.readouterr().out.lower()
+
+
+# --- the content bucket's name ---------------------------------------------------------
+
+
+def test_a_new_stack_names_its_bucket_once_with_the_account():
+    """The template appends the account itself, so the deploy passes the bare prefix."""
+    fake_aws = FakeAws(stack_status=None)
+
+    status, _ = run(fake_aws, "deploy", "--yes")
+
+    [deploy] = fake_aws.commands("cloudformation deploy")
+    assert status == 0 and "S3BucketName=cmcd-content" in deploy
+
+
+def test_an_existing_stack_keeps_the_bucket_name_it_was_deployed_with():
+    """A changed BucketName makes CloudFormation replace the bucket: never on an update."""
+    fake_aws = FakeAws(parameters={"S3BucketName": "cmcd-content-111122223333"})
+
+    run(fake_aws, "deploy", "--yes")
+
+    [deploy] = fake_aws.commands("cloudformation deploy")
+    assert "S3BucketName=cmcd-content-111122223333" in deploy
+
+
+def test_an_unreadable_stack_deploys_nothing(capsys):
+    fake_aws = FakeAws(failing=("Parameters[?ParameterKey",))
+
+    status, _ = run(fake_aws, "deploy", "--yes")
+
+    assert status != 0
+    assert fake_aws.commands("cloudformation deploy") == []
+    assert fake_aws.commands("s3api create-bucket") == []
+    assert "Nothing was deployed" in capsys.readouterr().out

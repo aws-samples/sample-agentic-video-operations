@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "hls-doctor": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/sample-agentic-video-operations",
+        "--env-file",
+        ".env",
+        "--package",
+        "hls-doctor",
+        "serve-hls-doctor"
+      ]
+    },
+    "hls-doctor-demo": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/sample-agentic-video-operations",
+        "--package",
+        "hls-doctor",
+        "serve-hls-doctor"
+      ],
+      "env": {
+        "DEMO": "1",
+        "DEMO_SCENARIO": "hls_segment_race",
+        "ALLOW_WRITES": "false"
+      }
+    }
+  }
+}

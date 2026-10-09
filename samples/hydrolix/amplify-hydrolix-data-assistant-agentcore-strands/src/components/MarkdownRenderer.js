@@ -12,7 +12,7 @@ const MarkdownRenderer = ({ content }) => {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         // Raw HTML in a model answer is parsed, then sanitized: no script, iframe, srcdoc,
-        // event handlers, images, or links other than http(s) reach the page (RB11).
+        // event handlers, images, or links other than http(s) reach the page.
         rehypePlugins={[rehypeRaw, [rehypeSanitize, MARKDOWN_SCHEMA]]}
         components={{
           h1: ({ node, children, ...props }) => (

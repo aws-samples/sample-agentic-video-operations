@@ -3,6 +3,7 @@
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +12,7 @@ PUBLISHED_REF_PREFIXES = (
     "refs/remotes/origin/main",
     "refs/remotes/origin/release-candidate/",
 )
+CANONICAL_ORIGIN_PATH = "aws-samples/sample-agentic-video-operations"
 
 
 def read_ignored_commits(path: Path) -> list[str]:
@@ -38,6 +40,43 @@ def list_published_refs(root: Path = ROOT) -> list[str]:
     return [ref for ref in result.stdout.splitlines() if ref]
 
 
+def is_shallow_repository(root: Path = ROOT) -> bool:
+    """Return whether Git reports that the clone has truncated history."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip() == "true"
+
+
+def read_origin_url(root: Path = ROOT) -> str:
+    """Return the fetch URL used for the canonical published-history ref."""
+    result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def local_test_skip_reason(*, shallow: bool, refs: list[str], origin_url: str) -> str | None:
+    """Explain why a local clone cannot prove reachability against published history."""
+    ci_note = "CI runs scripts/check_gitleaks_ignore.py against full canonical history."
+    if shallow:
+        return f"published-history check skipped in a shallow clone. {ci_note}"
+    normalized_origin = origin_url.rstrip("/").removesuffix(".git")
+    if not normalized_origin.endswith(CANONICAL_ORIGIN_PATH):
+        return f"published-history check skipped in a fork or non-canonical clone. {ci_note}"
+    if "refs/remotes/origin/main" not in refs:
+        return f"published-history check skipped because origin/main is unavailable. {ci_note}"
+    return None
+
+
 def is_ancestor(commit: str, ref: str, root: Path = ROOT) -> bool:
     """Return whether a commit is reachable from one published ref."""
     result = subprocess.run(
@@ -53,7 +92,7 @@ def is_ancestor(commit: str, ref: str, root: Path = ROOT) -> bool:
 def find_unreachable_commits(
     commits: list[str],
     refs: list[str],
-    ancestor_check=is_ancestor,
+    ancestor_check: Callable[[str, str], bool] = is_ancestor,
 ) -> list[str]:
     """Return ignore commits that no published ref can reach."""
     return [commit for commit in commits if not any(ancestor_check(commit, ref) for ref in refs)]

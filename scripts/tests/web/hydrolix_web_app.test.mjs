@@ -1,4 +1,4 @@
-// node --test: the Hydrolix web app's pure stream parser and logger (RB9, RB10).
+// node --test: the Hydrolix web app's pure stream parser and logger.
 // Modules are loaded from source as ES modules, so this runs on any Node with node:test.
 import { test } from "node:test";
 import assert from "node:assert/strict";

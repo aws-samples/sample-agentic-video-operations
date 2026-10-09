@@ -1,4 +1,4 @@
-"""Release gate: an AgentCore runtime is created only after its role's policies (RB14).
+"""Release gate: an AgentCore runtime is created only after its role's policies.
 
 uv run python scripts/check_runtime_dependencies.py
 samples/agentic-iops-streaming/cdk/cdk.out/*.template.json
@@ -92,10 +92,10 @@ def runtime_role(value: Any, parameters: set[str]) -> RoleKey:
         text = value["Fn::Sub"]
         if ":role/" not in text:
             return None
-        tail = text.split(":role/", 1)[1]
-        if tail.startswith("${") and tail.endswith("}") and tail[2:-1] in parameters:
-            return ("parameter", tail[2:-1])
-        return name_after_role(text) if "${" not in tail else None
+        role = text.split(":role/", 1)[1]
+        if role.startswith("${") and role.endswith("}") and role[2:-1] in parameters:
+            return ("parameter", role[2:-1])
+        return name_after_role(text) if "${" not in role else None
     return None
 
 

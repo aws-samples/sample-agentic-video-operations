@@ -70,7 +70,7 @@ def every_threshold(thresholds):
 
 def test_every_decision_value_states_its_rationale():
     found = list(every_threshold(T))
-    # 7 measurements (the graphic palette one is T49) + 5 penalty weights + 3 status floors
+    # 7 measurements, including the graphic-palette check, + 5 penalty weights + 3 status floors
     # + the vision trust level + 4 window-confidence values + 2 telemetry steps
     # + the finding majority share
     assert len(found) == 23

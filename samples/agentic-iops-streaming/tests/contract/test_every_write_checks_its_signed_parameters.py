@@ -1,9 +1,10 @@
-"""Every pack write refuses inputs that differ from what the operator signed (write_safe_tools §3).
+"""Every write refuses inputs that differ from what the operator signed (write_safe_tools §3).
 
 `require_action_approval` checks the action, resource, signature and expiry, never the
 parameters. So each write must also call `require_signed_parameters`, or it would act on inputs
-nobody approved. This sends every registered write its own inputs under an approval whose signed
-parameters differ, so a new write that forgets the check fails here rather than in review.
+nobody approved. This sends every registered write, the packs' and the coordinator's own, its
+inputs under an approval whose signed parameters differ, so a new write that forgets the check
+fails here rather than in review.
 """
 
 import inspect
@@ -12,7 +13,10 @@ from pathlib import Path
 
 import pytest
 
+from agentic_iops_streaming.bootstrap.create_workflow_tools import create_workflow_tools
+from agentic_iops_streaming.bootstrap.wrap_workflow_tools import INJECTED
 from agentic_iops_streaming.domain.propose_write_action import propose_write_action
+from agentic_iops_streaming.settings.runtime_settings import AgenticIopsSettings
 from media_ops_contracts.action_result import ActionResult
 from media_ops_contracts.approved_action import ApprovedAction, sign_approved_action
 from media_ops_contracts.domain_pack import WriteTool
@@ -31,23 +35,38 @@ def clock() -> datetime:
     return NOW
 
 
-def pack_writes() -> list[WriteTool]:
+class UntouchedStore:
+    """A workflow store no call in this file may reach: every one is refused before it."""
+
+    def __getattr__(self, name: str):
+        raise AssertionError(f"the workflow store was used ({name}) by a refused write")
+
+
+def every_write() -> list[WriteTool]:
+    """The packs' writes and the coordinator's, as `create_agentic_iops` registers them."""
     with pytest.MonkeyPatch.context() as environment:
         environment.setenv("DEMO", "1")  # replay clients: no call here can reach AWS
         environment.setenv("FIXTURES_DIR", str(FIXTURES))
         environment.setenv("APPROVAL_SIGNING_KEY", KEY)
-        return [
+        packs = [
             write
             for factory in (create_medialive_pack, create_mediaconnect_pack)
             for write in factory(clock=clock).write_tools()
         ]
+        coordinator = create_workflow_tools(
+            AgenticIopsSettings(agent_model_id="us.anthropic.claude-sonnet-4-6"),
+            UntouchedStore(),  # type: ignore[arg-type]  # a refused save must not reach it
+            signing_key=resolve_approval_signing_key(KEY),
+            now=clock,
+        ).writes
+        return packs + coordinator
 
 
 def honest_inputs(write: WriteTool) -> dict[str, object]:
-    """One value per input the model would pass; the approval is added separately."""
+    """One value per input the model would pass; the approval and session state come apart."""
     inputs: dict[str, object] = {}
     for name, parameter in inspect.signature(write.function).parameters.items():
-        if name == "approved_action" or parameter.default is not inspect.Parameter.empty:
+        if name in INJECTED or parameter.default is not inspect.Parameter.empty:
             continue
         inputs[name] = 1 if parameter.annotation is int else f"demo-{name}"
     return inputs
@@ -74,9 +93,17 @@ def tampered_approvals(write: WriteTool) -> dict[str, ApprovedAction]:
     return tampered
 
 
+def session_inputs(write: WriteTool) -> dict[str, object]:
+    """What the coordinator's wrapper injects besides the approval: here, nothing held."""
+    parameters = inspect.signature(write.function).parameters
+    return {name: {} for name in INJECTED if name != "approved_action" and name in parameters}
+
+
 def refusal_kind(write: WriteTool, approved_action: ApprovedAction) -> FailureKind | None:
     try:
-        write.function(**honest_inputs(write), approved_action=approved_action)
+        write.function(
+            **honest_inputs(write), **session_inputs(write), approved_action=approved_action
+        )
     except ToolFailure as failure:
         return failure.kind
     return None
@@ -84,14 +111,20 @@ def refusal_kind(write: WriteTool, approved_action: ApprovedAction) -> FailureKi
 
 CASES = [
     pytest.param(write, label, approved, id=f"{write.function.__name__}-{label}")
-    for write in pack_writes()
+    for write in every_write()
     for label, approved in tampered_approvals(write).items()
 ]
 
 
-def test_every_pack_write_is_covered():
-    names = {write.function.__name__ for write in pack_writes()}
-    assert {"stop_channel", "switch_channel_input", "delete_schedule_action", "stop_flow"} <= names
+def test_every_registered_write_is_covered():
+    names = {write.function.__name__ for write in every_write()}
+    assert {
+        "stop_channel",
+        "switch_channel_input",
+        "delete_schedule_action",
+        "stop_flow",
+        "save_workflow",
+    } <= names
     assert {case.values[0].function.__name__ for case in CASES} == names
 
 
@@ -100,7 +133,7 @@ def test_a_write_refuses_inputs_the_operator_did_not_sign(write, label, approved
     assert refusal_kind(write, approved) is FailureKind.APPROVAL_REQUIRED
 
 
-@pytest.mark.parametrize("write", pack_writes(), ids=lambda write: write.function.__name__)
+@pytest.mark.parametrize("write", every_write(), ids=lambda write: write.function.__name__)
 def test_the_same_call_honestly_signed_is_not_refused_for_its_approval(write):
     """The control: the refusals above come from the parameters, not from the harness."""
     inputs = honest_inputs(write)

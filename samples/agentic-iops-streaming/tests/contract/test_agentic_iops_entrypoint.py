@@ -109,3 +109,27 @@ def test_shared_sessions_require_a_shared_signing_key():
     assert (
         AgenticIopsSettings(memory_id="memory-1", approval_signing_key="k").memory_id == "memory-1"
     )
+
+
+def test_the_local_port_defaults_to_8080_and_reads_the_environment(monkeypatch):
+    assert AgenticIopsSettings().agentic_iops_port == 8080
+
+    monkeypatch.setenv("AGENTIC_IOPS_PORT", "8091")
+
+    assert AgenticIopsSettings().agentic_iops_port == 8091
+
+
+def test_inside_the_container_a_port_other_than_8080_is_refused(monkeypatch):
+    """AgentCore serves the container on 8080: another port would only fail health checks."""
+    monkeypatch.setenv("DOCKER_CONTAINER", "1")
+
+    with pytest.raises(ValidationError, match="AgentCore serves the container on 8080"):
+        AgenticIopsSettings(agentic_iops_port=8091)
+
+
+def test_inside_the_container_8080_is_accepted_and_outside_any_port_is(monkeypatch):
+    monkeypatch.setenv("DOCKER_CONTAINER", "1")
+    assert AgenticIopsSettings(agentic_iops_port=8080).agentic_iops_port == 8080
+
+    monkeypatch.delenv("DOCKER_CONTAINER")
+    assert AgenticIopsSettings(agentic_iops_port=8091).agentic_iops_port == 8091

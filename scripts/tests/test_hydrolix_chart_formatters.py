@@ -1,4 +1,4 @@
-"""RB11: the Hydrolix web app never evaluates model or data output as code."""
+"""The Hydrolix web app never evaluates model or data output as code."""
 
 import re
 import shutil

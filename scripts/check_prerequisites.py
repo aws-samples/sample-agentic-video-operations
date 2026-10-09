@@ -17,6 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from read_root_env import load_root_env
+from renamed_settings import describe_renames, find_renamed_settings
 
 MINIMUM_NODE_MAJOR = 20
 # The probe bounds itself at 180 s (smoke_aws_servers.TIMEOUT_SECONDS); allow it to report.
@@ -32,6 +33,8 @@ SESSION_MANAGER_INSTALL = (
 class CheckGroup(StrEnum):
     OFFLINE = "offline"
     AWS = "aws"
+    # Optional media tooling: reported, never required, never blocking.
+    MEDIA = "media"
 
 
 @dataclass(frozen=True)
@@ -126,25 +129,24 @@ def check_session_manager_plugin() -> CheckResult:
     )
 
 
-# REN1 renamed every HUB_* setting to AGENTIC_IOPS_*. An old name is ignored without a
-# word, so the doctor names each one; HUB_WRITE_TAG matters most (`just doctor aws` fails).
-OLD_SETTING_PREFIX = "HUB_"
-NEW_SETTING_PREFIX = "AGENTIC_IOPS_"
+# The sample rename changed every HUB_* setting to AGENTIC_IOPS_*. The deploy and runtime
+# refuse an old name; the doctor names each one first. HUB_WRITE_TAG matters most.
 
 
 def check_renamed_settings(environ: Mapping[str, str] = os.environ) -> CheckResult:
     """Settings still set under their old HUB_* names, from the root .env or the shell."""
-    stale = sorted(name for name in environ if name.startswith(OLD_SETTING_PREFIX))
-    if not stale:
+    found = find_renamed_settings(environ)
+    if not found:
         return CheckResult(CheckGroup.AWS, "renamed settings", True, "no HUB_* settings")
-    detail = f"{', '.join(stale)} set but ignored: renamed to {NEW_SETTING_PREFIX}*"
-    if "HUB_WRITE_TAG" in stale:
-        detail += "; until renamed, writes are no longer tag-scoped"
-    renames = ", ".join(
-        f"{name} -> {NEW_SETTING_PREFIX}{name.removeprefix(OLD_SETTING_PREFIX)}" for name in stale
-    )
+    detail = f"{', '.join(found)} set: the deploy and the runtime refuse old names"
+    if "HUB_WRITE_TAG" in found:
+        detail += "; left as is, writes are no longer tag-scoped"
     return CheckResult(
-        CheckGroup.AWS, "renamed settings", False, detail, f"rename in .env: {renames}"
+        CheckGroup.AWS,
+        "renamed settings",
+        False,
+        detail,
+        f"rename in .env: {describe_renames(found)}",
     )
 
 
@@ -256,6 +258,16 @@ def collect_offline_results() -> list[CheckResult]:
             CheckGroup.OFFLINE,
         ),
         check_tool("just", "uv tool install rust-just", CheckGroup.OFFLINE),
+        check_tool(
+            "ffprobe",
+            "Install FFmpeg (https://ffmpeg.org/download.html) for HLS Doctor media probes",
+            CheckGroup.MEDIA,
+        ),
+        check_tool(
+            "mediastreamvalidator",
+            "Apple HLS Tools (macOS, optional) add the HLS Doctor conformance crosscheck",
+            CheckGroup.MEDIA,
+        ),
         check_python_version(),
     ]
 
@@ -306,7 +318,9 @@ def print_results(results: list[CheckResult], *, strict_aws: bool) -> None:
     for group in CheckGroup:
         print(f"{group.value.upper()} prerequisites")
         for result in (item for item in results if item.group is group):
-            failed_strictly = group is CheckGroup.OFFLINE or strict_aws
+            failed_strictly = group is CheckGroup.OFFLINE or (
+                strict_aws and group is CheckGroup.AWS
+            )
             mark = "ok  " if result.passed else ("FAIL" if failed_strictly else "WARN")
             print(f"{mark} {result.name:<20} {result.detail}")
             if not result.passed:

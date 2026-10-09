@@ -94,5 +94,5 @@ def test_a_pruned_tree_is_one_no_later_rule_could_re_include(tmp_path, ignore, l
 
 def test_every_planted_path_is_forbidden():
     """The planted paths are the forbidden list: a planted path the matcher allows proves
-    nothing about the ignore files (T65: session files hold operators' conversations)."""
+    nothing about the ignore files; session files hold operators' conversations."""
     assert context.find_forbidden(list(PLANTED)) == list(PLANTED)

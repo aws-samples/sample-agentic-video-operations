@@ -1,4 +1,4 @@
-"""Demo mode never builds a boto3 client (backlog T4)."""
+"""Demo mode never builds a boto3 client."""
 
 import pytest
 

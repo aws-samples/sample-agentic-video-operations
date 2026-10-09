@@ -1,4 +1,4 @@
-"""DEMO=1 with the root .env's empty DEMO_SCENARIO replays cmcd's own scenario (backlog T4)."""
+"""DEMO=1 with the root .env's empty DEMO_SCENARIO replays cmcd's own scenario."""
 
 import asyncio
 from pathlib import Path

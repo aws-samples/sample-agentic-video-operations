@@ -98,7 +98,7 @@ def get_agentcore_memory_messages(
                 }
 
                 formatted_messages.append(formatted_message)
-        # Metadata only (RB10): no message text, no actor or session id.
+        # Metadata only: no message text, no actor or session id.
         turns = len(recent_turns or [])
         print(f"🧠 Memory: {len(formatted_messages)} messages from {turns} turns")
         # Return messages in inverted order (most recent first)

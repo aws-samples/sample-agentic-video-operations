@@ -39,6 +39,7 @@ class ExpectedResult(BaseModel):
     verifications: list[ActionVerification] = Field(default_factory=list)
     max_tool_calls: int
     writes_attempted: int = 0
+    tool_errors: int | None = None
 
 
 class EvalScenario(BaseModel):
@@ -46,6 +47,7 @@ class EvalScenario(BaseModel):
     prompt: str
     media_domains: list[str]
     fixture: str
+    seed_workflow: str | None = None
     allow_writes: bool = False
     turns: list[list[ModelBlock]]
     decision: DecisionStep | None = None
@@ -63,5 +65,6 @@ class EvalResult(BaseModel):
     specialists: list[str]
     latency_ms: float
     writes_attempted: int
+    tool_errors: int
     verifications: list[ActionVerification]
     failures: list[str]

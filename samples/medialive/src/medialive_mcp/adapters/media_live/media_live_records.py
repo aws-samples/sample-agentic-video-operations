@@ -38,7 +38,8 @@ class ChannelDetails(ChannelSummary):
     output_groups: list[str] = []
     audio_descriptions: list[str] = []
     pipelines: list[PipelineDetail] = []
-    # EncoderSettings.ThumbnailConfiguration: True (AUTO), False (DISABLED), None (not set)
+    # EncoderSettings.ThumbnailConfiguration: True (AUTO), False (DISABLED), None (not set,
+    # which MediaLive treats as off)
     thumbnails: bool | None = None
 
 

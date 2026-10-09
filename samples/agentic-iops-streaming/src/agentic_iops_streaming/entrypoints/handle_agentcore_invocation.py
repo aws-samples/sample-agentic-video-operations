@@ -4,12 +4,12 @@
 import logging
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from functools import cache
 from typing import Any
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from agentic_iops_streaming.bootstrap.apply_agentic_iops_tool_defaults import (
     apply_agentic_iops_tool_defaults,
@@ -127,18 +127,38 @@ STARTUP_ERRORS = (ValidationError, DomainPackError, SkillError, ToolFailure, Run
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
-        get_agentic_iops()  # a broken setting, pack or skill stops startup, not a request
+        iops = get_agentic_iops()  # a broken setting, pack or skill stops startup, not a request
     except STARTUP_ERRORS as error:
         print(
             f"agentic-iops-streaming cannot start: {describe_startup_error(error)}", file=sys.stderr
         )
         print(
-            "Fix the root .env (see .env.example), then run `just run agentic-iops-streaming` "
-            "again.",
+            startup_recovery_step(os.environ),
             file=sys.stderr,
         )
         raise SystemExit(2) from None
-    app.run()
+    app.run(port=iops.settings.agentic_iops_port)
+
+
+def startup_recovery_step(environ: Mapping[str, str]) -> str:
+    """Point local and deployed operators at the configuration they can change."""
+    if is_local_mode(environ):
+        return (
+            "Fix the reported setting or source in this clone (start with the root .env), "
+            "then run `just run agentic-iops-streaming` again."
+        )
+    return (
+        "Fix the reported AgentCore deployment setting or packaged source, then run "
+        "`just deploy agentic-iops-streaming` again."
+    )
+
+
+def is_local_mode(environ: Mapping[str, str]) -> bool:
+    """AGENTIC_IOPS_LOCAL_MODE as the settings would read it; they just failed to load."""
+    try:
+        return TypeAdapter(bool).validate_python(environ.get("AGENTIC_IOPS_LOCAL_MODE", "false"))
+    except ValidationError:
+        return False
 
 
 def describe_startup_error(error: Exception) -> str:

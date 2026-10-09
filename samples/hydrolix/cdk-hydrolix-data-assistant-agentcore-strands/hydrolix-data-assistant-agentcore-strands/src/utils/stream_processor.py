@@ -16,10 +16,10 @@ async def process_agent_stream(agent: Agent, query: str, agent_name: str | None 
 
     This function handles streaming responses from a Strands agent, processing
     tool use events and collecting text output. Logs carry metadata only (tool names,
-    counts and lengths), never the question, the SQL or the answer (RB10).
+    counts and lengths), never the question, the SQL or the answer.
 
     The queries themselves are recorded after they run, with their status, by
-    RecordExecutedQueries (T41), not here when the model writes them.
+    RecordExecutedQueries, not here when the model writes them.
 
     Args:
         agent: The Strands Agent instance to stream from

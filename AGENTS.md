@@ -10,6 +10,7 @@ workflows with AI agents. Use the root `justfile` for every common command.
 | `cmcd` | [`samples/cmcd/`](samples/cmcd/) | Investigate viewer QoE from CMCD data | `just run cmcd` · `just test cmcd` · `just deploy cmcd` |
 | `mediaconnect` | [`samples/mediaconnect/`](samples/mediaconnect/) | Inspect MediaConnect transport health | `just run mediaconnect` · `just test mediaconnect` |
 | `medialive` | [`samples/medialive/`](samples/medialive/) | Inspect MediaLive channel health | `just run medialive` · `just test medialive` · deploys through `agentic-iops-streaming` |
+| `hls-doctor` | [`samples/hls-doctor/`](samples/hls-doctor/) | Diagnose an HLS presentation from one manifest URL; also a read-only `hls` domain pack | `just run hls-doctor` · `just test hls-doctor` · deploys through `agentic-iops-streaming` with `MEDIA_DOMAINS` including `hls` |
 | `agentic-iops-streaming` | [`samples/agentic-iops-streaming/`](samples/agentic-iops-streaming/) | Investigate across MediaConnect and MediaLive; writes need approval | `just demo` · `just run agentic-iops-streaming` · `just test agentic-iops-streaming` · `just deploy agentic-iops-streaming` |
 | `hydrolix` | [`samples/hydrolix/`](samples/hydrolix/) | Explore CDN and streaming analytics in a web UI | `just deploy hydrolix` · `just destroy hydrolix` |
 
@@ -44,6 +45,11 @@ For changed deploy material, also run `cdk synth` or `cfn-lint`, as applicable.
 - Keep each change small and limited to its assigned files.
 - Use action-oriented file and function names.
 - Never commit `.env`, credentials, account IDs, ARNs, or real resource IDs.
-- Keep write tools disabled unless `ALLOW_WRITES=true`.
+- Keep the domain packs' media-resource write tools disabled unless `ALLOW_WRITES=true`.
+  agentic-iops-streaming's workflow tools have their own runtime switch,
+  `ALLOW_WORKFLOW_DISCOVERY` (default true), read by local runs: discovery creates and
+  deletes a transient tagged signal map, and `save_workflow` is an approved write to the
+  sample's own store. The deploy doesn't pass it: a deployed runtime always has discovery on
+  and carries its IAM.
 - Every operational write requires approval and post-action verification.
 - Tests and demos run offline. Live AWS probes use the explicit `just smoke aws` command.

@@ -110,7 +110,7 @@ DIMENSIONS_BY_METRIC: dict[str, tuple[str, ...]] = {
 }
 
 # Metrics with no ChannelId dimension: all channels in the Region combined. They are shown as
-# context and never scored against one channel (T64).
+# context and never scored against one channel.
 REGION_WIDE_METRICS = frozenset(
     metric for metric, dimensions in DIMENSIONS_BY_METRIC.items() if "ChannelId" not in dimensions
 )

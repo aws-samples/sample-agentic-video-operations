@@ -1,4 +1,4 @@
-"""MCP servers start without the FastMCP banner, its hosting link or its upgrade nag (T21).
+"""MCP servers start without the FastMCP banner, its hosting link or its upgrade nag.
 
 The banner is also the only place FastMCP checks PyPI for a newer version, so without it a
 server makes no update request either.
@@ -14,6 +14,7 @@ SERVERS = (
     "cmcd_mcp.entrypoints.serve_mcp",
     "mediaconnect_mcp.entrypoints.serve_mcp",
     "medialive_mcp.entrypoints.serve_mcp",
+    "hls_doctor.entrypoints.serve_mcp",
 )
 BANNER_TEXT = ("╭", "FastMCP", "pip install --upgrade", "horizon.prefect.io", "gofastmcp.com")
 

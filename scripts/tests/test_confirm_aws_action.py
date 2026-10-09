@@ -15,7 +15,7 @@ def test_only_an_explicit_y_continues():
 
 
 def test_without_a_terminal_it_refuses_without_asking(capsys):
-    """T59: nobody can answer, so a later tool must not be left to block or abort."""
+    """Nobody can answer, so a later tool must not be left to block or abort."""
     import confirm_aws_action
 
     asked = []

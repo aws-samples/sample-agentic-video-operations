@@ -139,7 +139,7 @@ def test_missing_or_unlisted_target_fails_before_health_read():
     assert session.calls == [(case.list_tool, {})]
 
 
-# T42: readable failures and one overall limit.
+# Readable failures and one overall limit.
 def run_probe(verify, *, timeout_seconds=5.0):
     return asyncio.run(smoke.probe_all_servers({}, verify=verify, timeout_seconds=timeout_seconds))
 

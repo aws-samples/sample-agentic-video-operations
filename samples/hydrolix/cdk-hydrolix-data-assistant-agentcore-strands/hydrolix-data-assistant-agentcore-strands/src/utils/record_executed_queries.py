@@ -1,4 +1,4 @@
-"""Record each Hydrolix query after it ran, with its status (T41).
+"""Record each Hydrolix query after it ran, with its status.
 
 A record goes to the request's own list, which the response streams back to its caller,
 and to the results table under the verified caller's `sub`. Nothing is written in IAM mode,

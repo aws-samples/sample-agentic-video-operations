@@ -1,4 +1,4 @@
-// node --test: the web app keeps the queries a request ran even when it ends in an error (T41).
+// node --test: the web app keeps the queries a request ran even when it ends in an error.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

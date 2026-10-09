@@ -94,15 +94,18 @@ def test_windows_beyond_the_bounds_are_refused():
 def test_every_generated_fixture_file_matches_its_generator_exactly():
     import json
 
-    from generate_quality_fixtures import frozen_output_fixture
+    from generate_quality_fixtures import frozen_output_channel, frozen_output_fixture
 
     scenario = FIXTURES / "frozen_output"
     generated = frozen_output_fixture()
     for name, expected in generated.items():
         assert json.loads((scenario / name).read_text()) == expected, name
-    # The one copied file is the input_loss channel, byte for byte.
+    # The channel is input_loss's, byte for byte, plus thumbnails AUTO.
     channel = "medialive.describe_channel.json"
-    assert (scenario / channel).read_text() == (FIXTURES / "input_loss" / channel).read_text()
+    assert (scenario / channel).read_text() == frozen_output_channel()
+    assert json.loads(frozen_output_channel())["EncoderSettings"] == {
+        "ThumbnailConfiguration": {"State": "AUTO"}
+    }
     assert sorted(p.name for p in scenario.iterdir()) == sorted([*generated, channel])
 
 
@@ -254,7 +257,7 @@ def test_an_encoder_freeze_keeps_a_clean_channel_from_reading_healthy(monkeypatc
     assert (result.status, result.worst_pipeline_id) == (Status.UNVERIFIED, "1")
 
 
-# --- T78 and T79: no frames, and stopping early only on a conclusive answer --------------
+# --- No frames, and stopping early only on a conclusive answer ---------------------------
 
 
 class CountingMediaLive:
@@ -292,7 +295,7 @@ TRUSTED = DEFAULT_THRESHOLDS.trusted_vision_confidence.value
 
 
 def test_with_no_frames_neither_score_reads_as_a_perfect_picture():
-    """T78: nothing was measured, so there is no score, and confidence stays untrusted."""
+    """Nothing was measured, so there is no score, and confidence stays untrusted."""
     result, _ = analyze_changed(**DISABLED)
 
     for pipeline in result.pipelines:
@@ -304,7 +307,7 @@ def test_with_no_frames_neither_score_reads_as_a_perfect_picture():
 
 
 def test_thumbnails_disabled_in_the_channel_stop_sampling_before_any_read():
-    """T79: a conclusive answer, as MediaConnect's disabled thumbnails are."""
+    """A disabled-thumbnail result is conclusive, as it is for MediaConnect."""
     result, medialive = analyze_changed(**DISABLED)
 
     assert medialive.thumbnail_calls == 0
@@ -327,3 +330,25 @@ def test_enabled_thumbnails_that_have_not_arrived_yet_keep_polling_the_window():
     pipelines = len(result.pipelines)
     assert medialive.thumbnail_calls == frames * pipelines
     assert all("none arrived" in p.note for p in result.pipelines)
+
+
+def test_thumbnails_unset_in_the_channel_are_off_and_not_sampled():
+    """In MediaLive an unset ThumbnailConfiguration means thumbnails are off. On RC5 a
+    running channel without one polled the whole window (34 s) for NotFoundException."""
+    result, medialive = analyze_changed(EncoderSettings={})
+
+    assert medialive.thumbnail_calls == 0
+    assert result.status is Status.UNVERIFIED
+    assert all(
+        "thumbnails are not enabled in the channel's encoder settings" in p.note
+        for p in result.pipelines
+    )
+
+
+def test_the_recorded_channel_declares_its_thumbnails_enabled():
+    """The fixture the other tests sample from must say AUTO, or it would no longer be polled."""
+    result, medialive = analyze_changed()
+
+    assert medialive.thumbnail_calls > 0 and all(
+        p.assessment.sampled_frames for p in result.pipelines
+    )

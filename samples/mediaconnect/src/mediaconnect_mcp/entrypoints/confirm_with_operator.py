@@ -1,4 +1,4 @@
-"""Ask the human at the MCP client to type the exact resource id before a write (RB13).
+"""Ask the human at the MCP client to type the exact resource id before a write.
 
 The question goes out as an MCP form elicitation, so the answer comes from the client, never
 from the model's tool arguments. A client that can't show a form can't write.

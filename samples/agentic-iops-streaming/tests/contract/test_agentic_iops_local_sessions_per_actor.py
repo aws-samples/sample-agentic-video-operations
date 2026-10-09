@@ -1,4 +1,4 @@
-"""Local sessions are kept per actor, as deployed AgentCore Memory keeps them (T54).
+"""Local sessions are kept per actor, as deployed AgentCore Memory keeps them.
 
 Without MEMORY_ID the agent stores sessions as files. They were keyed by session id only, so
 two operators who used the same session id shared history and agent.state, and the second

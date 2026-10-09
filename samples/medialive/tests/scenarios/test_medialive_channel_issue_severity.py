@@ -1,4 +1,4 @@
-"""Channel health ratings follow magnitude and the worst finding (backlog T7)."""
+"""Channel health ratings follow magnitude and the worst finding."""
 
 import json
 from datetime import UTC, datetime, timedelta, timezone

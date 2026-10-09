@@ -1,4 +1,4 @@
-"""Give the subagents only the Hydrolix tools they need, each bound to HYDROLIX_TABLE (RB12)."""
+"""Give the subagents only the Hydrolix tools they need, each bound to HYDROLIX_TABLE."""
 
 from collections.abc import Iterable
 from typing import Any

@@ -10,11 +10,13 @@ PYTHON_MANIFESTS = (
     "packages/media_ops_video_quality/pyproject.toml",
     "samples/cmcd/pyproject.toml",
     "samples/agentic-iops-streaming/pyproject.toml",
+    "samples/hls-doctor/pyproject.toml",
     "samples/mediaconnect/pyproject.toml",
     "samples/medialive/pyproject.toml",
 )
 JAVASCRIPT_MANIFESTS = (
     "samples/agentic-iops-streaming/cdk/package.json",
+    "samples/hls-doctor/player-probe/package.json",
     "samples/hydrolix/amplify-hydrolix-data-assistant-agentcore-strands/package.json",
     "samples/hydrolix/cdk-hydrolix-data-assistant-agentcore-strands/package.json",
 )

@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import { aws_bedrockagentcore as bedrockagentcore } from 'aws-cdk-lib';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as ecr_assets from 'aws-cdk-lib/aws-ecr-assets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
@@ -34,8 +35,12 @@ const DISCOVERY_SUFFIX = '/.well-known/openid-configuration';
 // destroy deletes only log groups of this exact runtime name.
 export const RUNTIME_NAME = 'AgenticIopsStreamingRuntime';
 // The memory and endpoint name suffix: fixed, never derived from the stack name, so renaming
-// the stack (as REN1 did) can't rename these resources again.
+// the stack can't rename these resources again.
 export const RESOURCE_NAME_SUFFIX = 'default';
+// The tag every signal map this runtime creates carries, and the only one it may read or delete
+// (extend_agentic_iops_streaming.md §8.5).
+export const APP_TAG_KEY = 'managed-by';
+export const APP_TAG_VALUE = 'agentic-iops-streaming';
 
 interface PackStatement {
   actions: string[];
@@ -71,7 +76,7 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
     }
 
     // Context, not CfnParameters: the security diff synthesizes with the same -c options as
-    // the deploy, so the IAM it shows names these exact models (T60).
+    // the deploy, so the IAM it shows names these exact models.
     const agentModelId = readModelId('agentModelId', this.node.tryGetContext('agentModelId'),
       'us.anthropic.claude-sonnet-4-6');
     const thumbnailModelId = readModelId('thumbnailModelId', this.node.tryGetContext('thumbnailModelId'),
@@ -126,6 +131,17 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
       description: 'Sessions and paused approvals of agentic-iops-streaming',
     });
 
+    // The workflow store (extend_agentic_iops_streaming.md §8.4): versions are immutable, so
+    // the table is append-only in practice and retained, like the memory, when the stack goes.
+    const workflows = new dynamodb.Table(this, 'WorkflowTable', {
+      partitionKey: { name: 'workflow_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'version', type: dynamodb.AttributeType.NUMBER },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     const runtime = new bedrockagentcore.CfnRuntime(this, 'AgenticIopsRuntime', {
       agentRuntimeName: RUNTIME_NAME,
       agentRuntimeArtifact: { containerConfiguration: { containerUri: image.imageUri } },
@@ -148,15 +164,16 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
         ALLOW_WRITES: allowWrites ? 'true' : 'false',
         MEMORY_ID: memory.attrMemoryId,
         APPROVAL_SIGNING_KEY_SECRET_ARN: signingKey.secretArn,
+        WORKFLOW_TABLE_NAME: workflows.tableName,
         ...(jwt ? { AGENTIC_IOPS_JWT_ISSUER: jwt.issuer, AGENTIC_IOPS_JWT_ALLOWED_CLIENTS: jwt.clientIds.join(',') } : {}),
       },
     });
-    for (const statement of this.runtimeStatements(memory.attrMemoryArn, agentModelId)) {
+    for (const statement of this.runtimeStatements(memory.attrMemoryArn, agentModelId, workflows)) {
       role.addToPolicy(statement);
     }
     // AgentCore validates the role when it creates the runtime (it pulls the image from ECR
     // then), and RoleArn alone doesn't order the runtime after the role's DefaultPolicy:
-    // without this, both can be created in the same second and the deploy rolls back (RB14).
+    // without this, both can be created in the same second and the deploy rolls back.
     // No cycle: the policy depends on the role and the memory, never on the runtime.
     runtime.node.addDependency(role.node.findChild('DefaultPolicy'));
 
@@ -169,11 +186,11 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
     if (!jwt) {
       // Who may invoke: only principals with this policy (or broader IAM). The actor header is
       // caller-supplied, so actor isolation holds only among these principals (extend_agentic_iops_streaming.md §1).
-      const invokePolicy = new iam.ManagedPolicy(this, 'InvokeHubPolicy', {
+      const invokePolicy = new iam.ManagedPolicy(this, 'InvokeAgenticIopsPolicy', {
         description: 'Invoke agentic-iops-streaming runtime and its endpoint, nothing else',
         statements: [
           new iam.PolicyStatement({
-            sid: 'InvokeHub',
+            sid: 'InvokeAgenticIops',
             actions: ['bedrock-agentcore:InvokeAgentRuntime'],
             resources: [runtime.attrAgentRuntimeArn, `${runtime.attrAgentRuntimeArn}/runtime-endpoint/*`],
           }),
@@ -191,10 +208,14 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AgentEndpointName', { value: endpoint.name });
     new cdk.CfnOutput(this, 'MemoryId', { value: memory.attrMemoryId });
     new cdk.CfnOutput(this, 'MediaDomains', { value: mediaDomains.join(',') });
+    new cdk.CfnOutput(this, 'WorkflowTableName', {
+      value: workflows.tableName,
+      description: 'The workflow store; retained when the stack is deleted',
+    });
   }
 
   /**
-   * What invoking one configured model needs (T60), following AWS's cross-Region inference
+   * What invoking one configured model needs, following AWS's cross-Region inference
    * guidance: the inference profile in this account and Region, and the foundation model in
    * every Region the profile can route to. That set differs per geography and changes over
    * time, so the model ARN keeps the Region as `*`, but names the one model, derived from the
@@ -208,8 +229,47 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
     return [`arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${modelId}`, model];
   }
 
+  /**
+   * What the workflow tools need (§8.5): this stack's own table, and only the signal maps this
+   * runtime tagged. A signal map is a transient discovery engine, so create, read and delete are
+   * all scoped by the `managed-by` tag: a map an operator made in the console is out of reach.
+   * `Fn.sub` (not a template string) keeps the resource one literal ARN, which the IAM gate's
+   * tag-scoped class matches.
+   */
+  private workflowStatements(workflows: dynamodb.ITable): iam.PolicyStatement[] {
+    const signalMaps = cdk.Fn.sub(
+      'arn:${AWS::Partition}:medialive:${AWS::Region}:${AWS::AccountId}:signal-map:*',
+    );
+    return [
+      new iam.PolicyStatement({
+        sid: 'CreateTaggedSignalMap',
+        actions: ['medialive:CreateSignalMap', 'medialive:CreateTags'],
+        resources: [signalMaps],
+        conditions: {
+          StringEquals: { [`aws:RequestTag/${APP_TAG_KEY}`]: APP_TAG_VALUE },
+          'ForAllValues:StringEquals': { 'aws:TagKeys': [APP_TAG_KEY] },
+        },
+      }),
+      new iam.PolicyStatement({
+        sid: 'ReadAndDeleteOwnSignalMaps',
+        actions: ['medialive:GetSignalMap', 'medialive:DeleteSignalMap'],
+        resources: [signalMaps],
+        conditions: { StringEquals: { [`aws:ResourceTag/${APP_TAG_KEY}`]: APP_TAG_VALUE } },
+      }),
+      new iam.PolicyStatement({
+        sid: 'UseWorkflowStore',
+        actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+        resources: [workflows.tableArn],
+      }),
+    ];
+  }
+
   /** What every agentic-iops-streaming runtime needs, whatever packs it loads. */
-  private runtimeStatements(memoryArn: string, agentModelId: string): iam.PolicyStatement[] {
+  private runtimeStatements(
+    memoryArn: string,
+    agentModelId: string,
+    workflows: dynamodb.ITable,
+  ): iam.PolicyStatement[] {
     // Only this runtime's own log groups (runtime ids are `<RUNTIME_NAME>-<suffix>`).
     const logGroup = `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/runtimes/${RUNTIME_NAME}-*`;
     return [
@@ -219,7 +279,7 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
         resources: this.modelResources(agentModelId),
       }),
       new iam.PolicyStatement({
-        sid: 'UseHubMemory',
+        sid: 'UseAgenticIopsMemory',
         actions: [
           'bedrock-agentcore:CreateEvent', 'bedrock-agentcore:GetEvent',
           'bedrock-agentcore:ListEvents', 'bedrock-agentcore:ListSessions',
@@ -234,6 +294,7 @@ export class AgenticIopsStreamingStack extends cdk.Stack {
         actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents', 'logs:DescribeLogStreams'],
         resources: [logGroup, `${logGroup}:log-stream:*`],
       }),
+      ...this.workflowStatements(workflows),
       new iam.PolicyStatement({
         sid: 'DescribeLogGroups',
         actions: ['logs:DescribeLogGroups'],
@@ -335,17 +396,21 @@ export function readWriteTag(value?: string): WriteTag | undefined {
   return { key, value: tagValue };
 }
 
+// Pack domains whose sample folder is not named after the domain.
+const PACK_FOLDERS: Record<string, string> = { hls: 'hls-doctor' };
+
 export function readPackPermissions(domain: string): PackPermissions {
-  const file = path.join(SAMPLES_DIR, domain, 'iam_permissions.json');
-  if (!/^[a-z0-9-]+$/.test(domain) || !fs.existsSync(file)) {
-    throw new Error(`Unknown media domain "${domain}": samples/${domain}/iam_permissions.json not found.`);
+  const folder = PACK_FOLDERS[domain] ?? domain;
+  const file = path.join(SAMPLES_DIR, folder, 'iam_permissions.json');
+  if (!/^[a-z0-9-]+$/.test(folder) || !fs.existsSync(file)) {
+    throw new Error(`Unknown media domain "${domain}": samples/${folder}/iam_permissions.json not found.`);
   }
   return JSON.parse(fs.readFileSync(file, 'utf8')) as PackPermissions;
 }
 
 // A pack's Bedrock grant: the thumbnail (vision) model agentic-iops-streaming is configured with, nothing else.
 const VISION_MODEL = '{vision_model}';
-// The repository's one model-id rule (T72), shared with the deploy scripts and the Hydrolix
+// The repository's one model-id rule, shared with the deploy scripts and the Hydrolix
 // stack: model and cross-Region profile ids only, so no value can widen a grant.
 const MODEL_ID_RULE = JSON.parse(
   fs.readFileSync(path.join(REPOSITORY_ROOT, 'scripts', 'model_id_rule.json'), 'utf8'),

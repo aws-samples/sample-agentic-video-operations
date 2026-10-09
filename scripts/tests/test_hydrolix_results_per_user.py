@@ -1,4 +1,4 @@
-"""Hydrolix query records are per verified user, recorded as they ran (T41).
+"""Hydrolix query records are per verified user, recorded as they ran.
 
 The web app used to read the results table by a client-chosen prompt_uuid with a role every
 signed-in user shares, so anyone could read anyone's SQL. Now the runtime streams each
@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
+from botocore.stub import Stubber
 from strands import tool
 from test_hydrolix_bound_model_sql import (  # noqa: F401 - pytest fixtures
     ALLOWED_SQL,
@@ -74,7 +75,7 @@ def results(runtime, monkeypatch):  # noqa: F811
     recorder = sys.modules["src.utils.record_executed_queries"]
     dynamodb = FakeDynamoDB()
     monkeypatch.setattr(utils, "QUESTION_ANSWERS_TABLE", "results-table")
-    monkeypatch.setattr(utils.boto3, "client", lambda service: dynamodb)
+    monkeypatch.setattr(utils, "_dynamodb", dynamodb)  # the client built on the first write
     monkeypatch.setattr(recorder, "save_query_record", utils.save_query_record)  # the real one
     monkeypatch.setattr(runtime.app, "Agent", SubagentCallingOrchestrator)
     monkeypatch.setattr(runtime.app, "BedrockModel", lambda **_: object())
@@ -210,6 +211,51 @@ def test_a_failed_write_logs_the_class_only_and_returns(results, capsys):
 
 def results_save(results):
     return sys.modules["src.utils.utils"].save_query_record("alice", "uuid-1", record())
+
+
+def offline_dynamodb_clients(monkeypatch):
+    """Real boto3 DynamoDB clients, answered by a Stubber so no write leaves this machine."""
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    utils = sys.modules["src.utils.utils"]
+    monkeypatch.setattr(utils, "QUESTION_ANSWERS_TABLE", "results-table")
+    real_client, built = utils.boto3.client, []
+
+    def build(*args, **kwargs):
+        client = real_client(*args, **kwargs)
+        stubber = Stubber(client)
+        stubber.add_response("put_item", {})
+        stubber.add_response("put_item", {})
+        stubber.activate()
+        built.append(client)
+        return client
+
+    monkeypatch.setattr(utils.boto3, "client", build)
+    return built
+
+
+def test_the_results_write_gives_up_inside_the_request_deadline(runtime, monkeypatch):  # noqa: F811
+    # botocore's defaults (60 s connect, 60 s read, retried) let one audit write outlive the
+    # 180 s request deadline during an AWS failure.
+    built = offline_dynamodb_clients(monkeypatch)
+
+    assert sys.modules["src.utils.utils"].save_query_record("alice", "uuid-1", record())
+
+    [client] = built
+    config = client.meta.config
+    assert config.connect_timeout == 5 and config.read_timeout == 10
+    # botocore keeps retries={"max_attempts": 2} as 3 attempts in all: at worst about 45 s.
+    assert (config.retries or {}).get("total_max_attempts") == 3
+    assert client.meta.region_name == "us-west-2"  # AWS_REGION, as the runtime reads it
+
+
+def test_the_results_client_is_built_once_across_writes(runtime, monkeypatch):  # noqa: F811
+    built = offline_dynamodb_clients(monkeypatch)
+    save = sys.modules["src.utils.utils"].save_query_record
+
+    assert save("alice", "uuid-1", record()) and save("alice", "uuid-2", record())
+
+    assert len(built) == 1
 
 
 def test_the_web_app_reads_no_dynamodb_table():

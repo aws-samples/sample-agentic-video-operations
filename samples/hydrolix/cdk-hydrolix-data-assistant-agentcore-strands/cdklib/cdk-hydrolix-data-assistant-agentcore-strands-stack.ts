@@ -7,7 +7,7 @@
  * - IAM roles and permissions for AgentCore
  * - Hydrolix credentials in Secrets Manager
  *
- * Inbound auth (RB9): with -c jwtDiscoveryUrl=... -c jwtClientIds=... the runtime accepts
+ * Inbound auth: with -c jwtDiscoveryUrl=... -c jwtClientIds=... the runtime accepts
  * only Cognito access tokens from that user pool and app clients, forwards only the
  * Authorization header, and the agent's actor is the token's `sub`. Without them the
  * runtime is IAM-authorized and the agent runs with memory off (no verified identity).
@@ -103,7 +103,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     // DYNAMODB TABLES
     // ================================
 
-    // The SQL each request ran, per verified user (T41): the partition key is the caller's
+    // The SQL each request ran, per verified user: the partition key is the caller's
     // token `sub`, the sort key a millisecond timestamp with a unique suffix. Only the
     // runtime writes it; the web app gets its own records in the response stream.
     const rawQueryResults = new dynamodb.Table(this, "QueryRecords", {
@@ -360,7 +360,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
     
     agentRuntime.node.addDependency(memoryPolicy);
     // grantPull puts the ECR pull in the role's DefaultPolicy, which AgentCore needs when it
-    // creates the runtime; RoleArn alone doesn't order the two (RB14).
+    // creates the runtime; RoleArn alone doesn't order the two.
     agentRuntime.node.addDependency(agentCoreRole.node.findChild('DefaultPolicy'));
 
     // ================================
@@ -427,7 +427,7 @@ export class CdkHydrolixDataAssistantAgentcoreStrandsStack extends cdk.Stack {
   }
 }
 
-// The repository's one model-id rule (T72), shared with the deploy scripts and the agentic-iops-streaming stack.
+// The repository's one model-id rule, shared with the deploy scripts and the agentic-iops-streaming stack.
 // A profile id is <prefix>.<provider>.<model> and routes to the foundation model
 // <provider>.<model> in each Region of its geography; a bare id can't start with a prefix.
 // The pattern's lookahead works the same in CloudFormation's Java regex and in JavaScript.
@@ -438,7 +438,7 @@ const PROFILE_PREFIXES = MODEL_ID_RULE.profile_prefixes;
 export const MODEL_ID_PATTERN = MODEL_ID_RULE.pattern;
 
 /**
- * What invoking the configured model needs (T71, agentic-iops-streaming's T60 rule): for a profile id, the
+ * What invoking the configured model needs: for a profile id, the
  * profile in this account and Region plus the foundation model behind it in any Region; for
  * a bare model id, that foundation model only. The base model is derived here, in the
  * template, from the one parameter, so it can never name another model.

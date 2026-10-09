@@ -196,7 +196,7 @@ def test_aws_doctor_names_each_failed_probe_line(monkeypatch):
 
 
 def test_settings_still_named_hub_are_a_warning_that_names_each_one():
-    """REN1: HUB_* became AGENTIC_IOPS_*; an old name is ignored, silently, without this."""
+    """HUB_* became AGENTIC_IOPS_*; an old name is otherwise ignored silently."""
     result = doctor.check_renamed_settings({"HUB_TOOL_BUDGET": "8", "AWS_REGION": "us-west-2"})
 
     assert result.group is doctor.CheckGroup.AWS and not result.passed

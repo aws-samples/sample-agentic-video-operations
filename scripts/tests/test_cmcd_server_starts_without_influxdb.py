@@ -1,4 +1,4 @@
-"""The live cmcd MCP server process starts without INFLUXDB_* settings (T20)."""
+"""The live cmcd MCP server process starts without INFLUXDB_* settings."""
 
 import os
 import subprocess

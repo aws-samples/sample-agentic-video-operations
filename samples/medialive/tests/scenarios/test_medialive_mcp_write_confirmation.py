@@ -1,4 +1,4 @@
-"""A stdio MCP channel write runs only after the human types the exact channel id (RB13).
+"""A stdio MCP channel write runs only after the human types the exact channel id.
 
 The server asks through MCP elicitation, so the answer comes from the client's user, not
 from the model's tool arguments. A client that can't ask refuses every write.

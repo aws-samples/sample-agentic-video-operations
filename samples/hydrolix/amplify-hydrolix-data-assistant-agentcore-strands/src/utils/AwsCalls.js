@@ -80,7 +80,7 @@ export const generateChart = async (answer) => {
           extractBetweenTags(responseBody, "chart_type"),
           "\n"
         ),
-        // Formatters by name only: model output is never evaluated (RB11).
+        // Formatters by name only: model output is never evaluated.
         chart_configuration: formatted.configuration,
         caption: removeCharFromStartAndEnd(
           extractBetweenTags(responseBody, "caption"),

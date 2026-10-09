@@ -41,7 +41,7 @@ MISSING_ERROR = re.compile(r"An error occurred \((NotFoundException|ResourceNotF
 class StackResources:
     status: str
     secret_arn: str | None
-    retired_table: str | None = None  # the pre-T41 results table, retained by design
+    retired_table: str | None = None  # the earlier results table, retained by design
 
 
 @dataclass(frozen=True)
@@ -209,7 +209,7 @@ def install_cdk_dependencies(runner: Runner) -> int:
 
 def cdk_context(settings: Mapping[str, str]) -> list[str]:
     """The -c options both the security diff and the deploy synthesize with. The model is
-    context: it sets BedrockModelId's default, so both synthesize the same template (T71)."""
+    context: it sets BedrockModelId's default, so both synthesize the same template."""
     context = ["-c", f"agentModelId={settings['AGENT_MODEL_ID']}"]
     if settings.get("HYDROLIX_JWT_DISCOVERY_URL"):
         context += [
@@ -399,7 +399,7 @@ def destroy_stack(
         shutil.rmtree(MCP_DESTINATION)
     if amplify_failed or stack_failed:
         print("Teardown incomplete. Remaining resources:")
-        if stack_failed:
+        if stack_failed and stack is not None:
             print(f"- CloudFormation stack: {STACK}")
             if stack.secret_arn:
                 print(f"- Secrets Manager secret: {stack.secret_arn}")

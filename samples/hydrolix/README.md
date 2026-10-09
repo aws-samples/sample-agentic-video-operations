@@ -157,7 +157,7 @@ cd sample-agentic-video-operations
    Raw command:
 
    ```bash
-   uv run pytest scripts/tests/test_manage_hydrolix_stack.py
+   uv run pytest scripts/tests/test_*hydrolix*.py
    ```
 
 4. Synthesize the CDK backend with its safe template defaults:

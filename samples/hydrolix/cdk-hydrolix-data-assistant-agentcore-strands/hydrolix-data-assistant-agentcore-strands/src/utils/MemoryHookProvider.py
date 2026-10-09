@@ -83,7 +83,7 @@ class MemoryHookProvider(HookProvider):
                 session_id=self.session_id,
                 messages=[(content_to_save, role)],
             )
-            # Metadata only (RB10): no message text, no actor or session id.
+            # Metadata only: no message text, no actor or session id.
             print(f"💾 Memory: saved one {role} message (length={len(content_to_save)})")
         except Exception as error:
             print(f"💥 Memory save failed: {type(error).__name__}")

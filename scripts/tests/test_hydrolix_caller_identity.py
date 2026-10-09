@@ -1,4 +1,4 @@
-"""Hydrolix runtime: the actor is a verified identity and logs carry no content (RB9, RB10).
+"""Hydrolix runtime: the actor is a verified identity and logs carry no content.
 
 These run the real entrypoint (app.agent_invocation) with the model, memory and stream
 replaced by fakes. `strands_tools` is not a workspace dependency, so it is stubbed.

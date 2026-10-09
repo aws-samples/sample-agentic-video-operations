@@ -7,6 +7,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from list_tracked_files import list_tracked_files
+
 JUST_COMMAND = re.compile(r"\bjust ([a-z][a-z-]*)(?: ([^\n;&|]+))?")
 UV_RUN = re.compile(r"\buv run(?P<arguments>[^\n`]*)")
 PYTHON_SCRIPT = re.compile(r"\b(scripts/[\w./-]+\.py)([^\n`]*)")
@@ -61,9 +63,7 @@ def handled_arguments(body: str) -> set[str]:
 def read_project_scripts(root: Path) -> dict[str, frozenset[str]]:
     """Return distribution name -> project scripts from every workspace package."""
     result: dict[str, frozenset[str]] = {}
-    for path in (root / "pyproject.toml", *(root / "samples").glob("*/pyproject.toml")):
-        if not path.exists():
-            continue
+    for path in list_tracked_files(root, "pyproject.toml", "samples/*/pyproject.toml"):
         project = tomllib.loads(path.read_text()).get("project", {})
         if name := project.get("name"):
             result[name] = frozenset(project.get("scripts", {}))
@@ -74,7 +74,8 @@ def read_script_interfaces(root: Path) -> dict[str, ScriptInterface]:
     """Read argparse declarations without importing or running repository scripts."""
     return {
         path.relative_to(root).as_posix(): _read_script_interface(path)
-        for path in (root / "scripts").glob("*.py")
+        for path in list_tracked_files(root, "scripts/*.py")
+        if path.parent == root / "scripts"
     }
 
 

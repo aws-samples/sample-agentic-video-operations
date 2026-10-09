@@ -1,4 +1,4 @@
-"""Region-wide metrics are context, never part of a channel's score (T64).
+"""Region-wide metrics are context, never part of a channel's score.
 
 DroppedFrames and SvqTime are published per pipeline and Region only ("Supported dimensions
 sets: Pipeline, Region" in the MediaLive user guide, Output metrics): every channel in the

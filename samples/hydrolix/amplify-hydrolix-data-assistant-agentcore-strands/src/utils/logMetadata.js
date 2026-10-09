@@ -1,4 +1,4 @@
-// The web app's only console sink (RB10). Event names, counts and lengths only: never a
+// The web app's only console sink. Event names, counts and lengths only: never a
 // prompt, answer, SQL, query result, chart payload, user or session identity, or an error
 // message (which can quote any of them). scripts/tests/test_hydrolix_web_app.py fails on any
 // other console call in src/.

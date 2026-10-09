@@ -27,10 +27,6 @@ Parameters:
     Description: Name for the S3 bucket (must be globally unique)
     Default: cmcd-content-bucket
 
-  DeploymentArtifactsBucketName:
-    Type: String
-    Description: Existing S3 bucket used to package this template for deployment
-
   InfluxDBInstanceType:
     Type: String
     Description: Timestream for InfluxDB class; db.influx.medium is the smallest supported
@@ -477,7 +473,6 @@ Resources:
               - s3:ListBucket
             Resource:
               - !GetAtt ContentBucket.Arn
-              - !Sub 'arn:${AWS::Partition}:s3:::${DeploymentArtifactsBucketName}'
           - Sid: AccessStackBucketObjects
             Effect: Allow
             Principal: '*'
@@ -490,7 +485,6 @@ Resources:
               - s3:PutObject
             Resource:
               - !Sub '${ContentBucket.Arn}/*'
-              - !Sub 'arn:${AWS::Partition}:s3:::${DeploymentArtifactsBucketName}/*'
 
   PrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation

@@ -7,9 +7,10 @@ without a trusted vision verdict, is UNVERIFIED and keeps the channel from readi
 Telemetry that cannot be read counts as unknown, never as agreement.
 
 Sampling stops before the first read only on a conclusive answer from the channel itself:
-thumbnails disabled in its configuration, or the channel not running. Thumbnails that are
-enabled on a running channel but haven't arrived yet are transient, so the whole window is
-polled, as MediaConnect does.
+thumbnails not enabled in its encoder settings (DISABLED, or no ThumbnailConfiguration at
+all, which in MediaLive means off), or the channel not running. Only a running channel with
+thumbnails AUTO is polled, through the whole window, as MediaConnect does: a frame missing
+there is transient.
 """
 
 from collections.abc import Callable
@@ -128,6 +129,8 @@ def no_thumbnail_reason(details: ChannelDetails) -> str | None:
     """Why no thumbnail can arrive, when the channel says so; None when one still might."""
     if details.thumbnails is False:
         return "thumbnails are disabled in the channel's configuration (ThumbnailConfiguration)"
+    if details.thumbnails is None:  # unset: MediaLive generates none
+        return "thumbnails are not enabled in the channel's encoder settings"
     if details.state is not ChannelState.RUNNING:
         return f"the channel is {details.state}"
     return None

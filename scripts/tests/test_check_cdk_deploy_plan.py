@@ -1,4 +1,4 @@
-"""The deploy plan's bootstrap and security-diff checks (T59 review).
+"""The deploy plan's bootstrap and security-diff checks.
 
 A healthy CDKToolkit with another qualifier, or an old version, can't serve these apps; a
 security diff that printed nothing can't back an approval.
@@ -135,7 +135,7 @@ def test_a_failed_security_diff_stops_and_shows_why(tmp_path, capsys):
     assert "synth failed" in output and "Could not compute the security diff" in output
 
 
-# T59 re-review: exit 0 with output is not enough. The output must be CDK's result for this
+# Exit 0 with output is not enough. The output must be CDK's result for this
 # stack: `Stack <name>`, then the "no changes" sentence or a security-change section.
 NODE_WARNING = "(node:4242) [DEP0040] DeprecationWarning: The `punycode` module is deprecated.\n"
 NOTICE = "NOTICES\n\n31885\tbootstrap: a new version is available\n"
@@ -177,7 +177,7 @@ def test_colored_output_is_read_without_its_escape_codes(tmp_path):
 
 
 def test_a_later_stacks_changes_cannot_authorize_this_stack(tmp_path):
-    """T59 re-review: the result must be in this stack's own section, not a later one's."""
+    """The result must be in this stack's own section, not a later one's."""
     later_changes = (
         "Stack AgenticIopsStreamingStack\nStack OtherStack\nIAM Statement Changes\n┌───┐\n"
     )

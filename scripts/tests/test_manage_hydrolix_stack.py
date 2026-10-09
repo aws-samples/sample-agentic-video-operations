@@ -200,7 +200,7 @@ def read_documented_inputs(prompt: str) -> dict[str, dict[str, dict[str, object]
 @pytest.mark.parametrize("prompt", PROMPTS)
 def test_prompts_document_the_pinned_mcp_tool_inputs_exactly(prompt):
     """Each Hydrolix tool a prompt documents has the pinned release's inputs. Which tools the
-    subagents get is test_hydrolix_bound_model_sql's (RB12: not list_databases or list_tables).
+    subagents get is test_hydrolix_bound_model_sql's: not list_databases or list_tables.
     """
     recorded = json.loads(MCP_TOOL_INPUTS.read_text())
     assert recorded["commit"] == manage_hydrolix_stack.MCP_COMMIT
@@ -334,7 +334,7 @@ def test_an_interactive_deploy_confirms_once_and_cdk_never_asks_again(monkeypatc
     assert deploy[deploy.index("--require-approval") + 1] == "never"
 
 
-# --- T59: one confirmation, before anything is fetched or built --------------------------
+# --- One confirmation, before anything is fetched or built -------------------------------
 
 
 def test_the_security_diff_comes_before_the_prompt_and_the_mcp_checkout_after(
@@ -732,7 +732,7 @@ def test_destroy_leaves_the_earlier_results_table_and_only_prints_how_to_delete_
 
 
 def test_the_security_diff_and_the_deploy_get_the_same_model(monkeypatch, tmp_path):
-    """T71 review: the model reaches both syntheses as context (cdk diff takes no --parameters),
+    """The model reaches both syntheses as context (cdk diff takes no --parameters),
     and the deploy uses the template default it sets, never a previous stack value."""
     isolate_paths(monkeypatch, tmp_path)
     runner = FakeRunner()

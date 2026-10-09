@@ -1,4 +1,4 @@
-"""Scripts read the root .env the way `just` does, so their raw commands work too (T61).
+"""Scripts read the root .env the way `just` does, so their raw commands work too.
 
 `just` loads the root .env itself (`set dotenv-load`), but the READMEs also show each
 recipe's raw `uv run python scripts/...` command, and uv loads no .env. A script that reads

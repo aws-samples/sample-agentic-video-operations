@@ -4,6 +4,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,10 +27,11 @@ SMOKE_CASES = (
     SmokeCase("cmcd", "analyze_buffer_events", "low_buffer_count"),
     SmokeCase("mediaconnect", "list_flows", "flows"),
     SmokeCase("medialive", "list_channels", "channel_id"),
+    SmokeCase("hls-doctor", "fetch_manifest", "looks_like_m3u8"),
 )
 
 
-def build_child_environment(environ: dict[str, str]) -> dict[str, str]:
+def build_child_environment(environ: Mapping[str, str]) -> dict[str, str]:
     child = dict(environ)
     for name in (
         "AWS_ACCESS_KEY_ID",
@@ -55,7 +57,7 @@ def build_child_environment(environ: dict[str, str]) -> dict[str, str]:
 def build_server_parameters(
     case: SmokeCase,
     temporary_env: Path,
-    environ: dict[str, str],
+    environ: Mapping[str, str],
 ) -> StdioServerParameters:
     return StdioServerParameters(
         command="just",

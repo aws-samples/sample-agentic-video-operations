@@ -1,4 +1,4 @@
-"""Before a CDK deploy builds anything: the bootstrap state and the security changes (T59).
+"""Before a CDK deploy builds anything: the bootstrap state and the security changes.
 
 The repository's confirmation is the one place a person approves a deploy. It comes after
 the security diff is printed and before the image is built or pushed, so CDK then deploys
@@ -50,13 +50,15 @@ def check_cdk_bootstrap(
             print(f"  (cd {cdk_directory} && npx cdk bootstrap {target})")
         else:
             print(f"CDK bootstrap: could not be read: {describe_failure(result)}")
-        return stopped()
+        stopped()
+        return None
     found = read_json_object(result.stdout)
     status, found_qualifier = found.get("status"), found.get("qualifier")
     if status not in USABLE_BOOTSTRAP:
         print(f"CDK bootstrap: CDKToolkit is {status or 'unreadable'} in {target}.")
         print("Fix or re-create it with `npx cdk bootstrap`, then re-run the deploy.")
-        return stopped()
+        stopped()
+        return None
     if found_qualifier != qualifier:
         described = f"qualifier {found_qualifier}" if found_qualifier else "no Qualifier (legacy)"
         print(
@@ -64,10 +66,12 @@ def check_cdk_bootstrap(
             f"through the {qualifier} bootstrap resources."
         )
         print(f"  Bootstrap for it: (cd {cdk_directory} && npx cdk bootstrap {target})")
-        return stopped()
+        stopped()
+        return None
     version = read_bootstrap_version(runner, region, qualifier, cdk_directory)
     if version is None:
-        return stopped()
+        stopped()
+        return None
     return f"found (CDKToolkit, qualifier {qualifier}, version {version})"
 
 
@@ -117,7 +121,6 @@ def read_json_object(text: str) -> dict[str, str | None]:
 
 def stopped() -> None:
     print("Nothing was built or deployed.")
-    return None
 
 
 def approval_line(assume_yes: bool) -> str:

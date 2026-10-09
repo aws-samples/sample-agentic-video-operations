@@ -1,4 +1,4 @@
-"""Scripts the READMEs run directly read the root .env, as `just` does (T61).
+"""Scripts the READMEs run directly read the root .env, as `just` does.
 
 `just` loads the root .env (`set dotenv-load`), but the READMEs also show the raw
 `uv run python scripts/...` command, and uv loads no .env. So a setting that is in .env
@@ -142,7 +142,7 @@ def test_the_stack_scripts_name_the_file_when_a_setting_is_missing(capsys):
 
 
 def test_quotes_are_read_before_comments(tmp_path):
-    """T61 review: a quoted value keeps its `#`, and a comment after it is dropped."""
+    """A quoted value keeps its `#`, and a comment after it is dropped."""
     path = tmp_path / ".env"
     path.write_text(
         'export TOKEN="alpha=beta # literal" # operator note\n'
