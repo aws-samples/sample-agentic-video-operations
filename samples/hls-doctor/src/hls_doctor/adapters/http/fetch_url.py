@@ -37,26 +37,33 @@ def create_live_fetch(
     timeout_seconds: float,
     user_agent: str,
     extra_headers: dict[str, str] | None = None,
+    header_origin_url: str | None = None,
     clock: Callable[[], datetime] | None = None,
     allow_private_targets: bool = False,
     resolve: ResolveHost = system_dns,
     transport: httpx.BaseTransport | None = None,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> FetchUrl:
-    """A FetchUrl backed by httpx; transport errors are recorded, not raised."""
+    """A FetchUrl backed by httpx; transport errors are recorded, not raised.
+
+    `extra_headers` (operator credentials such as Authorization or Cookie) are
+    sent only on requests whose scheme, host and port match the origin of
+    `header_origin_url` - the entry URL - never on cross-origin renditions or
+    redirect hops.
+    """
     client = httpx.Client(
         timeout=timeout_seconds,
-        headers={"User-Agent": user_agent, **(extra_headers or {})},
+        headers={"User-Agent": user_agent},
         follow_redirects=False,
         transport=transport,
     )
+    entry_origin = url_origin(header_origin_url) if header_origin_url and extra_headers else None
     read_now = clock or (lambda: datetime.now(UTC))
     epoch = read_now()
     deadline_seconds = timeout_seconds * TOTAL_DEADLINE_FACTOR
 
     def fetch(url: str, *, range_header: str | None = None) -> HttpExchange:
         at_ms = int((read_now() - epoch).total_seconds() * 1000)
-        headers = {"Range": range_header} if range_header else {}
         started = time.monotonic()
         deadline_at = monotonic() + deadline_seconds
         hops: list[str] = []
@@ -66,6 +73,9 @@ def create_live_fetch(
                 if monotonic() >= deadline_at:
                     break
                 guard_fetch_target(target, allow_private=allow_private_targets, resolve=resolve)
+                headers = {"Range": range_header} if range_header else {}
+                if entry_origin is not None and url_origin(target) == entry_origin:
+                    headers.update(extra_headers or {})
                 with client.stream("GET", target, headers=headers) as response:
                     ttfb_ms = (time.monotonic() - started) * 1000
                     if response.is_redirect and response.headers.get("location"):
@@ -104,6 +114,13 @@ def create_live_fetch(
             )  # fmt: skip
 
     return fetch
+
+
+def url_origin(url: str) -> tuple[str, str, int | None]:
+    """(scheme, host, effective port): the header-scoping identity of a URL."""
+    parsed = httpx.URL(url)
+    default_port = {"http": 80, "https": 443}.get(parsed.scheme)
+    return parsed.scheme, (parsed.host or "").lower(), parsed.port or default_port
 
 
 def read_exchange(

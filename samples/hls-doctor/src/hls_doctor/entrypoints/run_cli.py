@@ -40,7 +40,11 @@ def run_inspection(options: InspectOptions) -> InspectionReport:
         settings = settings.model_copy(update={"hls_timeout_seconds": options.timeout_seconds})
     if options.user_agent is not None:
         settings = settings.model_copy(update={"hls_user_agent": options.user_agent})
-    context = build_probe_context(settings, extra_headers=options.headers or None)
+    context = build_probe_context(
+        settings,
+        extra_headers=options.headers or None,
+        header_origin_url=options.url,
+    )
     return inspect_stream(options.url, context, watch_seconds=options.watch_seconds or None)
 
 

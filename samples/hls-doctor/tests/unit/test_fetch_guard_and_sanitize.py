@@ -312,3 +312,36 @@ def test_a_dripping_body_is_cut_at_the_total_deadline() -> None:
     # 5 s timeout -> 20 s total deadline -> about 20 one-second chunks,
     # well before the 61 chunks the byte cap alone would have allowed.
     assert chunks_served["count"] < 30
+
+
+def test_cli_headers_stay_on_the_entry_origin() -> None:
+    from hls_doctor.adapters.http.fetch_url import create_live_fetch
+
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen[request.url.host] = request.headers.get("authorization")
+        if request.url.host == "cdn.example" and request.url.path == "/hop":
+            return httpx.Response(302, headers={"location": "https://other.example/x.m3u8"})
+        return httpx.Response(
+            200,
+            content=b"#EXTM3U\n",
+            headers={"content-type": "application/vnd.apple.mpegurl"},
+        )
+
+    fetch = create_live_fetch(
+        timeout_seconds=5,
+        user_agent="test",
+        extra_headers={"Authorization": "Bearer entry-token"},
+        header_origin_url="https://cdn.example/master.m3u8",
+        resolve=resolver({"cdn.example": PUBLIC, "other.example": PUBLIC}),
+        transport=httpx.MockTransport(handler),
+    )
+
+    fetch("https://cdn.example/hop")  # same origin, redirects cross-origin
+    assert seen["cdn.example"] == "Bearer entry-token"
+    assert seen["other.example"] is None  # the redirect hop gets no header
+
+    seen.clear()
+    fetch("https://other.example/rendition.m3u8")  # cross-origin rendition
+    assert seen["other.example"] is None

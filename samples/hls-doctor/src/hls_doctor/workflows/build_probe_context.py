@@ -56,7 +56,10 @@ class ProbeContext:
 
 
 def build_probe_context(
-    settings: HlsDoctorSettings, *, extra_headers: dict[str, str] | None = None
+    settings: HlsDoctorSettings,
+    *,
+    extra_headers: dict[str, str] | None = None,
+    header_origin_url: str | None = None,
 ) -> ProbeContext:
     if settings.demo:
         timeline = ReplayTimeline()
@@ -73,6 +76,7 @@ def build_probe_context(
         timeout_seconds=settings.hls_timeout_seconds,
         user_agent=settings.hls_user_agent,
         extra_headers=extra_headers,
+        header_origin_url=header_origin_url,
         allow_private_targets=settings.hls_allow_private_targets,
     )
     return ProbeContext(
