@@ -281,3 +281,34 @@ def test_gzip_bomb_decompression_is_capped_per_chunk() -> None:
     assert exchange.content_length == MAX_BODY_BYTES
     # The decoded cap must hold per decompression call, not after the fact.
     assert peak < MAX_BODY_BYTES * 4
+
+
+def test_a_dripping_body_is_cut_at_the_total_deadline() -> None:
+    from hls_doctor.adapters.http.fetch_url import create_live_fetch
+
+    clock = {"now": 0.0}
+    chunks_served = {"count": 0}
+
+    def drip():
+        for _ in range(10_000):  # a server dripping chunks forever
+            chunks_served["count"] += 1
+            clock["now"] += 1.0  # each chunk arrives just under the read timeout
+            yield b"x" * 65_536
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=drip(), headers={"content-type": "video/mp4"})
+
+    fetch = create_live_fetch(
+        timeout_seconds=5,
+        user_agent="test",
+        resolve=resolver({"cdn.example": PUBLIC}),
+        transport=httpx.MockTransport(handler),
+        monotonic=lambda: clock["now"],
+    )
+    exchange = fetch("http://cdn.example/drip.mp4")
+
+    assert exchange.transport_error == "DeadlineExceeded"
+    assert exchange.body_truncated
+    # 5 s timeout -> 20 s total deadline -> about 20 one-second chunks,
+    # well before the 61 chunks the byte cap alone would have allowed.
+    assert chunks_served["count"] < 30
