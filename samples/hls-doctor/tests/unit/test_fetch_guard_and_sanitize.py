@@ -345,3 +345,17 @@ def test_cli_headers_stay_on_the_entry_origin() -> None:
     seen.clear()
     fetch("https://other.example/rendition.m3u8")  # cross-origin rendition
     assert seen["other.example"] is None
+
+
+def test_location_header_query_is_redacted_like_any_url() -> None:
+    exchange = HttpExchange(
+        url="https://cdn.example/old",
+        requested_url="https://cdn.example/old",
+        at_ms=0,
+        status=302,
+        headers={"location": "https://cdn.example/new?signedtoken=leakme&_HLS_msn=9"},
+    )
+    clean = exchange.sanitized()
+    assert "leakme" not in clean.headers["location"]
+    assert "signedtoken=REDACTED" in clean.headers["location"]
+    assert "_HLS_msn=9" in clean.headers["location"]

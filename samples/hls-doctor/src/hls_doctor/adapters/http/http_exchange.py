@@ -53,7 +53,7 @@ class HttpExchange(BaseModel):
             "requested_url": redact_url(self.requested_url),
             "redirects": [redact_url(hop) for hop in self.redirects],
             "headers": {
-                name: value
+                name: redact_url(value) if name.lower() == "location" else value
                 for name, value in self.headers.items()
                 if name.lower() in HEADER_ALLOWLIST
             },
