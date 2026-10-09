@@ -206,7 +206,6 @@ def test_ffprobe_local_input_is_an_allowlist(tmp_path) -> None:
 
     from hls_doctor.adapters.ffprobe.run_ffprobe import protocol_whitelist
 
-    assert protocol_whitelist("https://cdn.example/seg.m4s") == "http,https,tcp,tls"
     with tempfile.NamedTemporaryFile(prefix="hls-doctor-media-", suffix=".bin") as own:
         assert protocol_whitelist(own.name) == "file"
     for hostile in (
@@ -241,3 +240,12 @@ def test_playlist_redaction_covers_define_values_and_any_quoted_query() -> None:
     assert 'VALUE="REDACTED"' in redacted
     assert "tok=REDACTED" in redacted
     assert "_HLS_msn=7" in redacted
+
+
+def test_ffprobe_refuses_network_targets_outright() -> None:
+    from hls_doctor.adapters.ffprobe.run_ffprobe import protocol_whitelist
+
+    for target in ("http://cdn.example/seg.m4s", "https://cdn.example/seg.m4s"):
+        with pytest.raises(ToolFailure) as failure:
+            protocol_whitelist(target)
+        assert "local" in failure.value.message.lower()

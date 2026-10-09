@@ -1,9 +1,10 @@
-"""Live media probe: ffprobe with an explicit protocol whitelist, fixed argv.
+"""Live media probe: ffprobe over local bytes only, fixed argv.
 
-Network targets may only use http/https (tcp/tls beneath them); a local path -
-the temp file the workflow just downloaded - may only use `file`. Everything
-else (`file:` URLs, `concat:`, `data:`, `subfile:`, bare devices) is refused
-before ffprobe sees it, rather than relying on ffmpeg's own checks.
+ffprobe never touches the network: every caller downloads through the guarded
+fetcher first and probes the temp file. "Local bytes only" is a property of
+this adapter - any target that is not the workflow's own temp download
+(network URLs included, and ffmpeg pseudo-protocols like `concat:`,
+`subfile,...:`, `data:`) is refused before ffprobe sees it.
 """
 
 import json
@@ -49,15 +50,13 @@ def create_live_probe() -> ProbeSegment:
 
 
 def protocol_whitelist(target: str) -> str:
-    """http(s) for URLs; `file` only for the workflow's own temp download.
+    """`file`, and only for the workflow's own temp download; nothing else.
 
-    Local input is an allowlist, not a blocklist: the path must resolve to an
-    hls-doctor media temp file inside the system temp directory, so ffmpeg
-    pseudo-protocols (`concat:`, `subfile,...:`, `data:`) and arbitrary paths
-    never reach ffprobe.
+    An allowlist, not a blocklist: the target must resolve to an existing
+    hls-doctor media temp file inside the system temp directory. Network URLs
+    are refused here too - downloading is the guarded fetcher's job, and
+    ffprobe only ever sees local bytes.
     """
-    if target.lower().startswith(("http://", "https://")):
-        return "http,https,tcp,tls"
     resolved = Path(target).resolve()
     temp_root = Path(tempfile.gettempdir()).resolve()
     is_own_download = (
@@ -68,8 +67,9 @@ def protocol_whitelist(target: str) -> str:
     if not is_own_download:
         raise ToolFailure(
             FailureKind.INVALID_REQUEST,
-            f"Refusing to probe {target[:80]!r}: only http(s) URLs and the"
-            " workflow's own downloaded bytes are probed.",
-            "Pass an http or https segment URL.",
+            f"Refusing to probe {target[:80]!r}: ffprobe reads local bytes only -"
+            " the workflow downloads through the guarded fetcher first.",
+            "Pass an http or https segment URL to probe_segment; it downloads"
+            " and probes the bytes for you.",
         )
     return "file"
