@@ -216,8 +216,8 @@ async def get_cmcd_data(query: str, url: str = INFLUXDB_URL, token: str = INFLUX
 @mcp.tool(name='get_average_bitrate', description='Get average bitrate from CMCD metrics')
 async def get_average_bitrate(
     time_range: str = Field(default="-24h", description="Time range for the query (e.g., -1h, -24h, -7d)"),
-    cmcd_sid: str = Field(default=None, description="Optional session ID to filter by"),
-    cmcd_cid: str = Field(default=None, description="Optional content ID to filter by")
+    cmcd_sid: Optional[str] = Field(default=None, description="Optional session ID to filter by"),
+    cmcd_cid: Optional[str] = Field(default=None, description="Optional content ID to filter by")
 ) -> Dict[str, Any]:
     """Get the average bitrate from CMCD metrics over the specified time range.
     
@@ -343,7 +343,7 @@ async def get_session_details(
 @mcp.tool(name='analyze_buffer_events', description='Analyze buffer-related events from CMCD metrics')
 async def analyze_buffer_events(
     time_range: str = Field(default="-24h", description="Time range for the query (e.g., -1h, -24h, -7d)"),
-    cmcd_sid: str = Field(default=None, description="Optional session ID to filter by"),
+    cmcd_sid: Optional[str] = Field(default=None, description="Optional session ID to filter by"),
     threshold_ms: int = Field(default=500, description="Buffer level threshold in milliseconds")
 ) -> Dict[str, Any]:
     """Analyze buffer-related events from CMCD metrics, identifying potential rebuffering events
@@ -399,7 +399,7 @@ async def analyze_buffer_events(
 @mcp.tool(name='identify_playback_errors', description='Identify potential playback errors from CMCD metrics')
 async def identify_playback_errors(
     time_range: str = Field(default="-24h", description="Time range for the query (e.g., -1h, -24h, -7d)"),
-    cmcd_sid: str = Field(default=None, description="Optional session ID to filter by")
+    cmcd_sid: Optional[str] = Field(default=None, description="Optional session ID to filter by")
 ) -> Dict[str, Any]:
     """Identify potential playback errors by analyzing patterns in CMCD metrics such as
     sudden bitrate drops, buffer underruns, or unusual startup delays.
